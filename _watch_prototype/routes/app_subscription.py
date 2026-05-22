@@ -62,8 +62,8 @@ PLANS = [
 PLAN_IDS = {p["id"] for p in PLANS if p["id"] != "free"}
 
 PAYMENT_NUMBER = {
-    "jazzcash":   "03001234567",   # replace with your actual number
-    "easypaisa":  "03001234567",   # replace with your actual number
+    "jazzcash":   "03286839827",   # Muhammad Rehan
+    "easypaisa":  "03286839827",   # Muhammad Rehan
 }
 
 
