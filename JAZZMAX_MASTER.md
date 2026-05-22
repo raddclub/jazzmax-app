@@ -444,10 +444,10 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] TID payment verification panel in Radd Hub (/tid/)
 - [x] Payment numbers set: 03286839827 (Muhammad Rehan)
 - [x] Add auth check to POST /watch/api/play/<file_id> (require valid token for premium titles)
-- [ ] Watch history API: POST /api/history/<file_id> with {progress_seconds, completed}
-- [ ] GET /api/history — return user's watch history
-- [ ] Search API: GET /api/search?q=term
-- [ ] Rate limiting on /api/play (max 20 requests/hour per user)
+- [x] Watch history API: POST /api/history/<file_id> with {progress_seconds, completed}
+- [x] GET /api/history — return user's watch history
+- [x] Search API: GET /api/search?q=term
+- [x] Rate limiting on /api/play (max 20 requests/hour per user — in-memory, resets on restart)
 
 ### Phase 1 — Flutter App: Project Setup
 - [x] Create `jazzmax_flutter/` folder with full Flutter project structure
@@ -477,7 +477,7 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] Home screen (poster grid — Movies + TV Shows sections + search bar)
 - [x] Movie/Show detail sheet (poster, title, year, rating, Watch button — bottom sheet)
 - [x] Search screen (offline local SQLite search — built into Home screen)
-- [ ] Downloads screen (list of downloaded files) ← Phase 5
+- [x] Downloads screen (list of downloaded files) ← built in Phase 5
 - [x] Profile/Settings screen (plan info, device info, logout)
 - [x] Subscription plans screen (plan cards + TID payment instructions)
 - [x] TID submission screen (enter TID after payment — built into Subscription screen)
@@ -754,6 +754,26 @@ Next account should: [what to do first]
 ```
 
 ---
+
+### Session 2 — May 23, 2026
+**Account:** New Replit account (continuing from Session 1)
+**Built:**
+- Fixed Watch Prototype crash (PyJWT not installed → installed + restarted)
+- Fixed Flutter app URL: `constants.dart` + `jazzmax_config.json` updated to current domain
+- Fixed critical bug: `main.dart` was NOT calling `RemoteConfig.fetch()` — added it (app now auto-fetches URL on every launch, no APK rebuild needed when server changes)
+- Registered Watch Prototype in proxy routing (artifact.toml) so Flutter app can reach /api/auth, /api/catalog etc. through Replit dev domain
+- Added auth check to `POST /watch/api/play/<file_id>` — free titles open to all, premium needs valid non-guest token (Phase 0 task)
+- Built `GET /api/search?q=term` — full-text search across titles, plot, genres, language
+- Added in-memory rate limiting to play endpoint (20/hr per user, 5/hr for guests)
+- Fixed guest token crash in `app_history.py` (sub="guest" → 401 instead of ValueError)
+- Marked all actually-done items in checklist (history API, downloads screen were built but unchecked)
+- Pushed all changes to GitHub → APK build triggered automatically
+**Checkboxes updated:** Yes — Phase 0 all done, Phase 3 downloads fixed
+**Next account should:**
+1. Check GitHub Actions → verify APK builds successfully
+2. Read section 14 — find first `[ ]` → next is Phase 1 "Verify GitHub Actions" then Phase 4 "Subtitle selector"
+3. When changing Replit accounts: just update `jazzmax_config.json` in GitHub — NO APK rebuild needed
+4. URL change process: edit `jazzmax_config.json` → change `api_base_url` → push to GitHub → done
 
 ### Session 1 — May 22, 2026
 **Account:** Muhammad Rehan (main account)  
