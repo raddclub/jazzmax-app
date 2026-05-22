@@ -37,6 +37,7 @@ EXCLUDE_DIRS = {
     "radd-hub/local",          # 641 MB — Chromium + ffmpeg binaries
     "node_modules",            # 372 MB — JS packages (reinstall with pnpm i)
     ".pythonlibs",             # 227 MB — Python packages (reinstall with pip)
+    ".local",                  # 64 MB  — Replit agent skills (not your code)
     "radd-hub/data/logs",      # 13 MB  — log files
     "radd-hub/data/backups",   # 7 MB   — old DB backups
     "radd-hub/data/tmp",
@@ -44,10 +45,13 @@ EXCLUDE_DIRS = {
     "radd-hub/data/media",
     "radd-hub/data/cache",
     "radd-hub/bots/node_modules",
+    "artifacts",               # Node.js API experiment — not Flutter project
     ".git",
     ".upm",
     ".config",
     ".cache",
+    "lib",                     # TypeScript workspace lib — not needed
+    "scripts",                 # TypeScript workspace scripts — not needed
 }
 
 EXCLUDE_SUFFIXES = {
