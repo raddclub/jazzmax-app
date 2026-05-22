@@ -1,8 +1,11 @@
 plugins {
     id "com.android.application"
     id "kotlin-android"
-    id "dev.flutter.flutter-gradle-plugin"
 }
+
+// Flutter plugin is applied automatically via settings.gradle → app_plugin_loader.gradle
+// Do NOT add "dev.flutter.flutter-gradle-plugin" here — it's incompatible with the
+// old-style settings.gradle that uses apply from: app_plugin_loader.gradle
 
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')

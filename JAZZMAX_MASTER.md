@@ -455,7 +455,7 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] `android/app/src/main/AndroidManifest.xml` with all permissions
 - [x] `android/app/build.gradle` configured for com.jazzmax.app
 - [x] `.github/workflows/build_apk.yml` — GitHub Actions APK build pipeline
-- [ ] Push to GitHub repo: `raddclub/jazzmax-app` ← run `bash push_to_github.sh`
+- [x] Push to GitHub repo: `raddclub/jazzmax-app` ← pushed via GitHub API (May 22 2026)
 - [ ] Verify GitHub Actions builds APK successfully (check Actions tab on GitHub)
 
 ### Phase 2 — Flutter App: Core Structure
@@ -512,9 +512,9 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] Splash screen with fade animation + pulsing dot
 - [x] Onboarding screen (4 pages, skip button, shown once via SharedPreferences)
 - [x] Bottom nav: Downloads tab replaces Subscribe (subscribe accessible from Profile)
-- [ ] App icon (JazzMAX red logo) ← still needed
-- [ ] ProGuard/R8 code obfuscation ← before release
-- [ ] Sign APK with keystore (required for release) ← before release
+- [x] App icon (JazzMAX red logo) ← red J+MAX PNG, all mipmap densities + adaptive icon
+- [x] ProGuard/R8 code obfuscation ← enabled in build.gradle with proguard-rules.pro
+- [x] Sign APK with keystore (required for release) ← PKCS12 keystore, CI reads from GitHub Secret KEYSTORE_BASE64
 - [ ] Test on real Android phone ← needs APK build to pass first
 - [ ] Upload signed APK to GitHub Releases ← after signing
 - [ ] Share APK link with first users
