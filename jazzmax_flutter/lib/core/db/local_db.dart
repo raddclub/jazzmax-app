@@ -1,0 +1,193 @@
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import '../../models/catalog_item.dart';
+
+/// Local SQLite catalog database.
+/// Stores titles + episodes for offline browsing.
+/// Stream URLs are NEVER stored here — always fetched live from server.
+class LocalDb {
+  static Database? _db;
+
+  static Future<Database> get instance async {
+    _db ??= await _openDb();
+    return _db!;
+  }
+
+  static Future<Database> _openDb() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final path = p.join(dir.path, 'jazzmax_catalog.db');
+
+    return openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE titles (
+            id          INTEGER PRIMARY KEY,
+            title       TEXT NOT NULL,
+            year        INTEGER,
+            media_type  TEXT NOT NULL,
+            description TEXT,
+            rating      REAL,
+            genres      TEXT,
+            poster_url  TEXT,
+            is_free     INTEGER DEFAULT 0,
+            db_version  INTEGER DEFAULT 0
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE episodes (
+            id        INTEGER PRIMARY KEY,
+            title_id  INTEGER NOT NULL,
+            file_id   TEXT,
+            season    INTEGER,
+            episode   INTEGER,
+            label     TEXT,
+            quality   TEXT,
+            is_free   INTEGER DEFAULT 0,
+            FOREIGN KEY (title_id) REFERENCES titles(id)
+          )
+        ''');
+
+        await db.execute('''
+          CREATE TABLE sync_meta (
+            key   TEXT PRIMARY KEY,
+            value TEXT
+          )
+        ''');
+
+        await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
+        await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
+      },
+    );
+  }
+
+  // ── Titles ────────────────────────────────────────────────────────────────
+
+  static Future<List<CatalogItem>> getMovies() async {
+    final db = await instance;
+    final rows = await db.query('titles',
+        where: 'media_type = ?', whereArgs: ['movie'],
+        orderBy: 'title ASC');
+    return rows.map(_rowToItem).toList();
+  }
+
+  static Future<List<CatalogItem>> getShows() async {
+    final db = await instance;
+    final rows = await db.query('titles',
+        where: 'media_type = ?', whereArgs: ['show'],
+        orderBy: 'title ASC');
+    return rows.map(_rowToItem).toList();
+  }
+
+  static Future<List<CatalogItem>> searchTitles(String query) async {
+    final db = await instance;
+    final rows = await db.query(
+      'titles',
+      where: 'title LIKE ?',
+      whereArgs: ['%$query%'],
+      orderBy: 'title ASC',
+      limit: 50,
+    );
+    return rows.map(_rowToItem).toList();
+  }
+
+  static Future<void> upsertTitle(CatalogItem item) async {
+    final db = await instance;
+    await db.insert(
+      'titles',
+      {
+        'id': item.id,
+        'title': item.title,
+        'year': item.year,
+        'media_type': item.mediaType,
+        'description': item.description,
+        'rating': item.rating,
+        'genres': item.genres,
+        'poster_url': item.posterUrl,
+        'is_free': item.isFree ? 1 : 0,
+        'db_version': item.dbVersion,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  // ── Episodes ──────────────────────────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> getEpisodes(int titleId) async {
+    final db = await instance;
+    return db.query(
+      'episodes',
+      where: 'title_id = ?',
+      whereArgs: [titleId],
+      orderBy: 'season ASC, episode ASC',
+    );
+  }
+
+  static Future<void> upsertEpisode(Map<String, dynamic> ep) async {
+    final db = await instance;
+    await db.insert('episodes', ep,
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // ── Sync metadata ─────────────────────────────────────────────────────────
+
+  static Future<int> getLastSyncVersion() async {
+    final db = await instance;
+    final rows = await db.query('sync_meta',
+        where: 'key = ?', whereArgs: ['last_version']);
+    if (rows.isEmpty) return 0;
+    return int.tryParse(rows.first['value'] as String? ?? '0') ?? 0;
+  }
+
+  static Future<void> setLastSyncVersion(int version) async {
+    final db = await instance;
+    await db.insert(
+      'sync_meta',
+      {'key': 'last_version', 'value': version.toString()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<int> getLastSyncTimestamp() async {
+    final db = await instance;
+    final rows = await db.query('sync_meta',
+        where: 'key = ?', whereArgs: ['last_sync_ts']);
+    if (rows.isEmpty) return 0;
+    return int.tryParse(rows.first['value'] as String? ?? '0') ?? 0;
+  }
+
+  static Future<void> setLastSyncTimestamp(int ts) async {
+    final db = await instance;
+    await db.insert(
+      'sync_meta',
+      {'key': 'last_sync_ts', 'value': ts.toString()},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<int> getTotalCount() async {
+    final db = await instance;
+    final result = await db.rawQuery('SELECT COUNT(*) as c FROM titles');
+    return (result.first['c'] as int?) ?? 0;
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  static CatalogItem _rowToItem(Map<String, dynamic> row) {
+    return CatalogItem(
+      id: row['id'] as int,
+      title: row['title'] as String,
+      year: row['year'] as int?,
+      mediaType: row['media_type'] as String,
+      description: row['description'] as String?,
+      rating: (row['rating'] as num?)?.toDouble(),
+      genres: row['genres'] as String?,
+      posterUrl: row['poster_url'] as String?,
+      isFree: (row['is_free'] as int? ?? 0) == 1,
+      dbVersion: row['db_version'] as int? ?? 0,
+    );
+  }
+}
