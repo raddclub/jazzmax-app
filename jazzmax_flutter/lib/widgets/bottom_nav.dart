@@ -39,9 +39,9 @@ class JazzMaxBottomNav extends StatelessWidget {
               onTap: () => onTap(1),
             ),
             _NavItem(
-              icon: Icons.star_outline_rounded,
-              activeIcon: Icons.star_rounded,
-              label: 'Subscribe',
+              icon: Icons.download_outlined,
+              activeIcon: Icons.download_rounded,
+              label: 'Downloads',
               isActive: currentIndex == 2,
               onTap: () => onTap(2),
             ),
