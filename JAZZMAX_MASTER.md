@@ -443,7 +443,7 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] GET /api/subscription/tid/status — payment status check
 - [x] TID payment verification panel in Radd Hub (/tid/)
 - [x] Payment numbers set: 03286839827 (Muhammad Rehan)
-- [ ] Add auth check to POST /watch/api/play/<file_id> (require valid token for premium titles)
+- [x] Add auth check to POST /watch/api/play/<file_id> (require valid token for premium titles)
 - [ ] Watch history API: POST /api/history/<file_id> with {progress_seconds, completed}
 - [ ] GET /api/history — return user's watch history
 - [ ] Search API: GET /api/search?q=term
