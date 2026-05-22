@@ -39,6 +39,18 @@ dependencies:
   # Network connectivity check
   connectivity_plus: ^6.0.2
 
+  # Screen brightness control (for player gesture)
+  screen_brightness: ^0.2.2+1
+
+  # System volume control (for player gesture)
+  volume_controller: ^2.0.7
+
+  # Keep screen awake during playback
+  wakelock_plus: ^1.1.4
+
+  # First-run onboarding flag
+  shared_preferences: ^2.2.2
+
   # Fonts
   google_fonts: ^6.1.0
 
