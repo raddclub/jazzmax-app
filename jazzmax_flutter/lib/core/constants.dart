@@ -7,7 +7,7 @@ class AppConstants {
   /// Runtime-mutable: updated by RemoteConfig.fetch() on every app start.
   /// To switch servers, edit jazzmax_config.json in GitHub — no APK rebuild needed.
   static String apiBaseUrl =
-      'https://41ae12f5-9a66-4db4-bcc0-7aa414aef3dc-00-bk5nniqeewor.pike.replit.dev';
+      'https://3a8b5394-ca6e-4969-becf-58950da98c8b-00-sta8fz28dnzk.pike.replit.dev';
 
   static const String onboardingSeenKey = 'jm_onboarding_seen';
 
