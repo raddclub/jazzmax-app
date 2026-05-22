@@ -450,37 +450,37 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [ ] Rate limiting on /api/play (max 20 requests/hour per user)
 
 ### Phase 1 — Flutter App: Project Setup
-- [ ] Create `jazzmax_flutter/` folder with full Flutter project structure
-- [ ] `pubspec.yaml` with all dependencies (media_kit, drift, dio, riverpod, etc.)
-- [ ] `android/app/src/main/AndroidManifest.xml` with all permissions
-- [ ] `android/app/build.gradle` configured for com.jazzmax.app
-- [ ] `.github/workflows/build_apk.yml` — GitHub Actions APK build pipeline
-- [ ] Push to GitHub repo: `raddclub/jazzmax-app`
+- [x] Create `jazzmax_flutter/` folder with full Flutter project structure
+- [x] `pubspec.yaml` with all dependencies (media_kit, sqflite, dio, riverpod, etc.)
+- [x] `android/app/src/main/AndroidManifest.xml` with all permissions
+- [x] `android/app/build.gradle` configured for com.jazzmax.app
+- [x] `.github/workflows/build_apk.yml` — GitHub Actions APK build pipeline
+- [ ] Push to GitHub repo: `raddclub/jazzmax-app` ← run `bash push_to_github.sh`
 - [ ] Verify GitHub Actions builds APK successfully (check Actions tab on GitHub)
 
 ### Phase 2 — Flutter App: Core Structure
-- [ ] `lib/main.dart` — app entry point
-- [ ] `lib/app.dart` — MaterialApp with dark theme + routing
-- [ ] `lib/core/api/api_client.dart` — Dio HTTP client with JWT interceptor
-- [ ] `lib/core/api/auth_api.dart` — login, register, refresh token calls
-- [ ] `lib/core/api/catalog_api.dart` — sync catalog, get stream URL
-- [ ] `lib/core/api/subscription_api.dart` — plans, TID submit
-- [ ] `lib/core/db/local_db.dart` — Drift encrypted local SQLite
-- [ ] `lib/core/db/sync_service.dart` — background catalog sync
-- [ ] `lib/core/security/device_id.dart` — get unique Android device ID
-- [ ] `lib/core/security/keystore.dart` — store tokens in Android Keystore
+- [x] `lib/main.dart` — app entry point
+- [x] `lib/app.dart` — MaterialApp with dark theme + routing
+- [x] `lib/core/api/api_client.dart` — Dio HTTP client with JWT interceptor + auto-refresh
+- [x] `lib/core/api/auth_api.dart` — login, register, refresh token calls
+- [x] `lib/core/api/catalog_api.dart` — sync catalog, get stream URL
+- [x] `lib/core/api/subscription_api.dart` — plans, TID submit
+- [x] `lib/core/db/local_db.dart` — sqflite local SQLite (offline catalog)
+- [x] `lib/core/db/sync_service.dart` — full + delta catalog sync
+- [x] `lib/core/security/device_id.dart` — get unique Android device ID
+- [x] `lib/core/security/keystore.dart` — store tokens in Android Keystore
 
 ### Phase 3 — Flutter App: Screens
-- [ ] Splash screen (check token → route to Home or Login)
-- [ ] Login screen (phone + password fields, JazzMAX branding)
-- [ ] Register screen (phone + password + confirm)
-- [ ] Home screen (poster grid — Movies + TV Shows sections)
-- [ ] Movie/Show detail screen (poster, title, year, rating, Watch + Download buttons)
-- [ ] Search screen (offline local SQLite search)
-- [ ] Downloads screen (list of downloaded files)
-- [ ] Profile/Settings screen (plan info, device info, logout)
-- [ ] Subscription plans screen (plan cards + TID payment instructions)
-- [ ] TID submission screen (enter TID after payment)
+- [x] Splash screen (check token → route to Home or Login)
+- [x] Login screen (phone + password fields, JazzMAX branding)
+- [x] Register screen (phone + password + confirm)
+- [x] Home screen (poster grid — Movies + TV Shows sections + search bar)
+- [x] Movie/Show detail sheet (poster, title, year, rating, Watch button — bottom sheet)
+- [x] Search screen (offline local SQLite search — built into Home screen)
+- [ ] Downloads screen (list of downloaded files) ← Phase 5
+- [x] Profile/Settings screen (plan info, device info, logout)
+- [x] Subscription plans screen (plan cards + TID payment instructions)
+- [x] TID submission screen (enter TID after payment — built into Subscription screen)
 
 ### Phase 4 — Flutter App: Video Player
 - [ ] `lib/features/player/player_screen.dart` — fullscreen player
