@@ -4,9 +4,11 @@ class AppConstants {
   static const String appName = 'JazzMAX';
   static const String tagline = 'Pakistan ka entertainment, data-free';
 
-  static const String apiBaseUrl = 'http://10.0.2.2:8000';
+  /// Runtime-mutable: updated by RemoteConfig.fetch() on every app start.
+  /// To switch servers, edit jazzmax_config.json in GitHub — no APK rebuild needed.
+  static String apiBaseUrl =
+      'https://41ae12f5-9a66-4db4-bcc0-7aa414aef3dc-00-bk5nniqeewor.pike.replit.dev';
 
-  // SharedPreferences keys
   static const String onboardingSeenKey = 'jm_onboarding_seen';
 
   static const Duration accessTokenValidity = Duration(minutes: 15);
@@ -50,11 +52,13 @@ class StorageKeys {
   static const String userId = 'jm_user_id';
   static const String deviceId = 'jm_device_id';
   static const String onboardingSeen = 'jm_onboarding_seen';
+  static const String isGuest = 'jm_is_guest';
 }
 
 class ApiPaths {
   static const String register = '/api/auth/register';
   static const String login = '/api/auth/login';
+  static const String guest = '/api/auth/guest';
   static const String refresh = '/api/auth/refresh';
   static const String logout = '/api/auth/logout';
   static const String me = '/api/auth/me';

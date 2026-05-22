@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api/auth_api.dart';
 import '../core/security/keystore.dart';
+import '../core/constants.dart';
 import '../models/user.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
@@ -30,8 +32,21 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier() : super(const AuthState());
 
-  /// Called on app start — checks if a token exists and validates it.
   Future<void> checkAuth() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isGuest = prefs.getBool(StorageKeys.isGuest) ?? false;
+
+    if (isGuest) {
+      final hasToken = await Keystore.hasTokens();
+      if (hasToken) {
+        state = AuthState(status: AuthStatus.authenticated, user: AppUser.guest());
+        return;
+      }
+      await prefs.remove(StorageKeys.isGuest);
+      state = state.copyWith(status: AuthStatus.unauthenticated);
+      return;
+    }
+
     final hasToken = await Keystore.hasTokens();
     if (!hasToken) {
       state = state.copyWith(status: AuthStatus.unauthenticated);
@@ -41,7 +56,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = await AuthApi.getMe();
       state = AuthState(status: AuthStatus.authenticated, user: user);
     } catch (_) {
-      // Token is invalid or expired — clear and send to login
       await Keystore.clearAll();
       state = state.copyWith(status: AuthStatus.unauthenticated);
     }
@@ -55,18 +69,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
       refreshToken: result.refreshToken,
       userId: result.userId.toString(),
     );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(StorageKeys.isGuest);
     final user = await AuthApi.getMe();
     state = AuthState(status: AuthStatus.authenticated, user: user);
   }
 
   Future<void> register({required String phone, required String password}) async {
     await AuthApi.register(phone: phone, password: password);
-    // After registration, log in automatically
     await login(phone: phone, password: password);
   }
 
+  Future<void> continueAsGuest() async {
+    final token = await AuthApi.guestLogin();
+    await Keystore.saveTokens(
+      accessToken: token,
+      refreshToken: '',
+      userId: '0',
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(StorageKeys.isGuest, true);
+    state = AuthState(status: AuthStatus.authenticated, user: AppUser.guest());
+  }
+
   Future<void> logout() async {
-    await AuthApi.logout();
+    try { await AuthApi.logout(); } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(StorageKeys.isGuest);
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 

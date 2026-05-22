@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
+import '../core/remote_config.dart';
 import '../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -28,7 +29,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _start() async {
-    await Future.delayed(const Duration(milliseconds: 1200));
+    await Future.delayed(const Duration(milliseconds: 400));
+    // Fetch remote config (updates server URL without needing an APK rebuild)
+    await RemoteConfig.fetch();
+    await Future.delayed(const Duration(milliseconds: 800));
     if (!mounted) return;
 
     // Check if onboarding has been seen

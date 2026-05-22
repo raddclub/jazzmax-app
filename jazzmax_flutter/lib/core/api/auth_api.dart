@@ -8,6 +8,13 @@ import '../security/device_id.dart';
 class AuthApi {
   static final _client = ApiClient.instance;
 
+  /// Continue as guest — returns a short-lived access token, no account needed.
+  static Future<String> guestLogin() async {
+    final response = await _client.post(ApiPaths.guest);
+    final data = response.data as Map<String, dynamic>;
+    return data['access_token'] as String;
+  }
+
   /// Register a new account with phone + password.
   static Future<Map<String, dynamic>> register({
     required String phone,

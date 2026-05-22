@@ -4,6 +4,7 @@ class AppUser {
   final String? deviceId;
   final String? deviceName;
   final bool isActive;
+  final bool isGuest;
   final String? createdAt;
   final String? lastLoginAt;
   final UserSubscription? subscription;
@@ -14,10 +15,15 @@ class AppUser {
     this.deviceId,
     this.deviceName,
     this.isActive = true,
+    this.isGuest = false,
     this.createdAt,
     this.lastLoginAt,
     this.subscription,
   });
+
+  factory AppUser.guest() {
+    return const AppUser(id: 0, phone: 'guest', isGuest: true);
+  }
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
     final userData = json['user'] as Map<String, dynamic>? ?? json;

@@ -28,6 +28,12 @@ class ApiClient {
     return _instance!;
   }
 
+  /// Call this after RemoteConfig.fetch() to point Dio at the new server URL.
+  static void updateBaseUrl(String url) {
+    _instance ??= ApiClient._();
+    _instance!._dio.options.baseUrl = url;
+  }
+
   Dio get dio => _dio;
 
   // ── Convenience methods ───────────────────────────────────────────────────
@@ -52,7 +58,7 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) async {
     // Skip auth header for auth endpoints
-    final noAuthPaths = [ApiPaths.login, ApiPaths.register, ApiPaths.refresh];
+    final noAuthPaths = [ApiPaths.login, ApiPaths.register, ApiPaths.refresh, ApiPaths.guest];
     if (noAuthPaths.contains(options.path)) {
       return handler.next(options);
     }

@@ -226,6 +226,24 @@ def refresh():
     return jsonify({"ok": True, "access_token": access_token})
 
 
+GUEST_TOKEN_TTL = 24 * 60 * 60  # 24 hours
+
+@bp.route("/guest", methods=["POST"])
+def guest_login():
+    """Return a short-lived guest access token — no account needed.
+    Guest gets 10-minute free preview per video (enforced client-side)."""
+    payload = {
+        "sub": "guest",
+        "phone": "guest",
+        "type": "access",
+        "is_guest": True,
+        "exp": int(time.time()) + GUEST_TOKEN_TTL,
+        "iat": int(time.time()),
+    }
+    token = jwt.encode(payload, _jwt_secret(), algorithm="HS256")
+    return jsonify({"access_token": token, "is_guest": True})
+
+
 @bp.route("/logout", methods=["POST"])
 @require_app_auth
 def logout():

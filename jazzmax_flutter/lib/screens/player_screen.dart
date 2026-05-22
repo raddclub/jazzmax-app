@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/api/catalog_api.dart';
@@ -54,6 +55,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _showSeekFwd = false;
   bool _showSeekBwd = false;
 
+  // Guest mode
+  bool _isGuest = false;
+  Timer? _guestLimitTimer;
+
   // Timers
   Timer? _controlsTimer;
   Timer? _positionTimer;
@@ -76,6 +81,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     WakelockPlus.enable();
 
     _initBrightnessVolume();
+    _checkGuestMode();
     _loadAndPlay();
     _resetControlsTimer();
 
@@ -83,6 +89,102 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _savePosition();
     });
+  }
+
+  // ── Guest mode limit ──────────────────────────────────────────────────────
+
+  Future<void> _checkGuestMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    _isGuest = prefs.getBool(StorageKeys.isGuest) ?? false;
+    if (_isGuest) {
+      _guestLimitTimer = Timer(const Duration(minutes: 10), () {
+        if (mounted) {
+          _player.pause();
+          _showSubscribePopup();
+        }
+      });
+    }
+  }
+
+  void _showSubscribePopup() {
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RichText(
+                text: const TextSpan(
+                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1),
+                  children: [
+                    TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
+                    TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_rounded, color: AppColors.primary, size: 40),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Free Preview Ended',
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'You\'ve watched your 10-minute free preview.\nSubscribe to continue watching — data-free on Jazz SIM.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.6),
+              ),
+              const SizedBox(height: 28),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.subscription, (r) => r.settings.name == AppRoutes.home);
+                },
+                child: const Text('Subscribe Now'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRoutes.register, (r) => false);
+                },
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppColors.textMuted),
+                  minimumSize: const Size(double.infinity, 52),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Create Free Account', style: TextStyle(color: AppColors.textMuted)),
+              ),
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
+                },
+                child: const Text('Back to Home', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   // ── Initialization ────────────────────────────────────────────────────────
@@ -278,6 +380,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controlsTimer?.cancel();
     _positionTimer?.cancel();
     _indicatorTimer?.cancel();
+    _guestLimitTimer?.cancel();
     _savePosition();
     _player.dispose();
     WakelockPlus.disable();

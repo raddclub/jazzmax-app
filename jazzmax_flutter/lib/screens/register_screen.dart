@@ -28,6 +28,19 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
+  Future<void> _continueAsGuest() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(authProvider.notifier).continueAsGuest();
+      if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    } catch (e) {
+      setState(() {
+        _error = 'Cannot connect to server. Check your internet.';
+        _loading = false;
+      });
+    }
+  }
+
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
@@ -186,6 +199,23 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ElevatedButton(
                   onPressed: _loading ? null : _register,
                   child: const Text('Create Account'),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: _loading ? null : _continueAsGuest,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: AppColors.textMuted),
+                      minimumSize: const Size(double.infinity, 52),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text(
+                      'Continue as Guest',
+                      style: TextStyle(color: AppColors.textMuted),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Center(
