@@ -35,7 +35,7 @@ def _ensure_table() -> None:
 
 
 def _get_user_id() -> int | None:
-    """Extract user_id from Bearer JWT. Returns None on invalid/missing token."""
+    """Extract user_id from Bearer JWT. Returns None on invalid/missing/guest token."""
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return None
@@ -45,6 +45,12 @@ def _get_user_id() -> int | None:
             token, SECRET, algorithms=["HS256"],
             options={"verify_sub": False},
         )
+        # Reject guest tokens — guests don't have persistent history
+        if payload.get("is_guest") or payload.get("sub") == "guest":
+            return None
+        # Reject non-access tokens (e.g. refresh tokens accidentally sent)
+        if payload.get("type") != "access":
+            return None
         return int(payload["sub"])
     except Exception:
         return None
