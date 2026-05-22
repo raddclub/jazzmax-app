@@ -28,6 +28,11 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Create local.properties (required by settings.gradle)
+        run: |
+          echo "flutter.sdk=$FLUTTER_ROOT" > jazzmax_flutter/android/local.properties
+          echo "sdk.dir=$ANDROID_SDK_ROOT" >> jazzmax_flutter/android/local.properties
+
       - name: Get Flutter dependencies
         working-directory: jazzmax_flutter
         run: flutter pub get
@@ -43,9 +48,7 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: jazzmax
           KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-        run: |
-          flutter build apk --release \
-            --dart-define=KEYSTORE_PATH=$KEYSTORE_PATH
+        run: flutter build apk --release
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
