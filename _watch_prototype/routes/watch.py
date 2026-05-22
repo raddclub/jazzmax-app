@@ -18,6 +18,37 @@ bp = Blueprint("watch", __name__, url_prefix="/watch")
 
 LINK_CACHE_SECONDS = 21600  # 6 hours — tested: JazzDrive links stay valid at least 6h
 
+# ── Simple in-memory rate limiter for /api/play ───────────────────────────────
+# Tracks (user_id_or_ip → list[timestamp]) — resets on server restart (acceptable).
+# Limit: 20 play requests per hour per authenticated user; 5/hour for guests/anon.
+import threading
+_rl_lock   = threading.Lock()
+_rl_store: dict[str, list[float]] = {}
+_RL_WINDOW = 3600   # 1 hour in seconds
+_RL_LIMIT_USER  = 20
+_RL_LIMIT_GUEST = 5
+
+def _rate_limit_key(payload: dict | None) -> str:
+    """Return a string key identifying the requester for rate limiting."""
+    if payload and not payload.get("is_guest") and payload.get("sub") != "guest":
+        return f"u:{payload['sub']}"
+    # Fall back to IP address for guests / unauthenticated requests
+    return f"ip:{request.remote_addr}"
+
+def _is_rate_limited(key: str, limit: int) -> bool:
+    """Return True if this key has exceeded its limit within the rolling window."""
+    now = time.time()
+    with _rl_lock:
+        hits = _rl_store.get(key, [])
+        # Drop timestamps outside the window
+        hits = [t for t in hits if now - t < _RL_WINDOW]
+        if len(hits) >= limit:
+            _rl_store[key] = hits
+            return True
+        hits.append(now)
+        _rl_store[key] = hits
+        return False
+
 # Posters are saved here permanently — never fetched from JazzDrive again
 POSTERS_DIR = Path(__file__).parent.parent / "posters"
 POSTERS_DIR.mkdir(exist_ok=True)
@@ -229,6 +260,16 @@ def play(file_id: int):
             "error": "login required to watch this title",
             "code": "AUTH_REQUIRED",
         }), 401
+
+    # --- rate limiting -------------------------------------------------------
+    rl_key   = _rate_limit_key(payload)
+    rl_limit = _RL_LIMIT_GUEST if (payload is None or is_guest) else _RL_LIMIT_USER
+    if _is_rate_limited(rl_key, rl_limit):
+        log.warning("play(%d): rate limit hit for key=%s", file_id, rl_key)
+        return jsonify({
+            "error": "too many requests — please wait before playing another video",
+            "code": "RATE_LIMITED",
+        }), 429
 
     # Check cached link (avoid hitting JazzDrive again if still valid)
     now = int(time.time())
