@@ -178,12 +178,27 @@ def show_episodes(slug: str):
 def play(file_id: int):
     """Generate a direct stream URL for ONE file — called only when user clicks play.
 
+    Auth rules:
+      - Premium (non-free) titles → valid Bearer token required (guest token OK for
+        free titles, but NOT for paid content).
+      - Free titles (is_free=1) → guests may play without a token.
+      - If the title is premium and the token is missing/invalid → 401.
+      - Guest tokens (is_guest=True) may only play free titles.
+
     Caches the link in stream_links for LINK_CACHE_SECONDS to avoid re-hitting
     JazzDrive on every page reload. Each user click still goes through this endpoint.
     """
+    from routes.app_auth import _verify_access_token
+
+    # --- resolve the file and its parent title so we know is_free ----------------
     with db.conn() as c:
         file_row = c.execute(
-            "SELECT id, share_url, title_id, filename FROM files WHERE id = ?", (file_id,)
+            """SELECT f.id, f.share_url, f.title_id, f.filename,
+                      COALESCE(t.is_free, 0) AS is_free
+               FROM files f
+               LEFT JOIN titles t ON t.id = f.title_id
+               WHERE f.id = ?""",
+            (file_id,)
         ).fetchone()
 
     if not file_row:
@@ -191,8 +206,29 @@ def play(file_id: int):
 
     share_url = file_row["share_url"]
     filename  = file_row["filename"] or ""   # used to target the correct file in the folder
+    is_free   = bool(file_row["is_free"])
+
     if not share_url:
         return jsonify({"error": "no share URL for this file"}), 500
+
+    # --- auth check: premium titles require a valid, non-guest token -------------
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else None
+    payload = _verify_access_token(token) if token else None
+
+    is_guest = payload.get("is_guest", False) if payload else True  # no token = treat as guest
+
+    if not is_free and is_guest:
+        return jsonify({
+            "error": "subscribe to watch this title",
+            "code": "SUBSCRIPTION_REQUIRED",
+        }), 403
+
+    if not is_free and payload is None:
+        return jsonify({
+            "error": "login required to watch this title",
+            "code": "AUTH_REQUIRED",
+        }), 401
 
     # Check cached link (avoid hitting JazzDrive again if still valid)
     now = int(time.time())
