@@ -483,38 +483,40 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] TID submission screen (enter TID after payment — built into Subscription screen)
 
 ### Phase 4 — Flutter App: Video Player
-- [ ] `lib/features/player/player_screen.dart` — fullscreen player
-- [ ] media_kit integration (handles MKV, EAC3, subtitles)
-- [ ] Playback controls (play/pause, seek bar, time display)
-- [ ] Double-tap left/right to seek ±10 seconds
-- [ ] Swipe left = brightness control
-- [ ] Swipe right = volume control
-- [ ] Audio track selector (for multi-language MKV files)
-- [ ] Subtitle selector (built-in + external .srt)
-- [ ] Aspect ratio toggle (Fit / Fill / Crop)
-- [ ] Screen lock button
-- [ ] Resume position (save + restore progress)
-- [ ] Background audio (continues when screen turns off)
+- [x] `lib/screens/player_screen.dart` — fullscreen player (777 lines)
+- [x] media_kit integration (handles MKV, EAC3, multiple audio tracks)
+- [x] Playback controls (play/pause, seek bar, time display)
+- [x] Double-tap left/right to seek ±10 seconds (with flash indicator)
+- [x] Swipe left half = screen brightness (screen_brightness package)
+- [x] Swipe right half = player volume (volume_controller package)
+- [x] Audio track selector (bottom sheet, for multi-language MKV files)
+- [ ] Subtitle selector (built-in + external .srt) ← next phase
+- [x] Aspect ratio toggle (Fit / Cover / Fill cycle)
+- [x] Screen lock button (tap-to-unlock overlay)
+- [x] Resume position (save every 5s to local_db, restore on open)
+- [x] Wakelock active during playback (wakelock_plus)
 
 ### Phase 5 — Flutter App: Downloads
-- [ ] Background download with flutter_downloader
-- [ ] WorkManager for surviving app kill during download
-- [ ] Download progress notification
-- [ ] AES-256 encryption of downloaded file (key = device_id + user_token)
-- [ ] Save as `.rdw` format in private app storage
-- [ ] Offline playback from encrypted file
-- [ ] Download limit per subscription tier (basic: 5/day, standard: 15/day, premium: unlimited)
-- [ ] Delete downloaded file
+- [x] `lib/core/download/download_service.dart` — Dio-based download with progress
+- [x] `lib/providers/downloads_provider.dart` — Riverpod state for downloads list
+- [x] `lib/screens/downloads_screen.dart` — full downloads list UI
+- [x] `lib/core/db/local_db.dart` downloads table — status, progress, local_path
+- [x] Download progress tracking (0.0 → 1.0, updates UI live)
+- [x] Delete downloaded file (removes local file + DB record)
+- [x] Offline playback from local file (passes local_path to player)
+- [ ] AES-256 encryption of downloaded files ← future
+- [ ] Download limit per subscription tier ← future
+- [ ] Background download survives app kill ← future
 
 ### Phase 6 — Polish & Release
-- [ ] App icon (JazzMAX red logo)
-- [ ] Splash screen with animation
-- [ ] Onboarding screen (explain zero-rating benefit, shown once)
-- [ ] Error handling screens (no internet, server down, etc.)
-- [ ] ProGuard/R8 code obfuscation (so APK can't be reverse engineered easily)
-- [ ] Sign APK with keystore (required for release)
-- [ ] Test on real Android phone
-- [ ] Upload signed APK to GitHub Releases
+- [x] Splash screen with fade animation + pulsing dot
+- [x] Onboarding screen (4 pages, skip button, shown once via SharedPreferences)
+- [x] Bottom nav: Downloads tab replaces Subscribe (subscribe accessible from Profile)
+- [ ] App icon (JazzMAX red logo) ← still needed
+- [ ] ProGuard/R8 code obfuscation ← before release
+- [ ] Sign APK with keystore (required for release) ← before release
+- [ ] Test on real Android phone ← needs APK build to pass first
+- [ ] Upload signed APK to GitHub Releases ← after signing
 - [ ] Share APK link with first users
 
 ### Phase 7 — Production Server
