@@ -1,0 +1,61 @@
+name: Build JazzMAX APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Get Flutter dependencies
+        working-directory: jazzmax_flutter
+        run: flutter pub get
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > jazzmax_flutter/android/app/keystore/jazzmax.keystore
+
+      - name: Build release APK
+        working-directory: jazzmax_flutter
+        env:
+          KEYSTORE_PATH: keystore/jazzmax.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: jazzmax
+          KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          flutter build apk --release \
+            --dart-define=KEYSTORE_PATH=$KEYSTORE_PATH
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jazzmax-release-${{ github.run_number }}
+          path: jazzmax_flutter/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 30
+
+      - name: Get APK size
+        run: |
+          APK=jazzmax_flutter/build/app/outputs/flutter-apk/app-release.apk
+          SIZE=$(du -sh "$APK" | cut -f1)
+          echo "✅ APK built successfully — Size: $SIZE"

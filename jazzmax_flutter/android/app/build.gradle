@@ -15,6 +15,13 @@ if (localPropertiesFile.exists()) {
 def flutterVersionCode = localProperties.getProperty('flutter.versionCode') ?: '1'
 def flutterVersionName = localProperties.getProperty('flutter.versionName') ?: '1.0'
 
+// Read keystore config from key.properties (local dev) or env vars (CI)
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file('key.properties')
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace "com.jazzmax.app"
     compileSdk flutter.compileSdkVersion
@@ -33,6 +40,18 @@ android {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
+    signingConfigs {
+        release {
+            def ksPath = System.getenv('KEYSTORE_PATH')
+                ?: keystoreProperties['storeFile']
+                ?: 'keystore/jazzmax.keystore'
+            storeFile file(ksPath)
+            storePassword System.getenv('KEYSTORE_PASSWORD') ?: keystoreProperties['storePassword'] ?: ''
+            keyAlias System.getenv('KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'jazzmax'
+            keyPassword System.getenv('KEY_PASSWORD') ?: keystoreProperties['keyPassword'] ?: ''
+        }
+    }
+
     defaultConfig {
         applicationId "com.jazzmax.app"
         minSdkVersion 21
@@ -44,6 +63,13 @@ android {
 
     buildTypes {
         release {
+            signingConfig signingConfigs.release
+            // R8/ProGuard: shrink, obfuscate, optimize
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
             signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false

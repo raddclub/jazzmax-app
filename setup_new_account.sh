@@ -68,88 +68,66 @@ curl -s -L \
 ZIP_SIZE=$(du -sh /tmp/jazzmax_github.zip | cut -f1)
 echo "  ✓ Downloaded: $ZIP_SIZE"
 
-# ── Step 3: Extract project files ─────────────────────────────────────────────
+# ── Step 3: Extract project files (Node.js — always available on Replit) ──────
 echo ""
 echo "▶ Step 3/4 — Extracting project files..."
 
-python3 << 'PYEOF'
-import zipfile, os, shutil
-from pathlib import Path
+# Install adm-zip quietly (tiny package, ~1 second)
+cd /tmp && npm install adm-zip --save --silent 2>/dev/null; cd "$WORKSPACE"
 
-src = '/tmp/jazzmax_github.zip'
-dest = '/home/runner/workspace'
+node << 'JSEOF'
+const AdmZip = require('/tmp/node_modules/adm-zip');
+const fs = require('fs');
+const path = require('path');
 
-z = zipfile.ZipFile(src)
-names = z.namelist()
+const PROTECTED = new Set([
+  '.replit', 'replit.nix', '.replitignore',
+  'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'package.json',
+  'tsconfig.json', 'tsconfig.base.json',
+]);
+const PROTECTED_DIRS = ['node_modules/', 'artifacts/', 'lib/', 'scripts/'];
+const SKIP_CONTAINS = ['local/browsers/', 'local/.chromium'];
 
-# GitHub zips wrap everything in a top-level folder like "raddclub-jazzmax-app-abc123/"
-prefix = names[0].split('/')[0] + '/'
+const dest = '/home/runner/workspace';
+const zip = new AdmZip('/tmp/jazzmax_github.zip');
+const entries = zip.getEntries();
 
-# These Replit-managed files must NEVER be overwritten
-PROTECTED = {
-    '.replit', 'replit.nix', '.replitignore',
-    'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'package.json',
-    'tsconfig.json', 'tsconfig.base.json',
+const prefix = entries[0].entryName.split('/')[0] + '/';
+let extracted = 0, skipped = 0;
+
+for (const entry of entries) {
+  const rel = entry.entryName.slice(prefix.length);
+  if (!rel) { skipped++; continue; }
+  if (SKIP_CONTAINS.some(sc => rel.includes(sc))) { skipped++; continue; }
+  const base = path.basename(rel);
+  if (PROTECTED.has(base)) { skipped++; continue; }
+  if (PROTECTED_DIRS.some(pd => rel.startsWith(pd))) { skipped++; continue; }
+  const destPath = path.join(dest, rel);
+  if (entry.isDirectory) {
+    fs.mkdirSync(destPath, { recursive: true });
+  } else {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.writeFileSync(destPath, entry.getData());
+    extracted++;
+  }
 }
-PROTECTED_DIRS = {
-    '.git/', 'node_modules/', 'artifacts/', 'lib/', 'scripts/',
-}
+console.log(`  ✓ Extracted ${extracted} files  (skipped ${skipped} protected/binary files)`);
+JSEOF
 
-# Heavy binaries we don't need (large Chromium/ffmpeg installs)
-SKIP_CONTAINS = [
-    'local/browsers/',
-    'local/.chromium',
-]
-
-extracted = 0
-skipped = 0
-
-for name in names:
-    rel = name[len(prefix):]
-    if not rel:
-        continue
-
-    # Skip heavy binaries
-    skip = False
-    for sc in SKIP_CONTAINS:
-        if sc in rel:
-            skip = True
-            break
-    if skip:
-        skipped += 1
-        continue
-
-    # Skip Replit-managed files
-    base = Path(rel).name
-    if base in PROTECTED:
-        skipped += 1
-        continue
-    for pd in PROTECTED_DIRS:
-        if rel.startswith(pd):
-            skip = True
-            break
-    if skip:
-        skipped += 1
-        continue
-
-    dest_path = os.path.join(dest, rel)
-
-    if name.endswith('/'):
-        os.makedirs(dest_path, exist_ok=True)
-    else:
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        with z.open(name) as src_f, open(dest_path, 'wb') as dst_f:
-            shutil.copyfileobj(src_f, dst_f)
-        extracted += 1
-
-print(f"  ✓ Extracted {extracted} files  (skipped {skipped} protected/binary files)")
-PYEOF
-
-# ── Step 4: Install Python packages ───────────────────────────────────────────
+# ── Step 4: Install Python packages (if Python is available) ──────────────────
 echo ""
-echo "▶ Step 4/4 — Installing Python packages..."
-pip install flask flask-cors pyjwt werkzeug requests -q
-echo "  ✓ Python packages ready"
+echo "▶ Step 4/4 — Python packages..."
+
+if command -v python3 &>/dev/null && command -v pip3 &>/dev/null; then
+    pip3 install flask flask-cors pyjwt werkzeug requests -q
+    echo "  ✓ Python packages ready"
+elif command -v pip &>/dev/null; then
+    pip install flask flask-cors pyjwt werkzeug requests -q
+    echo "  ✓ Python packages ready"
+else
+    echo "  ⚠  Python3/pip not found — the Replit Agent will install it automatically."
+    echo "  Just tell the Agent: \"Set up the Radd Hub and Watch Prototype workflows\""
+fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""

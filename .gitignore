@@ -79,3 +79,16 @@ radd-hub/.env
 
 # Zip exports
 jazzmax_*.zip
+
+# JazzMAX keystore (stored as GitHub Secret KEYSTORE_BASE64)
+jazzmax_flutter/android/app/keystore/*.keystore
+jazzmax_flutter/android/app/keystore/*.jks
+jazzmax_flutter/android/app/key.properties
+
+# Python
+__pycache__/
+*.pyc
+.pythonlibs/
+
+# Build artifacts
+jazzmax_flutter/build/
