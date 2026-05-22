@@ -1,0 +1,84 @@
+class AppUser {
+  final int id;
+  final String phone;
+  final String? deviceId;
+  final String? deviceName;
+  final bool isActive;
+  final String? createdAt;
+  final String? lastLoginAt;
+  final UserSubscription? subscription;
+
+  const AppUser({
+    required this.id,
+    required this.phone,
+    this.deviceId,
+    this.deviceName,
+    this.isActive = true,
+    this.createdAt,
+    this.lastLoginAt,
+    this.subscription,
+  });
+
+  factory AppUser.fromJson(Map<String, dynamic> json) {
+    final userData = json['user'] as Map<String, dynamic>? ?? json;
+    final subData = json['subscription'] as Map<String, dynamic>?;
+
+    return AppUser(
+      id: userData['id'] as int? ?? 0,
+      phone: userData['phone'] as String? ?? '',
+      deviceId: userData['device_id'] as String?,
+      deviceName: userData['device_name'] as String?,
+      isActive: (userData['is_active'] as int? ?? 1) == 1,
+      createdAt: userData['created_at'] as String?,
+      lastLoginAt: userData['last_login_at'] as String?,
+      subscription: subData != null ? UserSubscription.fromJson(subData) : null,
+    );
+  }
+
+  bool get hasActiveSubscription {
+    if (subscription == null) return false;
+    return subscription!.isActive;
+  }
+
+  String get planName => subscription?.plan ?? 'free';
+}
+
+class UserSubscription {
+  final String plan; // 'free', 'basic', 'standard', 'premium'
+  final String? expiresAt;
+  final bool isActive;
+
+  const UserSubscription({
+    required this.plan,
+    this.expiresAt,
+    required this.isActive,
+  });
+
+  factory UserSubscription.fromJson(Map<String, dynamic> json) {
+    final expiresAt = json['expires_at'] as String?;
+    bool active = (json['is_active'] as int? ?? 0) == 1;
+
+    // Also check expiry date
+    if (active && expiresAt != null) {
+      try {
+        final expiry = DateTime.parse(expiresAt);
+        active = expiry.isAfter(DateTime.now());
+      } catch (_) {}
+    }
+
+    return UserSubscription(
+      plan: json['plan'] as String? ?? 'free',
+      expiresAt: expiresAt,
+      isActive: active,
+    );
+  }
+
+  String get displayName {
+    switch (plan) {
+      case 'basic': return 'Basic';
+      case 'standard': return 'Standard';
+      case 'premium': return 'Premium';
+      default: return 'Free';
+    }
+  }
+}
