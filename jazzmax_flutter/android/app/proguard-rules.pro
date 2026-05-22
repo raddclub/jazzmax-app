@@ -36,6 +36,11 @@
 # Keep JazzMAX app models (prevent obfuscation of data classes)
 -keep class com.jazzmax.app.** { *; }
 
+# Google Play Core — referenced by Flutter's FlutterPlayStoreSplitApplication
+# but not needed for sideloaded / direct APK distribution.
+-dontwarn com.google.android.play.core.**
+-keep class com.google.android.play.core.** { *; }
+
 # Generic Android rules
 -keepattributes *Annotation*
 -keepattributes SourceFile,LineNumberTable
