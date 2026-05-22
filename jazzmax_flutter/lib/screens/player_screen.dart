@@ -16,11 +16,13 @@ import '../core/db/local_db.dart';
 class PlayerScreen extends StatefulWidget {
   final String fileId;
   final String title;
+  final String? localPath;
 
   const PlayerScreen({
     super.key,
     required this.fileId,
     required this.title,
+    this.localPath,
   });
 
   @override
@@ -159,8 +161,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void _seekRelative(int seconds) async {
     final pos = _player.state.position;
     final dur = _player.state.duration;
-    final newPos = (pos + Duration(seconds: seconds))
-        .clamp(Duration.zero, dur);
+    final raw = pos + Duration(seconds: seconds);
+    final newPos = raw < Duration.zero ? Duration.zero : (raw > dur ? dur : raw);
     await _player.seek(newPos);
 
     setState(() {
