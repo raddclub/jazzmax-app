@@ -57,7 +57,8 @@ def create_app() -> Flask:
 
     # ----- blueprints --------------------------------------------------
     from .routes import home, settings as settings_route, library, scan, upload, \
-                        stream, admin, bots, api, db_mgmt, organizer as organizer_route
+                        stream, admin, bots, api, db_mgmt, organizer as organizer_route, \
+                        tid_panel
     app.register_blueprint(auth.bp,                    url_prefix="/auth")
     app.register_blueprint(home.bp)
     app.register_blueprint(settings_route.bp,          url_prefix="/settings")
@@ -70,6 +71,7 @@ def create_app() -> Flask:
     app.register_blueprint(api.bp,                     url_prefix="/api")
     app.register_blueprint(db_mgmt.bp,                 url_prefix="/api/db_mgmt")
     app.register_blueprint(organizer_route.bp,         url_prefix="/organizer")
+    app.register_blueprint(tid_panel.bp,               url_prefix="/tid")
 
     # ------------------------------------------------------------------
     # Download proxy — /d/<remote_id>

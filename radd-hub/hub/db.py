@@ -362,6 +362,63 @@ _DDL = [
     )""",
     "CREATE INDEX IF NOT EXISTS idx_usage_jid ON user_usage(user_jid, date)",
 
+    # ---- app_users — JazzMAX Android app subscriber accounts
+    """CREATE TABLE IF NOT EXISTS app_users (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone           TEXT UNIQUE NOT NULL,
+        password_hash   TEXT NOT NULL,
+        device_id       TEXT,
+        device_name     TEXT,
+        device_bound_at INTEGER,
+        is_active       INTEGER DEFAULT 1,
+        created_at      INTEGER DEFAULT (strftime('%s','now')),
+        last_login_at   INTEGER
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_app_users_phone ON app_users(phone)",
+
+    # ---- app_subscriptions — which plan each app user is on
+    """CREATE TABLE IF NOT EXISTS app_subscriptions (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES app_users(id),
+        plan        TEXT NOT NULL DEFAULT 'free',
+        started_at  INTEGER,
+        expires_at  INTEGER,
+        is_active   INTEGER DEFAULT 1,
+        created_at  INTEGER DEFAULT (strftime('%s','now'))
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_app_subs_user ON app_subscriptions(user_id, is_active)",
+
+    # ---- tid_payments — manual TID payment verification queue
+    """CREATE TABLE IF NOT EXISTS tid_payments (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id        INTEGER REFERENCES app_users(id),
+        phone          TEXT NOT NULL,
+        amount_pkr     INTEGER NOT NULL,
+        tid            TEXT NOT NULL,
+        payment_method TEXT DEFAULT 'jazzcash',
+        plan           TEXT NOT NULL,
+        status         TEXT DEFAULT 'pending',
+        admin_note     TEXT,
+        submitted_at   INTEGER DEFAULT (strftime('%s','now')),
+        reviewed_at    INTEGER,
+        reviewed_by    TEXT
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_tid_status ON tid_payments(status, submitted_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tid_user   ON tid_payments(user_id)",
+
+    # ---- app_refresh_tokens — JWT refresh token store
+    """CREATE TABLE IF NOT EXISTS app_refresh_tokens (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES app_users(id),
+        token_hash  TEXT UNIQUE NOT NULL,
+        device_id   TEXT,
+        created_at  INTEGER DEFAULT (strftime('%s','now')),
+        expires_at  INTEGER,
+        revoked     INTEGER DEFAULT 0
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_refresh_token ON app_refresh_tokens(token_hash)",
+    "CREATE INDEX IF NOT EXISTS idx_refresh_user  ON app_refresh_tokens(user_id, revoked)",
+
     # ---- turbo_cache — lightning fast search/link lookups
     """CREATE TABLE IF NOT EXISTS turbo_cache (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
