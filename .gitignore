@@ -47,3 +47,35 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+.upm/
+.config/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pythonlibs/
+
+# Large binary folders (re-downloaded automatically)
+radd-hub/local/
+
+# Logs, temp, backups
+radd-hub/data/logs/
+radd-hub/data/backups/
+radd-hub/data/tmp/
+radd-hub/data/staging/
+radd-hub/data/media/
+radd-hub/data/cache/
+
+# SQLite WAL files (safe to exclude — database is checkpointed before push)
+radd-hub/data/radd_hub.db-wal
+radd-hub/data/radd_hub.db-shm
+radd-hub/data/raddhub.pid
+
+# Secrets / env
+.env
+.env.local
+radd-hub/.env
+
+# Zip exports
+jazzmax_*.zip

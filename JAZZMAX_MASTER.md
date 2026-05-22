@@ -16,13 +16,29 @@
 > 4. Add Replit Secret: `SESSION_SECRET` → ask Muhammad Rehan for the value
 > 5. Read section 14 (Task Checklist) → find first unchecked `[ ]` → build that
 
-## ⚡ END OF SESSION — CREATE ZIP BEFORE LEAVING
+## ⚡ END OF SESSION — PUSH TO GITHUB (primary method)
 > **Every account must run this before finishing:**
+> ```bash
+> bash push_to_github.sh
+> ```
+> This commits + pushes everything to: **github.com/raddclub/jazzmax-app** (private repo)
+> Requires `GITHUB_TOKEN` in Replit Secrets (add once per account, stays forever).
+>
+> **Backup method** (if GitHub push fails):
 > ```bash
 > bash create_zip.sh
 > ```
-> Then download `jazzmax_YYYYMMDD_HHMM.zip` from the Files panel and upload to next account.
-> The zip is ~80 MB and contains everything needed to continue.
+> Then download the zip from Files panel → upload to next account.
+
+## ⚡ START OF SESSION — CLONE FROM GITHUB (new account)
+> On the new Replit account, open Shell and run:
+> ```bash
+> git clone https://$GITHUB_TOKEN@github.com/raddclub/jazzmax-app.git /home/runner/workspace
+> cd /home/runner/workspace
+> pip install flask flask-cors pyjwt werkzeug requests
+> ```
+> Then add these Replit Secrets: `GITHUB_TOKEN`, `SESSION_SECRET`
+> Then create 2 workflows (see below), then read Task Checklist → build next unchecked item.
 
 ---
 
