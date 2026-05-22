@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radd Flix Pro — Uploader</title>
+<style>
+:root{
+  --bg:#0a0c11;--surface:#12151e;--surface2:#181d28;--surface3:#1e2435;
+  --border:#252d3d;--accent:#a371f7;--accent2:#c4a7ff;
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;
+  --text:#e2e8f0;--muted:#7d8590;--muted2:#475569;
+  --radius:10px;--radius-sm:6px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,Helvetica,Arial,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column}
+a{color:var(--accent2);text-decoration:none}
+a:hover{text-decoration:underline}
+button{cursor:pointer;border:none;font-family:inherit;font-size:.85rem;border-radius:var(--radius-sm);padding:.5rem .9rem;background:var(--surface3);color:var(--text);border:1px solid var(--border);transition:all .15s}
+button:hover{border-color:var(--accent);transform:translateY(-1px)}
+button:disabled{opacity:.5;cursor:not-allowed;transform:none}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+button.primary:hover{background:var(--accent2);border-color:var(--accent2)}
+button.danger{background:#3a1a1a;color:var(--red);border-color:#5a2a2a}
+input,select,textarea{font-family:inherit;font-size:.9rem;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:var(--radius-sm);padding:.55rem .8rem;width:100%;outline:none;transition:border .18s,box-shadow .18s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(163,113,247,.15)}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:10}
+header h1{font-size:1.15rem;font-weight:700;letter-spacing:-.01em}
+.badge{background:var(--accent);color:#fff;padding:3px 9px;border-radius:20px;font-size:.68rem;font-weight:700;letter-spacing:.04em}
+.spacer{flex:1}
+.btn-link{display:inline-block;padding:7px 14px;border-radius:6px;font-size:.82rem;background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+.btn-link:hover{border-color:var(--accent);text-decoration:none}
+main{padding:22px;max-width:1200px;margin:0 auto;width:100%;flex:1}
+.tabs{display:flex;gap:6px;border-bottom:1px solid var(--border);margin-bottom:22px;flex-wrap:wrap}
+.tabs button{background:transparent;border:none;border-bottom:2px solid transparent;border-radius:0;padding:10px 16px;color:var(--muted);font-weight:500}
+.tabs button.active{color:var(--accent2);border-bottom-color:var(--accent)}
+.tabs button:hover{color:var(--text);transform:none}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:22px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.card h2{font-size:.7rem;text-transform:uppercase;color:var(--muted);letter-spacing:.08em;margin-bottom:8px;font-weight:700}
+.card .v{font-size:1.5rem;font-weight:700;color:var(--accent2)}
+.card .sub{font-size:.78rem;color:var(--muted);margin-top:4px}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:18px}
+.section h3{font-size:.95rem;font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.row{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:10px}
+.row.col2{grid-template-columns:1fr 1fr}
+.row.col3{grid-template-columns:1fr 1fr auto}
+label{display:block;font-size:.75rem;color:var(--muted);margin-bottom:4px;font-weight:500}
+.pill{display:inline-block;padding:3px 9px;border-radius:14px;font-size:.7rem;font-weight:700}
+.pill.ok{background:#0f3a1f;color:var(--green)}
+.pill.bad{background:#3a0f0f;color:var(--red)}
+.pill.warn{background:#3a290f;color:var(--yellow)}
+table{width:100%;border-collapse:collapse;font-size:.84rem}
+th{text-align:left;padding:8px 10px;background:var(--surface2);color:var(--muted);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.empty{padding:30px;text-align:center;color:var(--muted);font-size:.85rem}
+.toast-area{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:50}
+.toast{background:var(--surface3);border:1px solid var(--border);border-left:3px solid var(--accent);padding:10px 14px;border-radius:6px;font-size:.85rem;min-width:220px;max-width:360px;animation:slide .25s ease-out}
+.toast.ok{border-left-color:var(--green)}
+.toast.err{border-left-color:var(--red)}
+@keyframes slide{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+.muted{color:var(--muted)}
+.mono{font-family:'SF Mono',Menlo,Monaco,Consolas,monospace;font-size:.78rem}
+.progress{height:6px;background:var(--surface2);border-radius:3px;overflow:hidden;margin-top:6px}
+.progress > div{height:100%;background:var(--accent);transition:width .3s}
+.share-link{font-size:.78rem;color:var(--accent2);word-break:break-all}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.poster{width:40px;height:60px;background:var(--surface2);border-radius:4px;object-fit:cover}
+.note{background:rgba(163,113,247,.08);border:1px solid rgba(163,113,247,.3);border-radius:6px;padding:10px 14px;font-size:.82rem;color:var(--accent2);margin-bottom:14px}
+</style>
+</head>
+<body>
+<header>
+  <h1>📤 Radd Flix Pro</h1>
+  <span class="badge">FULL UI</span>
+  <div class="spacer"></div>
+  <a class="btn-link" href="/">← Back to Hub</a>
+  <a class="btn-link" href="/flix">Old Flix Page</a>
+  <a class="btn-link" href="/dbgen/">DB Generator</a>
+</header>
+
+<main>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="login">Login</button>
+  <button class="tab-btn" data-tab="upload">Upload</button>
+  <button class="tab-btn" data-tab="library">Library</button>
+  <button class="tab-btn" data-tab="remote">Remote</button>
+  <button class="tab-btn" data-tab="settings">Settings</button>
+</div>
+
+<!-- Dashboard -->
+<div class="tab-content active" data-tab="dashboard">
+  <div class="grid">
+    <div class="card">
+      <h2>Session</h2>
+      <div class="v" id="stat-session">…</div>
+      <div class="sub" id="stat-session-sub"></div>
+    </div>
+    <div class="card">
+      <h2>Account</h2>
+      <div class="v" id="stat-msisdn">—</div>
+      <div class="sub">linked phone</div>
+    </div>
+    <div class="card">
+      <h2>Storage</h2>
+      <div class="v" id="stat-storage">—</div>
+      <div class="sub" id="stat-storage-sub"></div>
+    </div>
+    <div class="card">
+      <h2>Library</h2>
+      <div class="v" id="stat-library">—</div>
+      <div class="sub" id="stat-library-sub">tracked uploads</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Recent Upload Jobs</h3>
+    <table id="jobs-table">
+      <thead><tr><th>Started</th><th>File</th><th>Status</th><th>Progress</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">No jobs yet — try uploading a file from the Upload tab.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Login -->
+<div class="tab-content" data-tab="login">
+  <div class="section">
+    <h3>JazzDrive Login</h3>
+    <div class="note">Login uses Jazz mobile number (e.g. <span class="mono">923xxxxxxxxx</span>). An OTP will be sent to that phone.</div>
+    <div class="row col2">
+      <div>
+        <label>Mobile number (msisdn)</label>
+        <input id="login-msisdn" placeholder="9230xxxxxxxx" autocomplete="tel">
+      </div>
+      <div style="display:flex;align-items:end">
+        <button class="primary" id="btn-send-otp">Send OTP</button>
+      </div>
+    </div>
+    <div class="row col2" style="margin-top:14px">
+      <div>
+        <label>OTP code</label>
+        <input id="login-otp" placeholder="4-digit code" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" autocomplete="one-time-code">
+      </div>
+      <div style="display:flex;align-items:end;gap:6px">
+        <button class="primary" id="btn-refresh-token" style="display:none">Refresh Now</button>
+        <button class="primary" id="btn-verify-otp">Verify</button>
+        <button class="danger" id="btn-logout">Logout</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Upload -->
+<div class="tab-content" data-tab="upload">
+  <div class="section">
+    <h3>Upload File to JazzDrive</h3>
+    <div class="note">Provide an absolute path to a file on this server. Folder will default to root unless a parent ID is given.</div>
+    <div class="row col3">
+      <div>
+        <label>File path</label>
+        <input id="up-path" placeholder="/full/path/to/file.mkv">
+      </div>
+      <div>
+        <label>Parent folder ID</label>
+        <input id="up-parent" placeholder="0" value="0" inputmode="numeric">
+      </div>
+      <div style="display:flex;align-items:end">
+        <button class="primary" id="btn-upload">Start Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Active & Recent Uploads</h3>
+    <table id="upload-table">
+      <thead><tr><th>Job</th><th>File</th><th>State</th><th>Progress</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">Nothing yet.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Library -->
+<div class="tab-content" data-tab="library">
+  <div class="section">
+    <h3>Local Library (uploaded items with share URLs)</h3>
+    <div class="row col2">
+      <div>
+        <label>Search</label>
+        <input id="lib-q" placeholder="title, year, kind …">
+      </div>
+      <div style="display:flex;align-items:end;gap:6px">
+        <button id="btn-lib-refresh">Refresh</button>
+        <button id="btn-lib-search" class="primary">Search</button>
+      </div>
+    </div>
+    <table id="lib-table" style="margin-top:12px">
+      <thead><tr><th></th><th>Title</th><th>Kind</th><th>Size</th><th>Uploaded</th><th>Share</th><th></th></tr></thead>
+      <tbody><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Remote -->
+<div class="tab-content" data-tab="remote">
+  <div class="section">
+    <h3>Remote Folders</h3>
+    <div class="row">
+      <div>
+        <label>Parent folder ID (0 = root)</label>
+        <input id="folders-parent" value="0" inputmode="numeric">
+      </div>
+      <div style="display:flex;align-items:end">
+        <button id="btn-folders" class="primary">List</button>
+      </div>
+    </div>
+    <table id="folders-table" style="margin-top:12px">
+      <thead><tr><th>ID</th><th>Name</th><th>Path</th></tr></thead>
+      <tbody><tr><td colspan="3" class="empty">Click List to fetch.</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <h3>Remote Media</h3>
+    <div class="row col2">
+      <div>
+        <label>Type</label>
+        <select id="media-type">
+          <option value="">All</option>
+          <option value="video">Video</option>
+          <option value="audio">Audio</option>
+          <option value="image">Image</option>
+          <option value="document">Document</option>
+        </select>
+      </div>
+      <div style="display:flex;align-items:end">
+        <button id="btn-media" class="primary">List</button>
+      </div>
+    </div>
+    <table id="media-table" style="margin-top:12px">
+      <thead><tr><th>ID</th><th>Name</th><th>Size</th><th>Type</th></tr></thead>
+      <tbody><tr><td colspan="4" class="empty">Click List to fetch.</td></tr></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Settings -->
+<div class="tab-content" data-tab="settings">
+  <div class="section">
+    <h3>Configuration</h3>
+    <form id="cfg-form">
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+        <div><label>Mobile number</label><input name="msisdn" id="cfg-msisdn"></div>
+        <div><label>Share email</label><input name="share_email" id="cfg-share-email"></div>
+        <div><label>Watch root</label><input name="watch_root" id="cfg-watch-root"></div>
+        <div><label>Max parallel</label><input name="max_parallel" id="cfg-max-parallel" type="number" min="1"></div>
+        <div><label>Max file size (GB, 0 = default)</label><input name="max_size_gb" id="cfg-max-size" type="number" min="0" step="0.1"></div>
+        <div><label>Max bandwidth (B/s, 0 = unlimited)</label><input name="max_bps" id="cfg-max-bps" type="number" min="0"></div>
+      </div>
+      <div style="margin-top:14px;display:flex;gap:8px">
+        <button class="primary" type="submit">Save</button>
+        <button type="button" id="btn-cfg-reload">Reload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+</main>
+
+<div class="toast-area" id="toasts"></div>
+
+<script>
+const BASE = "{{ BASE }}";
+const $ = (q) => document.querySelector(q);
+const $$ = (q) => document.querySelectorAll(q);
+
+function toast(msg, kind="ok") {
+  const t = document.createElement("div");
+  t.className = "toast " + kind;
+  t.textContent = msg;
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 4500);
+}
+
+async function api(path, opts={}) {
+  const r = await fetch(BASE + path, {
+    headers: {"Content-Type": "application/json"},
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  let data;
+  try { data = await r.json(); } catch { data = {ok:false,error:`HTTP ${r.status}`}; }
+  if (!r.ok && !data.error) data.error = `HTTP ${r.status}`;
+  return data;
+}
+
+function fmtBytes(n) {
+  if (!n || n <= 0) return "—";
+  const u = ["B","KB","MB","GB","TB"];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return n.toFixed(n >= 100 ? 0 : 1) + " " + u[i];
+}
+
+function fmtDate(s) {
+  if (!s) return "—";
+  try { return new Date(s).toLocaleString(); } catch { return s; }
+}
+
+// Tabs
+$$(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    $$(".tab-btn").forEach(b => b.classList.remove("active"));
+    $$(".tab-content").forEach(c => c.classList.remove("active"));
+    btn.classList.add("active");
+    $(`.tab-content[data-tab='${btn.dataset.tab}']`).classList.add("active");
+    if (btn.dataset.tab === "library") loadLibrary();
+    if (btn.dataset.tab === "settings") loadConfig();
+    if (btn.dataset.tab === "upload") loadJobs();
+  });
+});
+
+// ---- Dashboard / status ----
+async function loadStatus() {
+  const s = await api("/api/status");
+  if (!s.ok) { toast("Status: " + s.error, "err"); return; }
+  const sess = s.session || {};
+  $("#stat-session").innerHTML = sess.logged_in
+    ? `<span class="pill ok">Logged in</span>`
+    : `<span class="pill bad">Logged out</span>`;
+  $("#stat-session-sub").textContent = sess.logged_in
+    ? `expires in ${sess.remaining_m || 0} min`
+    : "Use the Login tab";
+  $("#stat-msisdn").textContent = sess.msisdn || "—";
+
+  // Show/hide Refresh button based on refresh token availability
+  const btnRefresh = $("#btn-refresh-token");
+  if (btnRefresh) {
+    btnRefresh.style.display = sess.has_refresh_token ? "block" : "none";
+  }
+
+  if (s.storage && !s.storage.error) {
+    const used = s.storage.used_bytes ?? s.storage.used ?? 0;
+    const total = s.storage.total_bytes ?? s.storage.total ?? 0;
+    $("#stat-storage").textContent = fmtBytes(used);
+    $("#stat-storage-sub").textContent = total ? `of ${fmtBytes(total)}` : "";
+  } else {
+    $("#stat-storage").textContent = sess.logged_in ? "—" : "login first";
+    $("#stat-storage-sub").textContent = s.storage && s.storage.error ? s.storage.error : "";
+  }
+  $("#stat-library").textContent = s.library_count ?? "—";
+  if (s.config) {
+    $("#cfg-msisdn").value = s.config.msisdn || "";
+    $("#cfg-share-email").value = s.config.share_email || "";
+    $("#cfg-watch-root").value = s.config.watch_root || "";
+    $("#cfg-max-parallel").value = s.config.max_parallel || 1;
+    $("#cfg-max-size").value = s.config.max_size_gb || 0;
+    $("#cfg-max-bps").value = s.config.max_bps || 0;
+    $("#login-msisdn").value = s.config.msisdn || "";
+  }
+}
+
+// ---- Login ----
+$("#btn-send-otp").addEventListener("click", async () => {
+  const msisdn = $("#login-msisdn").value.trim();
+  if (!msisdn) return toast("Enter a phone number", "err");
+  $("#btn-send-otp").disabled = true;
+  const r = await api("/api/login/otp", {method:"POST", body:{msisdn}});
+  $("#btn-send-otp").disabled = false;
+  if (r.ok) toast(r.message || "OTP sent");
+  else toast("OTP failed: " + r.error, "err");
+});
+
+$("#btn-verify-otp").addEventListener("click", async () => {
+  const msisdn = $("#login-msisdn").value.trim();
+  const otp = $("#login-otp").value.trim();
+  if (!msisdn || !otp) return toast("Need msisdn + OTP", "err");
+  $("#btn-verify-otp").disabled = true;
+  const r = await api("/api/login/verify", {method:"POST", body:{msisdn, otp}});
+  $("#btn-verify-otp").disabled = false;
+  if (r.ok) { toast("Login successful"); loadStatus(); }
+  else toast("Verify failed: " + r.error, "err");
+});
+
+$("#btn-refresh-token").addEventListener("click", async () => {
+  toast("Refreshing session...");
+  const r = await api("/api/jazzdrive/refresh", {method:"POST"});
+  if (r.ok) {
+    toast("✓ Session refreshed");
+    loadStatus();
+  } else {
+    toast("Refresh failed: " + (r.error || "unknown"), "err");
+  }
+});
+
+$("#btn-logout").addEventListener("click", async () => {
+  if (!confirm("Log out of JazzDrive?")) return;
+  const r = await api("/api/logout", {method:"POST"});
+  if (r.ok) { toast("Logged out"); loadStatus(); }
+  else toast(r.error, "err");
+});
+
+// ---- Upload ----
+$("#btn-upload").addEventListener("click", async () => {
+  const path = $("#up-path").value.trim();
+  const parent_id = parseInt($("#up-parent").value || "0", 10);
+  if (!path) return toast("Provide a file path", "err");
+  const r = await api("/api/upload", {method:"POST", body:{path, parent_id}});
+  if (r.ok) { toast("Upload queued: " + r.job_id); loadJobs(); }
+  else toast(r.error, "err");
+});
+
+async function loadJobs() {
+  const r = await api("/api/uploads");
+  if (!r.ok) return;
+  const tbl = $("#upload-table tbody");
+  if (!r.jobs.length) {
+    tbl.innerHTML = '<tr><td colspan="4" class="empty">No uploads yet.</td></tr>';
+  } else {
+    tbl.innerHTML = r.jobs.map(j => {
+      const pct = j.percent || 0;
+      let stateCls = "warn";
+      if (j.state === "done") stateCls = "ok";
+      if (j.state === "failed") stateCls = "bad";
+      return `<tr>
+        <td class="mono">${j.id}</td>
+        <td class="mono" title="${j.path}">${(j.path||"").split("/").pop()}</td>
+        <td><span class="pill ${stateCls}">${j.state}</span>${j.error?'<div class="muted" style="font-size:.72rem;margin-top:4px">'+j.error+'</div>':''}</td>
+        <td style="min-width:160px">
+          <div>${pct}% — ${fmtBytes(j.uploaded)} / ${fmtBytes(j.total)}</div>
+          <div class="progress"><div style="width:${pct}%"></div></div>
+        </td>
+      </tr>`;
+    }).join("");
+  }
+  // Mirror onto dashboard
+  const dashTbl = $("#jobs-table tbody");
+  if (!r.jobs.length) {
+    dashTbl.innerHTML = '<tr><td colspan="4" class="empty">No jobs yet.</td></tr>';
+  } else {
+    dashTbl.innerHTML = r.jobs.slice(0, 6).map(j => `<tr>
+      <td>${fmtDate(new Date(j.started_at*1000).toISOString())}</td>
+      <td class="mono">${(j.path||"").split("/").pop()}</td>
+      <td><span class="pill ${j.state==='done'?'ok':j.state==='failed'?'bad':'warn'}">${j.state}</span></td>
+      <td>${j.percent || 0}%</td>
+    </tr>`).join("");
+  }
+}
+
+// ---- Library ----
+async function loadLibrary() {
+  const q = $("#lib-q").value.trim();
+  const r = await api("/api/library?limit=200" + (q ? "&q=" + encodeURIComponent(q) : ""));
+  const tbl = $("#lib-table tbody");
+  if (!r.ok) {
+    tbl.innerHTML = `<tr><td colspan="7" class="empty">Error: ${r.error}</td></tr>`;
+    return;
+  }
+  if (!r.items.length) {
+    tbl.innerHTML = '<tr><td colspan="7" class="empty">No items yet.</td></tr>';
+    return;
+  }
+  tbl.innerHTML = r.items.map(it => `<tr>
+    <td>${it.poster ? `<img class="poster" src="${it.poster}" alt="">` : ''}</td>
+    <td>
+      <div style="font-weight:600">${it.title || "—"}</div>
+      <div class="muted mono" style="font-size:.72rem">${it.name || ""}</div>
+    </td>
+    <td>${it.kind} ${it.year ? '· '+it.year : ''}</td>
+    <td>${fmtBytes(it.size_bytes)}</td>
+    <td class="mono" style="font-size:.72rem">${fmtDate(it.uploaded_at)}</td>
+    <td>${it.share_url ? `<a href="${it.share_url}" target="_blank" class="share-link">${it.share_url.slice(0, 50)}…</a>` : '<span class="muted">—</span>'}</td>
+    <td><div class="actions">
+      ${it.share_url ? `<button onclick="navigator.clipboard.writeText('${it.share_url}');toast('Copied!')">Copy</button>` : ''}
+      <button class="danger" onclick="deleteLib('${it.fingerprint}')">Delete</button>
+    </div></td>
+  </tr>`).join("");
+}
+
+async function deleteLib(fp) {
+  if (!confirm("Delete this library entry?")) return;
+  const r = await api("/api/library/" + encodeURIComponent(fp), {method:"DELETE"});
+  if (r.ok) { toast("Deleted"); loadLibrary(); }
+  else toast(r.error, "err");
+}
+
+$("#btn-lib-refresh").addEventListener("click", () => { $("#lib-q").value=""; loadLibrary(); });
+$("#btn-lib-search").addEventListener("click", loadLibrary);
+$("#lib-q").addEventListener("keydown", e => { if (e.key === "Enter") loadLibrary(); });
+
+// ---- Remote ----
+$("#btn-folders").addEventListener("click", async () => {
+  const parent = parseInt($("#folders-parent").value || "0", 10);
+  const r = await api("/api/folders?parent=" + parent);
+  const tbl = $("#folders-table tbody");
+  if (!r.ok) { tbl.innerHTML = `<tr><td colspan="3" class="empty">${r.error}</td></tr>`; return; }
+  if (!r.folders || !r.folders.length) {
+    tbl.innerHTML = '<tr><td colspan="3" class="empty">No folders.</td></tr>';
+    return;
+  }
+  tbl.innerHTML = r.folders.map(f => `<tr>
+    <td class="mono">${f.id ?? f.folder_id ?? '—'}</td>
+    <td>${f.name ?? '—'}</td>
+    <td class="muted mono" style="font-size:.74rem">${f.path ?? f.full_path ?? ''}</td>
+  </tr>`).join("");
+});
+
+$("#btn-media").addEventListener("click", async () => {
+  const t = $("#media-type").value;
+  const r = await api("/api/media" + (t ? "?type=" + t : ""));
+  const tbl = $("#media-table tbody");
+  if (!r.ok) { tbl.innerHTML = `<tr><td colspan="4" class="empty">${r.error}</td></tr>`; return; }
+  if (!r.media || !r.media.length) {
+    tbl.innerHTML = '<tr><td colspan="4" class="empty">No media.</td></tr>';
+    return;
+  }
+  tbl.innerHTML = r.media.map(m => `<tr>
+    <td class="mono">${m.id ?? m.file_id ?? '—'}</td>
+    <td>${m.name ?? m.filename ?? '—'}</td>
+    <td>${fmtBytes(m.size ?? m.file_size ?? 0)}</td>
+    <td>${m.type ?? m.mediatype ?? '—'}</td>
+  </tr>`).join("");
+});
+
+// ---- Settings ----
+async function loadConfig() {
+  const r = await api("/api/config");
+  if (!r.ok) return toast(r.error, "err");
+  const c = r.config || {};
+  $("#cfg-msisdn").value = c.msisdn || "";
+  $("#cfg-share-email").value = c.share_email || "";
+  $("#cfg-watch-root").value = c.watch_root || "";
+  $("#cfg-max-parallel").value = c.max_parallel || 1;
+  $("#cfg-max-size").value = c.max_size_gb || 0;
+  $("#cfg-max-bps").value = c.max_bps || 0;
+}
+$("#btn-cfg-reload").addEventListener("click", loadConfig);
+$("#cfg-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = {
+    msisdn: $("#cfg-msisdn").value.trim(),
+    share_email: $("#cfg-share-email").value.trim(),
+    watch_root: $("#cfg-watch-root").value.trim(),
+    max_parallel: parseInt($("#cfg-max-parallel").value || "1", 10),
+    max_size_gb: parseFloat($("#cfg-max-size").value || "0"),
+    max_bps: parseInt($("#cfg-max-bps").value || "0", 10),
+  };
+  const r = await api("/api/config", {method:"POST", body});
+  if (r.ok) toast("Saved (" + (r.updated||[]).join(", ") + ")");
+  else toast(r.error, "err");
+});
+
+// kick off
+loadStatus();
+setInterval(() => {
+  loadStatus();
+  if ($(".tab-content[data-tab='upload']").classList.contains("active")) loadJobs();
+}, 5000);
+</script>
+</body>
+</html>

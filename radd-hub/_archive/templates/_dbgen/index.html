@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Radd DB Generator</title>
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--surface2:#21262d;--border:#30363d;--accent:#58a6ff;--accent2:#3fb950;--warn:#d29922;--danger:#f85149;--text:#e6edf3;--muted:#7d8590}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;min-height:100vh}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;gap:12px}
+.header h1{font-size:1.3rem;font-weight:600}
+.header .badge{background:var(--accent);color:#000;padding:2px 8px;border-radius:20px;font-size:.7rem;font-weight:700}
+.stats-bar{display:flex;gap:12px;padding:16px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:100px}
+.stat .n{font-size:1.5rem;font-weight:700;color:var(--accent)}
+.stat .l{font-size:.72rem;color:var(--muted);margin-top:2px}
+.main{display:grid;grid-template-columns:320px 1fr;gap:0;height:calc(100vh - 108px)}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);overflow-y:auto}
+.content{overflow-y:auto;padding:20px}
+.section{padding:16px;border-bottom:1px solid var(--border)}
+.section h2{font-size:.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:6px;border:none;cursor:pointer;font-size:.85rem;font-weight:500;transition:opacity .15s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--accent);color:#000}
+.btn-success{background:var(--accent2);color:#000}
+.btn-warn{background:var(--warn);color:#000}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+.btn-sm{padding:5px 10px;font-size:.78rem}
+input,select,textarea{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:.85rem;width:100%;outline:none;transition:border-color .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+label{font-size:.8rem;color:var(--muted);display:block;margin-bottom:4px;margin-top:10px}
+.card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:10px}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.card-title{font-weight:600;font-size:.9rem}
+.badge-ok{background:#1a3a1a;color:var(--accent2);padding:2px 8px;border-radius:12px;font-size:.72rem;font-weight:600}
+.badge-err{background:#3a1a1a;color:var(--danger);padding:2px 8px;border-radius:12px;font-size:.72rem;font-weight:600}
+.badge-warn{background:#3a2a0a;color:var(--warn);padding:2px 8px;border-radius:12px;font-size:.72rem;font-weight:600}
+.badge-info{background:#0d2a4a;color:var(--accent);padding:2px 8px;border-radius:12px;font-size:.72rem;font-weight:600}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.otp-row{display:flex;gap:8px;margin-top:8px}
+.otp-row input{flex:1}
+.log-box{background:#0a0f14;border:1px solid var(--border);border-radius:6px;height:280px;overflow-y:auto;padding:10px;font-family:'Courier New',monospace;font-size:.75rem;line-height:1.5}
+.log-line{padding:1px 0}
+.log-line.scan_start,.log-line.info{color:var(--accent)}
+.log-line.folder{color:var(--text)}
+.log-line.share_ok,.log-line.tmdb_ok,.log-line.complete,.log-line.scan_done,.log-line.login_ok{color:var(--accent2)}
+.log-line.share_fail,.log-line.error{color:var(--danger)}
+.log-line.tmdb,.log-line.enriching,.log-line.progress{color:var(--warn)}
+.log-line.share,.log-line.tmdb_miss{color:var(--muted)}
+.tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px}
+.tab{padding:10px 18px;cursor:pointer;font-size:.85rem;border-bottom:2px solid transparent;color:var(--muted)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.title-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.title-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;overflow:hidden;cursor:pointer;transition:border-color .15s}
+.title-card:hover{border-color:var(--accent)}
+.title-card img{width:100%;height:150px;object-fit:cover;background:var(--surface)}
+.title-card .info{padding:10px}
+.title-card .tc-title{font-size:.85rem;font-weight:600;margin-bottom:4px}
+.title-card .tc-meta{font-size:.72rem;color:var(--muted)}
+.title-card .tc-cast{font-size:.7rem;color:var(--muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.search-bar{display:flex;gap:8px;margin-bottom:16px}
+.search-bar input{flex:1}
+.key-row{display:flex;align-items:center;gap:8px;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;flex-wrap:wrap}
+.key-row .key-info{flex:1;min-width:0}
+.key-row .key-provider{font-size:.72rem;font-weight:700;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
+.key-row .key-val{font-size:.78rem;color:var(--muted);font-family:monospace}
+.key-row .key-status{font-size:.72rem}
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+.modal.open{display:flex}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:24px;min-width:360px;max-width:520px;width:90%}
+.modal-box h3{font-size:1rem;font-weight:600;margin-bottom:16px}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.notice{background:#1a2a3a;border:1px solid var(--accent);border-radius:6px;padding:10px 14px;font-size:.82rem;color:var(--accent);margin-bottom:12px}
+.empty{text-align:center;padding:40px;color:var(--muted);font-size:.9rem}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.flex-gap{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>🎬</div>
+  <h1>Radd Media DB Generator</h1>
+  <span class="badge">v1.2</span>
+  <div style="flex:1"></div>
+  <button class="btn btn-ghost btn-sm" onclick="exportDb()">⬇ Export JSON</button>
+</div>
+<div class="stats-bar" id="statsBar">
+  <div class="stat"><div class="n" id="s-titles">—</div><div class="l">Titles</div></div>
+  <div class="stat"><div class="n" id="s-files">—</div><div class="l">Files</div></div>
+  <div class="stat"><div class="n" id="s-size">—</div><div class="l">Total Size</div></div>
+  <div class="stat"><div class="n" id="s-accounts">—</div><div class="l">Accounts</div></div>
+  <div class="stat"><div class="n" id="s-tmdb-keys">—</div><div class="l">TMDB Keys</div></div>
+</div>
+<div class="main">
+  <div class="sidebar">
+    <div class="section">
+      <h2>JazzDrive Accounts</h2>
+      <button class="btn btn-primary btn-sm" onclick="openAddAccount()">+ Add Account</button>
+      <div id="accountList" style="margin-top:12px"></div>
+    </div>
+    <div class="section">
+      <h2>API Keys</h2>
+      <button class="btn btn-ghost btn-sm" onclick="openAddKey()">+ Add Key</button>
+      <div id="keyList" style="margin-top:10px"></div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="tab-bar">
+      <div class="tab active" onclick="showTab('library')">📚 Library</div>
+      <div class="tab" onclick="showTab('scan')">🔍 Scanner</div>
+      <div class="tab" onclick="showTab('keys')">🔑 API Keys</div>
+    </div>
+    <div class="tab-content active" id="tab-library">
+      <div class="search-bar">
+        <input type="text" id="searchQ" placeholder="Search by title, actor, genre, director..." oninput="debounceSearch()">
+        <select id="searchType" style="width:auto">
+          <option value="q">Title</option>
+          <option value="actor">Actor</option>
+          <option value="genre">Genre</option>
+          <option value="director">Director</option>
+          <option value="year">Year</option>
+        </select>
+        <button class="btn btn-primary" onclick="searchLibrary()">Search</button>
+      </div>
+      <div id="libraryGrid" class="title-grid"></div>
+    </div>
+    <div class="tab-content" id="tab-scan">
+      <div class="notice">Select an account from the sidebar and click <strong>Scan Account</strong> to start. The scanner will recursively walk all JazzDrive folders, create share links automatically, then enrich each file with TMDB metadata.</div>
+      <div id="scanArea">
+        <div class="empty">Select an account from the sidebar to begin scanning.</div>
+      </div>
+    </div>
+    <div class="tab-content" id="tab-keys">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h2 style="font-size:.9rem">All API Keys</h2>
+        <button class="btn btn-primary btn-sm" onclick="openAddKey()">+ Add Key</button>
+      </div>
+      <div id="keysPanel"></div>
+    </div>
+  </div>
+</div>
+<div class="modal" id="addAccountModal">
+  <div class="modal-box">
+    <h3>Add JazzDrive Account</h3>
+    <label>Phone Number (MSISDN)</label>
+    <input type="tel" id="newMsisdn" placeholder="923XXXXXXXXX">
+    <label>Label (optional)</label>
+    <input type="text" id="newLabel" placeholder="e.g. account-1, backup-jazz">
+    <label>Notes (optional)</label>
+    <input type="text" id="newNotes" placeholder="e.g. 50GB storage">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('addAccountModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addAccount()">Add Account</button>
+    </div>
+  </div>
+</div>
+<div class="modal" id="addKeyModal">
+  <div class="modal-box">
+    <h3>Add API Key</h3>
+    <label>Provider</label>
+    <select id="newKeyProvider">
+      <option value="tmdb">TMDB (Movie Database)</option>
+      <option value="groq">Groq (AI — Intent)</option>
+      <option value="gemini">Gemini (AI — Intent)</option>
+      <option value="omdb">OMDB (Movie DB Alt)</option>
+    </select>
+    <label>API Key</label>
+    <input type="text" id="newKeyValue" placeholder="Paste your API key here">
+    <label>Label (optional)</label>
+    <input type="text" id="newKeyLabel" placeholder="e.g. TMDB Key 3">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('addKeyModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="addKey()">Add Key</button>
+    </div>
+  </div>
+</div>
+<script>
+const BASE = {{ BASE|tojson }};
+let _accounts = [];
+let _activeAccount = null;
+let _scanEventSource = null;
+let _searchTimer = null;
+async function api(method, path, body) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(BASE + path, opts);
+  return r.json();
+}
+function fmtSize(b) {
+  if (!b) return '0 B';
+  const u = ['B','KB','MB','GB','TB'], i = Math.floor(Math.log(b)/Math.log(1024));
+  return (b/Math.pow(1024,i)).toFixed(i?1:0)+' '+u[i];
+}
+function showTab(name) {
+  document.querySelectorAll('.tab, .tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelector(`.tab[onclick*="${name}"]`).classList.add('active');
+  document.getElementById(`tab-${name}`).classList.add('active');
+  if (name === 'keys') loadKeysPanel();
+}
+async function loadStatus() {
+  const d = await api('GET', '/api/status');
+  if (!d.ok) return;
+  document.getElementById('s-titles').textContent = d.library.titles.toLocaleString();
+  document.getElementById('s-files').textContent = d.library.files.toLocaleString();
+  document.getElementById('s-size').textContent = fmtSize(d.library.total_size);
+  document.getElementById('s-accounts').textContent = d.accounts;
+  const tmdb = d.api_keys.tmdb || {};
+  document.getElementById('s-tmdb-keys').textContent = `${tmdb.active||0}/${tmdb.total||0}`;
+}
+async function loadAccounts() {
+  const d = await api('GET', '/api/accounts');
+  if (!d.ok) return;
+  _accounts = d.accounts;
+  const el = document.getElementById('accountList');
+  if (!_accounts.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:.8rem;padding:8px 0">No accounts yet. Add one above.</div>';
+    return;
+  }
+  el.innerHTML = _accounts.map(a => {
+    const ok = a.session_ok ? '<span class="badge-ok">✓ Session</span>' : '<span class="badge-warn">No Session</span>';
+    const lastScan = a.last_scan_at ? new Date(a.last_scan_at*1000).toLocaleDateString() : 'Never';
+    const usedGB = a.storage_used_bytes ? (a.storage_used_bytes/1e9).toFixed(1)+' GB' : '?';
+    return `<div class="card" onclick="selectAccount(${a.id})" style="cursor:pointer;${_activeAccount===a.id?'border-color:var(--accent)':''}">
+      <div class="card-header">
+        <div class="card-title">${a.label}</div>
+        ${ok}
+      </div>
+      <div style="font-size:.78rem;color:var(--muted)">${a.msisdn}</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:4px">Used: ${usedGB} · Scanned: ${lastScan}</div>
+      <div class="actions">
+        <button class="btn btn-warn btn-sm" onclick="event.stopPropagation();sendOtp(${a.id},'${a.msisdn}')">📱 Send OTP</button>
+        <button class="btn btn-success btn-sm" onclick="event.stopPropagation();selectAndScan(${a.id})">▶ Scan</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteAccount(${a.id})">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function selectAccount(id) {
+  _activeAccount = id;
+  loadAccounts();
+}
+function selectAndScan(id) {
+  _activeAccount = id;
+  showTab('scan');
+  renderScanArea(id);
+}
+function renderScanArea(accountId) {
+  const acct = _accounts.find(a => a.id === accountId);
+  if (!acct) return;
+  document.getElementById('scanArea').innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">📡 Scan: ${acct.label} (${acct.msisdn})</div>
+        <button class="btn btn-success" id="startScanBtn" onclick="startScan(${accountId})">▶ Start Scan</button>
+      </div>
+      ${!acct.session_ok ? '<div class="badge-warn" style="margin:6px 0;display:inline-block">⚠️ No session — send OTP first</div>' : ''}
+      <div style="margin-top:10px">
+        <div style="font-size:.8rem;color:var(--muted);margin-bottom:6px">📋 Scan Log</div>
+        <div class="log-box" id="scanLog"></div>
+      </div>
+    </div>`;
+  loadScanLog(accountId);
+}
+async function loadScanLog(accountId) {
+  const d = await api('GET', `/api/accounts/${accountId}/log?limit=200`);
+  if (!d.ok) return;
+  const box = document.getElementById('scanLog');
+  if (!box) return;
+  box.innerHTML = d.log.map(row => {
+    const t = new Date(row.ts*1000).toLocaleTimeString();
+    return `<div class="log-line ${row.event}">[${t}] ${row.message}</div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+async function startScan(accountId) {
+  document.getElementById('startScanBtn').disabled = true;
+  document.getElementById('startScanBtn').innerHTML = '<span class="spinner"></span>Scanning...';
+  const d = await api('POST', `/api/accounts/${accountId}/scan`);
+  if (!d.ok) {
+    alert(d.error);
+    document.getElementById('startScanBtn').disabled = false;
+    document.getElementById('startScanBtn').textContent = '▶ Start Scan';
+    return;
+  }
+  if (_scanEventSource) _scanEventSource.close();
+  const box = document.getElementById('scanLog');
+  if (box) box.innerHTML = '';
+  _scanEventSource = new EventSource(`${BASE}/api/accounts/${accountId}/scan-progress`);
+  _scanEventSource.onmessage = e => {
+    const data = JSON.parse(e.data);
+    if (data.event === 'done' || data.event === 'complete') {
+      _scanEventSource.close();
+      document.getElementById('startScanBtn').disabled = false;
+      document.getElementById('startScanBtn').textContent = '▶ Scan Again';
+      loadStatus();
+      loadAccounts();
+      return;
+    }
+    if (data.event === 'ping') return;
+    if (!box) return;
+    const t = new Date().toLocaleTimeString();
+    box.innerHTML += `<div class="log-line ${data.event}">[${t}] ${data.message}</div>`;
+    box.scrollTop = box.scrollHeight;
+  };
+}
+async function sendOtp(accountId, msisdn) {
+  const d = await api('POST', `/api/accounts/${accountId}/send-otp`);
+  if (!d.ok) { alert('Failed: ' + d.error); return; }
+  // Show inline OTP entry rather than blocking with prompt() before SMS arrives.
+  showOtpModal(accountId, msisdn);
+}
+function showOtpModal(accountId, msisdn) {
+  let modal = document.getElementById('otpModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'otpModal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-box">
+        <h3>Enter OTP</h3>
+        <div style="font-size:.85rem;color:var(--muted);margin-bottom:8px">
+          Jazz Drive is sending the OTP by SMS. Wait until you receive it, then type it below.
+        </div>
+        <label>Phone</label>
+        <input id="otpMsisdn" type="text" disabled>
+        <label>OTP code (4 digits)</label>
+        <input id="otpInput" type="text" inputmode="numeric" maxlength="4"
+               placeholder="1234" autocomplete="one-time-code">
+        <div id="otpErr" style="color:var(--danger);font-size:.78rem;margin-top:6px;min-height:1em"></div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" id="otpResendBtn">Resend OTP</button>
+          <button class="btn btn-ghost" onclick="closeModal('otpModal')">Cancel</button>
+          <button class="btn btn-primary" id="otpVerifyBtn">Verify</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.classList.remove('open'); });
+  }
+  document.getElementById('otpMsisdn').value = msisdn;
+  document.getElementById('otpInput').value = '';
+  document.getElementById('otpErr').textContent = '';
+  modal.classList.add('open');
+  setTimeout(() => document.getElementById('otpInput').focus(), 50);
+
+  const verifyBtn = document.getElementById('otpVerifyBtn');
+  const resendBtn = document.getElementById('otpResendBtn');
+  verifyBtn.onclick = async () => {
+    const otp = (document.getElementById('otpInput').value || '').trim();
+    const errEl = document.getElementById('otpErr');
+    errEl.textContent = '';
+    if (!/^\d{4}$/.test(otp)) {
+      errEl.textContent = 'Enter the 4-digit code exactly as received.';
+      return;
+    }
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = 'Verifying…';
+    const vd = await api('POST', `/api/accounts/${accountId}/verify-otp`, {otp});
+    verifyBtn.disabled = false;
+    verifyBtn.textContent = 'Verify';
+    if (vd.ok) {
+      modal.classList.remove('open');
+      alert('✅ Login successful! Session stored.');
+      loadAccounts();
+    } else {
+      errEl.textContent = '❌ ' + (vd.error || 'verification failed');
+    }
+  };
+  resendBtn.onclick = async () => {
+    resendBtn.disabled = true;
+    const r = await api('POST', `/api/accounts/${accountId}/send-otp`);
+    resendBtn.disabled = false;
+    document.getElementById('otpErr').textContent = r.ok
+      ? 'New OTP sent — check your SMS.'
+      : ('Resend failed: ' + (r.error || 'unknown'));
+  };
+}
+async function deleteAccount(id) {
+  if (!confirm('Delete this account? (Files in DB stay, only account record removed)')) return;
+  await api('DELETE', `/api/accounts/${id}`);
+  loadAccounts();
+  loadStatus();
+}
+function openAddAccount() { document.getElementById('addAccountModal').classList.add('open'); }
+function openAddKey() { document.getElementById('addKeyModal').classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+async function addAccount() {
+  const msisdn = document.getElementById('newMsisdn').value.trim();
+  const label = document.getElementById('newLabel').value.trim();
+  const notes = document.getElementById('newNotes').value.trim();
+  if (!msisdn) { alert('Phone number required'); return; }
+  const d = await api('POST', '/api/accounts', {msisdn, label, notes});
+  if (d.ok) {
+    closeModal('addAccountModal');
+    document.getElementById('newMsisdn').value = '';
+    document.getElementById('newLabel').value = '';
+    document.getElementById('newNotes').value = '';
+    loadAccounts();
+    loadStatus();
+  } else alert('Error: ' + d.error);
+}
+async function addKey() {
+  const provider = document.getElementById('newKeyProvider').value;
+  const api_key = document.getElementById('newKeyValue').value.trim();
+  const label = document.getElementById('newKeyLabel').value.trim();
+  if (!api_key) { alert('API key required'); return; }
+  const d = await api('POST', '/api/apikeys', {provider, api_key, label});
+  if (d.ok) {
+    closeModal('addKeyModal');
+    document.getElementById('newKeyValue').value = '';
+    document.getElementById('newKeyLabel').value = '';
+    loadStatus();
+    loadKeysPanel();
+  } else alert('Error: ' + d.error);
+}
+async function loadKeysPanel() {
+  const d = await api('GET', '/api/apikeys');
+  if (!d.ok) return;
+  const el = document.getElementById('keysPanel');
+  if (!d.keys.length) {
+    el.innerHTML = '<div class="empty">No API keys yet. Add TMDB, Groq, or Gemini keys.</div>';
+    return;
+  }
+  const byProvider = {};
+  d.keys.forEach(k => { (byProvider[k.provider] = byProvider[k.provider]||[]).push(k); });
+  el.innerHTML = Object.entries(byProvider).map(([p, keys]) => `
+    <div style="margin-bottom:20px">
+      <div style="font-size:.8rem;font-weight:700;text-transform:uppercase;color:var(--muted);margin-bottom:8px">${p} (${keys.length} keys)</div>
+      ${keys.map(k => {
+        const statusBadge = k.is_dead ? '<span class="badge-err">Dead</span>' :
+          (k.is_active ? '<span class="badge-ok">Active</span>' : '<span class="badge-warn">Disabled</span>');
+        return `<div class="key-row">
+          <div class="key-info">
+            <div class="key-provider">${p}</div>
+            <div class="key-val">${k.api_key_masked} ${k.label ? '· '+k.label : ''}</div>
+            <div class="key-status" style="margin-top:4px">${statusBadge} · Used: ${k.requests_today||0} today · Errors: ${k.error_count||0}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="toggleKey(${k.id},${!k.is_active})">${k.is_active?'Disable':'Enable'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteKey(${k.id})">🗑</button>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+async function toggleKey(id, active) {
+  await api('POST', `/api/apikeys/${id}/toggle`, {active});
+  loadKeysPanel();
+}
+async function deleteKey(id) {
+  if (!confirm('Delete this API key?')) return;
+  await api('DELETE', `/api/apikeys/${id}`);
+  loadKeysPanel();
+  loadStatus();
+}
+function debounceSearch() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(searchLibrary, 400);
+}
+async function searchLibrary() {
+  const q = document.getElementById('searchQ').value.trim();
+  const type = document.getElementById('searchType').value;
+  const params = new URLSearchParams();
+  if (q) params.set(type, q);
+  params.set('limit', '60');
+  const d = await fetch(BASE + '/api/library?' + params).then(r => r.json());
+  renderLibrary(d.titles || []);
+}
+async function loadLibrary() {
+  const d = await api('GET', '/api/library?limit=48');
+  renderLibrary(d.titles || []);
+}
+function renderLibrary(titles) {
+  const el = document.getElementById('libraryGrid');
+  if (!titles.length) {
+    el.innerHTML = '<div class="empty" style="grid-column:1/-1">No titles found. Scan an account to populate the library.</div>';
+    return;
+  }
+  el.innerHTML = titles.map(t => {
+    const poster = t.poster || '';
+    const cast = t.cast_names ? t.cast_names.split(',').slice(0,3).join(', ') : '';
+    const genres = t.genres_csv ? t.genres_csv.split(',').slice(0,3).join(' · ') : '';
+    const year = t.year || '';
+    const rating = t.rating ? `⭐ ${parseFloat(t.rating).toFixed(1)}` : '';
+    return `<div class="title-card" onclick="showTitleDetail(${t.id})">
+      ${poster ? `<img src="${poster}" alt="${t.title}" onerror="this.style.display='none'">` : '<div style="height:150px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:2rem">🎬</div>'}
+      <div class="info">
+        <div class="tc-title">${t.title}</div>
+        <div class="tc-meta">${year} ${rating} · ${t.media_type==='series'?'📺 Series':'🎬 Movie'} · ${t.file_count||0} file(s)</div>
+        ${genres ? `<div class="tc-cast" style="color:var(--accent);margin-top:2px">${genres}</div>` : ''}
+        ${cast ? `<div class="tc-cast">👥 ${cast}</div>` : ''}
+        ${t.director ? `<div class="tc-cast">🎬 ${t.director}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function showTitleDetail(titleId) {
+  const d = await api('GET', `/api/library?q=*`);
+  const t = (d.titles||[]).find(x => x.id === titleId);
+  if (!t) return;
+  const cast = t.cast_names || '';
+  const files = t.files || [];
+  alert(`🎬 ${t.title} (${t.year||'?'})\n\n`+
+    `⭐ ${t.rating||'?'}/10\n`+
+    `🎭 Genres: ${t.genres_csv||'?'}\n`+
+    `👥 Cast: ${cast.split(',').slice(0,5).join(', ')||'?'}\n`+
+    `🎬 Director: ${t.director||'?'}\n`+
+    `📁 Files: ${files.length}\n\n`+
+    files.slice(0,5).map(f=>`• ${f.filename} (${fmtSize(f.size_bytes)})`).join('\n'));
+}
+async function exportDb() {
+  window.open(BASE + '/api/export', '_blank');
+}
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+loadStatus();
+loadAccounts();
+loadLibrary();
+setInterval(loadStatus, 30000);
+</script>
+</body>
+</html>

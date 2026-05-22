@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% set active="settings" %}
+{% block content %}
+<style>
+@media(max-width:767px){
+  .settings-key-actions{display:flex;flex-wrap:wrap;gap:4px}
+  .settings-key-actions button{font-size:11px;padding:4px 8px}
+}
+</style>
+
+<div class="h-row">
+  <h2>Settings</h2>
+  <span class="muted" style="font-size:13px">Keys live here — add many per provider, they auto-rotate.</span>
+</div>
+
+{% for item in groups %}
+<div class="card">
+  <h3>{{ item.group.title }}</h3>
+  {% if item.group.doc %}<div class="muted" style="margin:-6px 0 12px">{{ item.group.doc }}</div>{% endif %}
+
+  {% for prov in item.providers %}
+  <div style="margin-bottom:18px">
+    <div class="row" style="justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+      <strong>{{ prov.provider }}</strong>
+      <button class="ghost" onclick="addKey('{{ prov.provider }}')">+ Add key</button>
+    </div>
+    {% if prov.keylist %}
+    <div class="table-wrap">
+    <table style="min-width:480px">
+      <thead><tr><th>Label</th><th>Value</th><th>Status</th><th>Uses</th><th></th></tr></thead>
+      <tbody>
+      {% for k in prov.keylist %}
+      <tr id="k-{{ k.id }}">
+        <td>{{ k.label or '—' }}</td>
+        <td><code>{{ k.value or '(unset)' }}</code></td>
+        <td>
+          {% if not k.is_active %}<span class="badge b-err">disabled</span>
+          {% elif k.exhausted %}<span class="badge b-warn">rate-limited</span>
+          {% elif k.last_status=='ok' %}<span class="badge b-ok">ok</span>
+          {% elif k.last_status=='invalid' %}<span class="badge b-err">invalid</span>
+          {% else %}<span class="badge b-info">active</span>{% endif %}
+        </td>
+        <td class="muted">{{ k.total_uses }}</td>
+        <td>
+          <div class="settings-key-actions" style="display:flex;gap:4px">
+            <button class="ghost" onclick="testKey({{ k.id }})">Test</button>
+            <button class="ghost" onclick="toggleKey({{ k.id }}, {{ 'false' if k.is_active else 'true' }})">
+              {{ 'Disable' if k.is_active else 'Enable' }}
+            </button>
+            <button class="danger" onclick="delKey({{ k.id }})">Delete</button>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}<div class="muted">No keys yet for {{ prov.provider }}.</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+
+<div class="card">
+  <h3>Mirror destinations</h3>
+  <div class="muted" style="margin:-6px 0 12px">
+    Where the GitHub / Sheets pushes go. The keys above authenticate the push;
+    these settings say <em>which repo / sheet</em>.
+  </div>
+  {% for k, label, kind in non_vault %}
+  <div class="form-row">
+    <label>{{ label }}</label>
+    <input type="{{ kind }}" id="set-{{ k }}" value="{{ settings[k] }}">
+  </div>
+  {% endfor %}
+  <button onclick="saveSettings()">Save mirror settings</button>
+</div>
+
+<div class="card">
+  <h3>JazzDrive</h3>
+  <div class="muted" style="margin:-6px 0 12px">Primary JazzDrive account configuration. Proxy is recommended for OTP delivery.</div>
+  
+  <div class="form-row">
+    <label>JazzDrive MSISDN<span class="muted" style="margin-left:6px">923xxxxxxxxx</span></label>
+    <input type="text" id="set-JAZZDRIVE_MSISDN" value="{{ settings.JAZZDRIVE_MSISDN or '' }}" placeholder="923xxxxxxxxx">
+  </div>
+
+  <div class="form-row">
+    <label>Share Email<span class="muted" style="margin-left:6px">For folder share links</span></label>
+    <input type="text" id="set-JAZZDRIVE_SHARE_EMAIL" value="{{ settings.JAZZDRIVE_SHARE_EMAIL or '' }}" placeholder="email@example.com">
+  </div>
+
+  <div class="form-row">
+    <label>Keepalive Interval<span class="muted" style="margin-left:6px">Seconds (default 2700)</span></label>
+    <input type="text" id="set-JAZZDRIVE_KEEPALIVE_INTERVAL" value="{{ settings.JAZZDRIVE_KEEPALIVE_INTERVAL or '2700' }}">
+  </div>
+
+  <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+    <button onclick="saveEnvSettings('jazzdrive')">Save Settings</button>
+    <button class="ghost" onclick="triggerRelogin()" style="border-color:var(--accent)">Trigger OTP Login</button>
+    <span id="jd-save-status" class="muted" style="font-size:13px"></span>
+  </div>
+</div>
+
+{% if jd_bot_grouped.whatsapp %}
+<div class="card">
+  <h3>WhatsApp Bot</h3>
+  <div class="muted" style="margin:-6px 0 12px">Bot behaviour and rate-limit configuration.</div>
+  {% for field in jd_bot_grouped.whatsapp %}
+  <div class="form-row">
+    <label>{{ field.label }}<span class="muted" style="margin-left:6px">{{ field.hint }}</span></label>
+    <input type="text" id="set-{{ field.key }}" value="{{ field.value }}" placeholder="{{ field.hint }}">
+  </div>
+  {% endfor %}
+  <button onclick="saveEnvSettings('whatsapp')">Save WhatsApp settings</button>
+</div>
+{% endif %}
+
+{% if jd_bot_grouped.telegram %}
+<div class="card">
+  <h3>Telegram Bot</h3>
+  <div class="muted" style="margin:-6px 0 12px">Telegram bot configuration.</div>
+  {% for field in jd_bot_grouped.telegram %}
+  <div class="form-row">
+    <label>{{ field.label }}<span class="muted" style="margin-left:6px">{{ field.hint }}</span></label>
+    <input type="text" id="set-{{ field.key }}" value="{{ field.value }}" placeholder="{{ field.hint }}">
+  </div>
+  {% endfor %}
+  <button onclick="saveEnvSettings('telegram')">Save Telegram settings</button>
+</div>
+{% endif %}
+
+<div class="card" id="site-domains-card">
+  <h3>Site Domains</h3>
+  <div class="muted" style="margin:-6px 0 12px">
+    Override the default domain for each movie site. Leave blank to use the built-in default.
+    Update here whenever a site migrates to a new domain.
+  </div>
+  <div class="form-row"><label>VegaMovies</label>
+    <input type="text" id="set-domain_vegamovies" placeholder="vegamovies.market"></div>
+  <div class="form-row"><label>KatMovieHD</label>
+    <input type="text" id="set-domain_katmoviehd" placeholder="katmoviehd.pictures"></div>
+  <div class="form-row"><label>RogMovies</label>
+    <input type="text" id="set-domain_rogmovies" placeholder="rogmovies.blog"></div>
+  <div class="form-row"><label>SSRMovies</label>
+    <input type="text" id="set-domain_ssrmovies" placeholder="ssrmovies.green"></div>
+  <div class="form-row"><label>GokuHD</label>
+    <input type="text" id="set-domain_gokuhd" placeholder="gokuhd.com"></div>
+  <div class="form-row"><label>PikaHD</label>
+    <input type="text" id="set-domain_pikahd" placeholder="pikahd.eu"></div>
+  <div class="form-row"><label>HDHub4u</label>
+    <input type="text" id="set-domain_hdhub4u" placeholder="hdhub4u.football"></div>
+  <div class="form-row"><label>MoviesDrive</label>
+    <input type="text" id="set-domain_moviesdrive" placeholder="moviesdrive.ws"></div>
+  <div class="form-row"><label>WatchMoviesPK</label>
+    <input type="text" id="set-domain_watchmoviespk" placeholder="watch-movies.com.pk"></div>
+  <div class="form-row"><label>NexDrive (CDN bridge)</label>
+    <input type="text" id="set-domain_nexdrive" placeholder="nexdrive.pro"></div>
+  <div class="form-row"><label>VCloud (CDN)</label>
+    <input type="text" id="set-domain_vcloud" placeholder="vcloud.zip"></div>
+  <button onclick="saveSiteDomains()">Save domain settings</button>
+</div>
+
+<div class="card">
+  <h3>Upload Configuration</h3>
+  <div class="muted" style="margin:-6px 0 12px">
+    Streaming uploader settings (ported from v1.0). Changes take effect on the next upload.
+  </div>
+  {% if upload_cfg %}
+  {% for field in upload_cfg %}
+  <div class="form-row">
+    <label>{{ field.label }}
+      <span class="muted" style="margin-left:6px;font-size:12px">{{ field.hint }}</span>
+    </label>
+    <input type="{{ field.type }}" id="set-{{ field.key }}"
+           value="{{ field.value }}" placeholder="{{ field.hint }}">
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="muted">Upload config not available.</div>
+  {% endif %}
+  {% for tog in upload_toggles %}
+  <div class="form-row" style="align-items:center;gap:10px">
+    <label style="flex:1">{{ tog.label }}
+      <span class="muted" style="margin-left:6px;font-size:12px">{{ tog.hint }}</span>
+    </label>
+    <label class="toggle-switch" style="flex-shrink:0">
+      <input type="checkbox" id="set-{{ tog.key }}" {% if tog.value %}checked{% endif %}
+             onchange="saveUploadCfg()">
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+  {% endfor %}
+  <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+    <button onclick="saveUploadCfg()">Save upload settings</button>
+    <span id="upload-cfg-status" class="muted" style="font-size:13px"></span>
+  </div>
+</div>
+
+<div class="card">
+  <h3>Mirror Sync</h3>
+  <div class="muted" style="margin:-6px 0 12px">
+    Manually push the full file database to configured GitHub / Google Sheets mirrors.
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <select id="sync-mode" style="padding:6px 10px">
+      <option value="both">GitHub + Sheets</option>
+      <option value="github">GitHub only</option>
+      <option value="gsheets">Sheets only</option>
+    </select>
+    <button onclick="triggerSync()">Sync now</button>
+    <span id="sync-status" class="muted" style="font-size:13px"></span>
+  </div>
+  <div id="sync-result" style="margin-top:10px;font-size:13px;display:none"></div>
+</div>
+
+<div class="card">
+  <h3>Storage</h3>
+  <div class="muted">Downloads land in a staging folder first; completed files move to the media folder before upload — preventing half-finished files from being uploaded.</div>
+  <div style="margin-top:8px"><strong>Staging folder:</strong> <code>{{ staging_dir }}</code></div>
+  <div style="margin-top:4px"><strong>Media folder:</strong> <code>{{ media_dir }}</code></div>
+</div>
+
+<!-- Add-key modal -->
+<div id="modal" style="display:none;position:fixed;inset:0;background:#0008;z-index:99;
+  align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="width:min(480px,100%);margin:0">
+    <h3>Add a new <span id="m-prov"></span> key</h3>
+    <div class="form-row">
+      <label>Label (optional)</label>
+      <input id="m-label" placeholder="e.g. Personal, Work, Backup">
+    </div>
+    <div class="form-row">
+      <label>Value</label>
+      <textarea id="m-value" rows="4" placeholder="Paste the key / token / JSON here"
+        style="resize:vertical"></textarea>
+    </div>
+    <div class="row" style="justify-content:flex-end;gap:8px">
+      <button class="ghost" onclick="closeModal()">Cancel</button>
+      <button onclick="saveKey()">Save</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script>
+let _prov=null;
+function addKey(p){
+  _prov=p;
+  document.getElementById('m-prov').textContent=p;
+  document.getElementById('m-label').value='';
+  document.getElementById('m-value').value='';
+  document.getElementById('modal').style.display='flex';
+  document.getElementById('m-value').focus();
+}
+function closeModal(){ document.getElementById('modal').style.display='none'; }
+document.getElementById('modal').addEventListener('click',e=>{ if(e.target===document.getElementById('modal')) closeModal(); });
+
+async function saveKey(){
+  const v=document.getElementById('m-value').value.trim();
+  if(!v){ toast('Value required'); return; }
+  try{
+    await api('/settings/api/keys',{method:'POST',body:{
+      provider:_prov, value:v, label:document.getElementById('m-label').value
+    }});
+    closeModal(); toast('Saved'); setTimeout(()=>location.reload(),300);
+  } catch(e){ toast('Failed: '+e.message); }
+}
+async function delKey(id){
+  if(!confirm('Delete key?')) return;
+  try{
+    await api('/settings/api/keys/'+id,{method:'DELETE'});
+    toast('Deleted'); document.getElementById('k-'+id).remove();
+  } catch(e){ toast('Failed: '+e.message); }
+}
+async function toggleKey(id,active){
+  try{
+    await api('/settings/api/keys/'+id+'/toggle',{method:'POST',body:{active}});
+    location.reload();
+  } catch(e){ toast('Failed: '+e.message); }
+}
+async function testKey(id){
+  try{
+    const d=await api('/settings/api/keys/'+id+'/test',{method:'POST'});
+    toast(d.ok?('OK — '+d.message):('FAIL — '+d.message));
+  } catch(e){ toast('Failed: '+e.message); }
+}
+async function saveSettings(){
+  const body={};
+  {% for k, _, _ in non_vault %}body['{{ k }}']=document.getElementById('set-{{ k }}').value;
+  {% endfor %}
+  try{ await api('/settings/api/settings',{method:'POST',body}); toast('Saved'); }
+  catch(e){ toast('Failed: '+e.message); }
+}
+async function saveEnvSettings(group){
+  const body={};
+  if(group === 'jazzdrive') {
+    ['JAZZDRIVE_MSISDN', 'JAZZDRIVE_SHARE_EMAIL', 'JAZZDRIVE_KEEPALIVE_INTERVAL'].forEach(k => {
+      const el = document.getElementById('set-' + k);
+      if(el) body[k] = el.value.trim();
+    });
+  } else {
+    document.querySelectorAll('[id^="set-"]').forEach(el=>{
+      const key=el.id.slice(4); // remove 'set-'
+      body[key]=el.value;
+    });
+  }
+  const status = document.getElementById('jd-save-status');
+  if(status) status.textContent = 'Saving...';
+  try{ 
+    await api('/settings/api/settings',{method:'POST',body}); 
+    toast('Saved'); 
+    if(status) status.textContent = 'Saved ✓';
+  }
+  catch(e){ 
+    toast('Failed: '+e.message); 
+    if(status) status.textContent = 'Failed';
+  }
+}
+
+async function triggerRelogin(){
+  const msisdn = document.getElementById('set-JAZZDRIVE_MSISDN').value.trim();
+  if(!msisdn) { toast('Enter MSISDN first'); return; }
+  
+  if(!confirm('This will trigger a new OTP to ' + msisdn + '. Proceed?')) return;
+  
+  toast('Triggering OTP...');
+  try {
+    const d = await api('/api/jd/send-otp', {method:'POST', body: {msisdn}});
+    if(d.ok) {
+      const otp = prompt('Enter the OTP sent to ' + msisdn);
+      if(otp) {
+        toast('Verifying OTP...');
+        const v = await api('/api/jd/verify-otp', {method:'POST', body: {msisdn, otp}});
+        if(v.ok) {
+          toast('✓ JazzDrive Connected!');
+          setTimeout(() => location.reload(), 1000);
+        } else {
+          toast('✗ OTP Verification Failed: ' + v.error);
+        }
+      }
+    } else {
+      toast('✗ Failed to send OTP: ' + d.error);
+    }
+  } catch(e) { toast('Error: ' + e.message); }
+}
+
+const _DOMAIN_KEYS=[
+  'domain_vegamovies','domain_katmoviehd','domain_rogmovies','domain_ssrmovies',
+  'domain_gokuhd','domain_pikahd','domain_hdhub4u','domain_moviesdrive',
+  'domain_watchmoviespk','domain_nexdrive','domain_vcloud'
+];
+async function loadSiteDomains(){
+  try{
+    const d=await api('/stream/api/settings');
+    _DOMAIN_KEYS.forEach(k=>{
+      const el=document.getElementById('set-'+k);
+      if(el&&d[k]) el.value=d[k];
+    });
+  }catch(e){}
+}
+async function saveSiteDomains(){
+  const body={};
+  _DOMAIN_KEYS.forEach(k=>{
+    const el=document.getElementById('set-'+k);
+    if(el) body[k]=el.value;
+  });
+  try{ await api('/stream/api/settings',{method:'POST',body}); toast('Domain settings saved'); }
+  catch(e){ toast('Failed: '+e.message); }
+}
+loadSiteDomains();
+
+async function saveUploadCfg(){
+  const keys=[{% for field in upload_cfg %}'{{ field.key }}',{% endfor %}];
+  const toggleKeys=[{% for tog in upload_toggles %}'{{ tog.key }}',{% endfor %}];
+  const body={};
+  keys.forEach(k=>{
+    const el=document.getElementById('set-'+k);
+    if(el) body[k]=el.value;
+  });
+  toggleKeys.forEach(k=>{
+    const el=document.getElementById('set-'+k);
+    if(el) body[k]=el.checked?'1':'0';
+  });
+  const st=document.getElementById('upload-cfg-status');
+  st.textContent='Saving…';
+  try{
+    await api('/settings/api/settings',{method:'POST',body});
+    st.textContent='Saved ✓';
+    setTimeout(()=>{ st.textContent=''; },3000);
+  }catch(e){ st.textContent='Failed: '+e.message; }
+}
+
+async function triggerSync(){
+  const mode=document.getElementById('sync-mode').value;
+  const st=document.getElementById('sync-status');
+  const res=document.getElementById('sync-result');
+  st.textContent='Syncing…'; res.style.display='none';
+  try{
+    const d=await api('/api/sync',{method:'POST',body:{mode}});
+    let html='';
+    if(d.github){ html+=`<div>GitHub: ${d.github.ok?'✓ OK':'✗ '+d.github.error} (${d.github.elapsed}s, ${d.github.records} records)</div>`; }
+    if(d.gsheets){ html+=`<div>Sheets: ${d.gsheets.ok?'✓ OK':'✗ '+d.gsheets.error} (${d.gsheets.elapsed}s, ${d.gsheets.records} records)</div>`; }
+    if(d.error){ html+=`<div>Error: ${d.error}</div>`; }
+    res.innerHTML=html||'Done.';
+    res.style.display='block';
+    st.textContent='';
+  }catch(e){ st.textContent='Failed: '+e.message; }
+}
+</script>{% endblock %}

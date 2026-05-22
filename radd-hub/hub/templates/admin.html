@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% set active="admin" %}
+{% block content %}
+<style>
+@media(max-width:767px){
+  .adm-wa-grid{grid-template-columns:1fr !important}
+  .roles-display{grid-template-columns:1fr !important}
+  .adm-roles-row{flex-direction:column;align-items:stretch}
+  .adm-roles-row input,.adm-roles-row select{max-width:100% !important;width:100%}
+}
+</style>
+
+<div class="h-row"><h2>Admin</h2></div>
+
+<!-- password -->
+<div class="card">
+  <h3>Account</h3>
+  <div class="form-row">
+    <label>Username</label>
+    <input value="{{ admin_user }}" disabled>
+  </div>
+  <div class="form-row">
+    <label>New password</label>
+    <input id="newpw" type="password" placeholder="At least 6 chars">
+  </div>
+  <button onclick="changePw()">Change password</button>
+</div>
+
+<!-- WA QR / pairing -->
+<div class="card">
+  <div class="row" style="justify-content:space-between;margin-bottom:14px">
+    <h3 style="margin:0">WhatsApp Connection</h3>
+    <div class="row" style="gap:6px">
+      <span class="badge b-mut" id="wa-run-badge">checking…</span>
+      <span class="badge b-mut" id="wa-con-badge"></span>
+    </div>
+  </div>
+
+  <div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:16px">
+    <button onclick="waAction('start')">▶ Start bot</button>
+    <button class="ghost" onclick="waAction('restart')">↺ Restart</button>
+    <button class="ghost" onclick="waAction('stop')">■ Stop</button>
+    <button class="danger" onclick="waRelink()">⚠ Re-link (wipe auth)</button>
+  </div>
+
+  <div class="grid grid-2 adm-wa-grid" style="gap:16px">
+    <div class="card" style="margin:0;background:var(--panel2)">
+      <h3>QR Code</h3>
+      <div id="admin-qr-area" style="min-height:160px;display:flex;align-items:center;justify-content:center">
+        <div class="muted">Loading…</div>
+      </div>
+    </div>
+    <div class="card" style="margin:0;background:var(--panel2)">
+      <h3>Pairing Code</h3>
+      <div class="muted" style="margin-bottom:10px;font-size:12px">
+        WhatsApp → Linked Devices → Link with phone number.
+      </div>
+      <div class="form-row">
+        <label>Phone (international)</label>
+        <input id="pair-phone" placeholder="923xxxxxxxxx">
+      </div>
+      <button onclick="setPairingNumber()">Set &amp; Request code</button>
+      <div id="pair-code-area" style="margin-top:12px;display:none">
+        <div class="muted">Code:</div>
+        <div id="pair-code-val" style="font-size:26px;font-weight:700;letter-spacing:5px;
+             color:var(--accent);font-family:monospace;margin-top:4px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bot command console -->
+<div class="card">
+  <h3>Bot Command Console</h3>
+  <div class="muted" style="margin-bottom:10px;font-size:12px">Send a raw admin command to the running WhatsApp bot.</div>
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    <input id="bot-cmd" placeholder="e.g. .ping or .status" style="font-family:monospace;flex:1;min-width:200px">
+    <button onclick="sendBotCmd()" style="flex-shrink:0">Send</button>
+  </div>
+  <pre id="bot-cmd-out" style="background:var(--panel2);padding:10px;border-radius:8px;
+       max-height:160px;overflow:auto;font-size:11px;color:var(--muted);margin-top:10px;
+       font-family:ui-monospace,monospace;line-height:1.5;display:none;word-break:break-all"></pre>
+</div>
+
+<!-- Bot users from bot.db -->
+<div class="card">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">Bot Users (bot.db)</h3>
+    <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="loadBotUsers()">↺ Refresh</button>
+  </div>
+  <div id="bot-users-tbl"><div class="muted empty">Loading…</div></div>
+</div>
+
+<!-- Role management -->
+<div class="card">
+  <h3>User Roles (users.json)</h3>
+  <div class="adm-roles-row row" style="gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <input id="role-num" placeholder="923xxxxxxxxx" style="max-width:220px;flex:1;min-width:140px">
+    <select id="role-sel" style="width:auto;flex-shrink:0">
+      <option value="admins">Admin</option>
+      <option value="verified" selected>Verified</option>
+      <option value="blocked">Blocked</option>
+    </select>
+    <button onclick="addUserRole()" style="flex-shrink:0">Add</button>
+    <button class="ghost" onclick="removeUserRole()" style="flex-shrink:0">Remove</button>
+  </div>
+  <div id="roles-display" class="roles-display" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    <div><strong>Admins</strong><ul id="r-admins" style="padding-left:16px;color:var(--muted);font-size:12px"></ul></div>
+    <div><strong>Verified</strong><ul id="r-verified" style="padding-left:16px;color:var(--muted);font-size:12px"></ul></div>
+    <div><strong>Blocked</strong><ul id="r-blocked" style="padding-left:16px;color:var(--muted);font-size:12px"></ul></div>
+  </div>
+</div>
+
+<!-- JazzDrive accounts -->
+<div class="card">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">JazzDrive Accounts</h3>
+    <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="loadJdAccounts()">↺ Refresh</button>
+  </div>
+  <div id="jd-accounts-tbl"><div class="muted empty">Loading…</div></div>
+</div>
+
+<!-- Broadcast -->
+<div class="card">
+  <h3>Broadcast Message</h3>
+  <div class="muted" style="margin-bottom:12px;font-size:12px">
+    Send a message to all users in the selected WhatsApp bot roles.
+  </div>
+  <div class="form-row">
+    <label>Message</label>
+    <textarea id="adm-bcast-msg" rows="3" placeholder="Type your broadcast message…"
+      style="resize:vertical"></textarea>
+  </div>
+  <div class="row" style="gap:10px;margin-top:8px;flex-wrap:wrap;align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;
+      text-transform:none;letter-spacing:0;color:var(--text)">
+      <input type="checkbox" id="adm-bcast-verified" checked> Verified</label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;
+      text-transform:none;letter-spacing:0;color:var(--text)">
+      <input type="checkbox" id="adm-bcast-admins"> Admins</label>
+    <button onclick="admSendBroadcast()">📢 Send Broadcast</button>
+    <span id="adm-bcast-status" class="muted" style="font-size:12px"></span>
+  </div>
+</div>
+
+<!-- Quota & Rewards leaderboard -->
+<div class="card">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">Quota &amp; Rewards Leaderboard</h3>
+    <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="loadQuotaLeaderboard()">↺ Refresh</button>
+  </div>
+  <div id="quota-leaderboard-tbl"><div class="muted empty">Loading…</div></div>
+</div>
+
+<!-- Database management -->
+<div class="card">
+  <h3>Database Management</h3>
+  <div class="muted" style="margin-bottom:14px;font-size:13px">
+    Manage the 3-way sync: local SQLite ↔ GitHub JSON ↔ Google Sheets.<br>
+    <strong>Pull from GitHub</strong> imports missing cloud records locally. <strong>Push to Cloud</strong> uploads all local records to both mirrors.
+  </div>
+  <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    <button onclick="dbPull()" id="btn-db-pull">⬇ Pull from GitHub</button>
+    <button onclick="dbSync('both')" id="btn-db-sync">⬆ Push to Cloud</button>
+  </div>
+  <div id="db-mgmt-msg" class="muted" style="font-size:13px;min-height:20px"></div>
+</div>
+
+<!-- Domain Doctor -->
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div>
+      <h3 style="margin:0">Domain Doctor</h3>
+      <div class="muted" style="font-size:12px;margin-top:3px">Discover working mirror domains for movie sites — run on demand only.</div>
+    </div>
+    <div class="row" style="gap:8px;flex-wrap:wrap">
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="ddRefreshStatus()">↺ Refresh Status</button>
+      <button onclick="ddRunAll()" id="btn-dd-run">▶ Run All Sites</button>
+    </div>
+  </div>
+  <div id="dd-status-msg" class="muted" style="font-size:12px;min-height:16px;margin-bottom:10px"></div>
+  <div id="dd-table"><div class="muted empty" style="font-size:13px">Click "Refresh Status" to load current domain info.</div></div>
+</div>
+
+<!-- Danger Zone -->
+<div class="card" style="border: 2px solid var(--err)">
+  <h3 style="color:var(--err)">⚠ Danger Zone</h3>
+  <div class="muted" style="margin-bottom:14px;font-size:13px">
+    The following actions are <strong>permanent</strong> and cannot be undone. Use with extreme caution.
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    {# Clear Local #}
+    <div style="padding:12px; background:rgba(255,0,0,0.05); border-radius:8px">
+      <div style="font-weight:600;margin-bottom:4px">Reset Local Tables</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px">Deletes all titles, files, and logs from the local database. Keeps accounts and settings.</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;text-transform:none;letter-spacing:0;color:var(--fg);cursor:pointer">
+          <input type="checkbox" id="chk-db-reset"> I understand this clears all media records
+        </label>
+        <button class="danger" onclick="dbReset()" style="padding:4px 12px;font-size:12px">Reset Tables</button>
+      </div>
+    </div>
+
+    {# Full Wipe #}
+    <div style="padding:12px; background:rgba(255,0,0,0.05); border-radius:8px">
+      <div style="font-weight:600;margin-bottom:4px">Wipe Complete Database</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px">Deletes the entire <code>radd_hub.db</code> file and re-creates it. <strong>All accounts, settings, and media will be lost.</strong></div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <label style="font-size:12px;text-transform:none;letter-spacing:0;color:var(--fg);cursor:pointer">
+          <input type="checkbox" id="chk-db-wipe"> I am absolutely sure I want to wipe everything
+        </label>
+        <button class="danger" onclick="dbFullWipe()" style="padding:4px 12px;font-size:12px">Wipe Everything</button>
+      </div>
+    </div>
+
+    {# Clear Cloud #}
+    <div style="padding:12px; background:rgba(255,0,0,0.05); border-radius:8px">
+      <div style="font-weight:600;margin-bottom:4px">Clear Cloud Mirrors</div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px">Wipes the data from your GitHub JSON and Google Sheets. This does not affect your local database.</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button class="ghost" onclick="dbClearGithub()" style="font-size:12px;padding:4px 12px;border-color:var(--err);color:var(--err)">Clear GitHub JSON</button>
+        <button class="ghost" onclick="dbClearSheets()" style="font-size:12px;padding:4px 12px;border-color:var(--err);color:var(--err)">Clear Google Sheets</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script>
+const WA_ADM='/admin/api';
+const BOTS_WA='/bots/api/whatsapp';
+let _waPollT=null;
+
+async function changePw(){
+  const v=document.getElementById('newpw').value.trim();
+  if(v.length<6){ toast('Password too short'); return; }
+  try{
+    await api(WA_ADM+'/change-password',{method:'POST',body:{password:v}});
+    toast('Updated — use new password on next sign-in.');
+    document.getElementById('newpw').value='';
+  } catch(e){ toast('Failed: '+e.message); }
+}
+
+async function pollWa(){
+  try{
+    const d=await api(WA_ADM+'/qr');
+    const rb=document.getElementById('wa-run-badge');
+    const cb=document.getElementById('wa-con-badge');
+    if(cb){ cb.textContent=d.connected?'connected':''; cb.className='badge '+(d.connected?'b-ok':'b-mut'); }
+    const area=document.getElementById('admin-qr-area');
+    if(d.connected){
+      if(area) area.innerHTML='<div style="color:var(--ok);font-size:22px;text-align:center">✔ Connected<br><small style="font-size:13px;color:var(--muted)">'+d.bot_number+'</small></div>';
+      if(rb){ rb.textContent='online'; rb.className='badge b-ok'; }
+    } else if(d.qr_available){
+      if(rb){ rb.textContent='waiting for scan'; rb.className='badge b-warn'; }
+      const ts=Date.now();
+      if(area) area.innerHTML='<img src="'+WA_ADM+'/qr.png?t='+ts+'" style="max-width:100%;border-radius:8px">';
+    } else {
+      if(rb){ rb.textContent='offline'; rb.className='badge b-err'; }
+      if(area) area.innerHTML='<div class="muted" style="text-align:center">Start the bot to see the QR.</div>';
+    }
+    if(d.pairing_code){
+      document.getElementById('pair-code-area').style.display='block';
+      document.getElementById('pair-code-val').textContent=d.pairing_code;
+    }
+  } catch(e){ console.warn(e); }
+}
+
+function startWaPoll(){ pollWa(); clearInterval(_waPollT); _waPollT=setInterval(pollWa,5000); }
+
+async function waAction(cmd){
+  try{ await api(BOTS_WA+'/'+cmd,{method:'POST'}); toast(cmd+' sent'); setTimeout(pollWa,1500); }
+  catch(e){ toast('Failed: '+e.message); }
+}
+
+async function waRelink(){
+  if(!confirm('Wipe WhatsApp auth and restart?')) return;
+  try{ await api(WA_ADM+'/relink',{method:'POST'}); toast('Re-link triggered'); setTimeout(pollWa,1500); }
+  catch(e){ toast('Failed: '+e.message); }
+}
+
+async function setPairingNumber(){
+  const num=(document.getElementById('pair-phone').value||'').trim();
+  if(!num){ toast('Enter a phone number'); return; }
+  try{
+    await api(WA_ADM+'/set-pairing-number',{method:'POST',body:{number:num}});
+    await api(WA_ADM+'/request-pairing-code',{method:'POST'});
+    toast('Pairing code requested — check bot logs in a few seconds');
+    setTimeout(pollWa,3000);
+  } catch(e){ toast('Failed: '+e.message); }
+}
+
+async function sendBotCmd(){
+  const cmd=(document.getElementById('bot-cmd').value||'').trim();
+  if(!cmd){ toast('Enter a command'); return; }
+  const out=document.getElementById('bot-cmd-out');
+  out.style.display='block'; out.textContent='Sending…';
+  try{
+    const d=await api(WA_ADM+'/cmd',{method:'POST',body:{cmd}});
+    out.textContent=d.ok?(d.lines||[]).join('\n')||'(no output)':'Error: '+(d.error||'unknown');
+  } catch(e){ out.textContent='Error: '+e.message; }
+}
+
+async function loadBotUsers(){
+  const cont=document.getElementById('bot-users-tbl');
+  try{
+    const d=await api(WA_ADM+'/bot-users');
+    if(d.warning) cont.innerHTML='<div class="muted">'+d.warning+'</div>';
+    const users=d.users||[];
+    if(!users.length){ cont.innerHTML='<div class="muted empty">No users in bot.db yet.</div>'; return; }
+    const roleBadge=r=>r==='admin'?'<span class="badge b-err">admin</span>':r==='verified'?'<span class="badge b-ok">verified</span>':'<span class="badge b-mut">'+r+'</span>';
+    cont.innerHTML='<div class="table-wrap"><table><thead><tr><th>JID</th><th>Role</th><th>Quota MB/day</th><th>Used today</th><th>Last seen</th><th>Points</th><th></th></tr></thead><tbody>'+
+      users.map(u=>'<tr>'+
+        '<td><code style="font-size:11px">'+u.jid+'</code></td>'+
+        '<td>'+roleBadge(u.role)+'</td>'+
+        '<td>'+u.daily_quota_mb+'</td>'+
+        '<td>'+(u.used_today_mb||0).toFixed(1)+'</td>'+
+        '<td class="muted" style="font-size:11px">'+(u.last_seen_at?new Date(u.last_seen_at*1000).toLocaleString():'—')+'</td>'+
+        '<td>'+(u.points||0)+'</td>'+
+        '<td><button class="ghost" style="padding:3px 8px;font-size:11px" onclick="setQuota(\''+u.jid.replace('@s.whatsapp.net','')+'\')">Quota</button></td>'+
+        '</tr>'
+      ).join('')+'</tbody></table></div>';
+  } catch(e){ cont.innerHTML='<div class="muted">Error: '+e.message+'</div>'; }
+}
+
+async function setQuota(num){
+  const mb=prompt('New daily quota in MB for '+num+':');
+  if(mb===null) return;
+  try{
+    await api(WA_ADM+'/quota',{method:'POST',body:{number:num,mb:parseInt(mb)||0}});
+    toast('Quota updated'); loadBotUsers();
+  } catch(e){ toast('Failed: '+e.message); }
+}
+
+async function loadUserRoles(){
+  try{
+    const d=await api(WA_ADM+'/settings');
+    ['admins','verified','blocked'].forEach(r=>{
+      const el=document.getElementById('r-'+r);
+      if(el) el.innerHTML=(d[r]||[]).map(j=>'<li>'+j+'</li>').join('')||'<li class="muted">(empty)</li>';
+    });
+  } catch(e){ console.warn('roles',e); }
+}
+
+async function addUserRole(){
+  const num=(document.getElementById('role-num').value||'').trim();
+  const role=document.getElementById('role-sel').value;
+  if(!num){ toast('Enter a phone number'); return; }
+  try{
+    await api(WA_ADM+'/users/add',{method:'POST',body:{role,number:num}});
+    toast('Added'); document.getElementById('role-num').value=''; loadUserRoles();
+  } catch(e){ toast('Failed: '+e.message); }
+}
+
+async function removeUserRole(){
+  const num=(document.getElementById('role-num').value||'').trim();
+  const role=document.getElementById('role-sel').value;
+  if(!num){ toast('Enter a phone number'); return; }
+  try{
+    await api(WA_ADM+'/users/remove',{method:'POST',body:{role,number:num}});
+    toast('Removed'); document.getElementById('role-num').value=''; loadUserRoles();
+  } catch(e){ toast('Failed: '+e.message); }
+}
+
+async function loadJdAccounts(){
+  const cont=document.getElementById('jd-accounts-tbl');
+  try{
+    const d=await api(WA_ADM+'/accounts');
+    const accts=d.accounts||[];
+    if(!accts.length){ cont.innerHTML='<div class="muted empty">No JazzDrive accounts. Add them in JazzDrive Scan.</div>'; return; }
+    cont.innerHTML='<div class="table-wrap"><table><thead><tr><th>MSISDN</th><th>Label</th><th>Notes</th><th>Active</th><th>Last scan</th></tr></thead><tbody>'+
+      accts.map(a=>'<tr>'+
+        '<td><code>'+a.msisdn+'</code></td>'+
+        '<td>'+(a.label||'—')+'</td>'+
+        '<td class="muted">'+(a.notes||'—')+'</td>'+
+        '<td>'+(a.is_active?'<span class="badge b-ok">yes</span>':'<span class="badge b-mut">no</span>')+'</td>'+
+        '<td class="muted">'+(a.last_scan_at?new Date(a.last_scan_at*1000).toLocaleString():'never')+'</td>'+
+        '</tr>'
+      ).join('')+'</tbody></table></div>';
+  } catch(e){ cont.innerHTML='<div class="muted">Error: '+e.message+'</div>'; }
+}
+
+async function admSendBroadcast(){
+  const msg=(document.getElementById('adm-bcast-msg').value||'').trim();
+  const chkV=document.getElementById('adm-bcast-verified').checked;
+  const chkA=document.getElementById('adm-bcast-admins').checked;
+  const st=document.getElementById('adm-bcast-status');
+  if(!msg){ toast('Enter a message first'); return; }
+  const roles=[]; if(chkV) roles.push('verified'); if(chkA) roles.push('admins');
+  if(!roles.length){ toast('Select at least one role'); return; }
+  if(!confirm('Send broadcast to all '+roles.join(' + ')+' users?')) return;
+  if(st) st.textContent='Sending…';
+  try{
+    const d=await api('/api/whatsapp/broadcast',{method:'POST',body:{message:msg,roles}});
+    const info=d.ok?('Sent '+d.sent+'/'+d.total+(d.failed?' ('+d.failed+' failed)':'')):'Error: '+(d.error||'?');
+    if(st) st.textContent=info; toast(info);
+    if(d.ok) document.getElementById('adm-bcast-msg').value='';
+  } catch(e){ if(st) st.textContent='Error: '+e.message; toast('Failed: '+e.message); }
+}
+
+/* ── DB management ─────────────────────────────────────────────────────── */
+function _dbMsg(msg, isErr){
+  const el=document.getElementById('db-mgmt-msg');
+  if(el){ el.textContent=msg; el.style.color=isErr?'var(--err)':'var(--ok)'; }
+}
+
+async function dbReset(){
+  const chk = document.getElementById('chk-db-reset');
+  if(!chk || !chk.checked){ toast('Please check the confirmation box first'); return; }
+  if(!confirm('ARE YOU SURE? All local titles, files, and scan logs will be DELETED.')) return;
+  
+  _dbMsg('Resetting…');
+  try{
+    const r = await api('/admin/api/db/reset',{method:'POST'});
+    if(r.ok){
+      _dbMsg('✔ Local database cleared');
+      chk.checked = false;
+    } else {
+      _dbMsg('Error: '+(r.error||'?'), true);
+    }
+  }catch(e){ _dbMsg('Error: '+e.message, true); }
+}
+
+async function dbFullWipe(){
+  const chk = document.getElementById('chk-db-wipe');
+  if(!chk || !chk.checked){ toast('Please check the confirmation box first'); return; }
+  if(!confirm('CRITICAL WARNING: This will delete the entire database file including all accounts and settings. You will be logged out. Continue?')) return;
+  
+  _dbMsg('Wiping entire database…');
+  try{
+    const r = await api('/admin/api/db/full-delete',{method:'POST'});
+    if(r.ok){
+      alert('Database wiped successfully. The system will now reload.');
+      location.href = '/';
+    } else {
+      _dbMsg('Error: '+(r.error||'?'), true);
+    }
+  }catch(e){ _dbMsg('Error: '+e.message, true); }
+}
+
+async function dbPull(){
+  _dbMsg('Pulling from GitHub…');
+  try{
+    const r=await api('/admin/api/db/pull',{method:'POST'});
+    _dbMsg(r.ok?`✔ Pulled ${r.pulled} new records (${r.skipped} already local)`:'Error: '+(r.error||'?'), !r.ok);
+  }catch(e){ _dbMsg('Error: '+e.message, true); }
+}
+
+async function dbSync(mode){
+  _dbMsg('Pushing to cloud…');
+  try{
+    const r=await api('/admin/api/db/sync',{method:'POST',body:{mode}});
+    const gh=r.github?`GitHub: ${r.github.ok?'OK':'FAIL'} (${r.github.records||0} records)`:'';
+    const gs=r.gsheets?`Sheets: ${r.gsheets.ok?'OK':'FAIL'} (${r.gsheets.records||0} records)`:'';
+    _dbMsg([gh,gs].filter(Boolean).join('  |  ')||'Done', !r.ok);
+  }catch(e){ _dbMsg('Error: '+e.message, true); }
+}
+
+async function dbClearGithub(){
+  if(!confirm('DANGER: This will wipe your GitHub JSON database file. Are you sure?')) return;
+  if(!confirm('FINAL CONFIRMATION: Are you absolutely sure? This cannot be undone.')) return;
+  _dbMsg('Clearing GitHub…');
+  try{
+    const r=await api('/admin/api/db/clear-github',{method:'POST'});
+    _dbMsg(r.ok?'✔ GitHub DB cleared':'Error: '+(r.error||'?'), !r.ok);
+  }catch(e){ _dbMsg('Error: '+e.message, true); }
+}
+
+async function dbClearSheets(){
+  if(!confirm('DANGER: This will delete all rows from your Google Sheet. Are you sure?')) return;
+  if(!confirm('FINAL CONFIRMATION: Are you absolutely sure? This cannot be undone.')) return;
+  _dbMsg('Clearing Google Sheets…');
+  try{
+    const r=await api('/admin/api/db/clear-gsheets',{method:'POST'});
+    _dbMsg(r.ok?'✔ Google Sheets cleared':'Error: '+(r.error||'?'), !r.ok);
+  }catch(e){ _dbMsg('Error: '+e.message, true); }
+}
+
+async function loadQuotaLeaderboard(){
+  const cont=document.getElementById('quota-leaderboard-tbl');
+  try{
+    const d=await api(WA_ADM+'/bot-users');
+    const users=d.users||[];
+    if(!users.length){ cont.innerHTML='<div class="muted empty">No bot users found.</div>'; return; }
+    const sorted=[...users].sort((a,b)=>(b.points||0)-(a.points||0));
+    cont.innerHTML='<div class="table-wrap"><table><thead><tr>'
+      +'<th>#</th><th>JID</th><th>Role</th>'
+      +'<th>Quota (MB/day)</th><th>Used Today</th>'
+      +'<th>Points</th><th>Last seen</th>'
+      +'</tr></thead><tbody>'
+      +sorted.map((u,i)=>{
+        const jid=u.jid||'—';
+        const role=u.role||'—';
+        const quota=u.daily_quota_mb!=null?u.daily_quota_mb+' MB':'—';
+        const used=u.used_today_mb!=null?u.used_today_mb.toFixed(1)+' MB':'—';
+        const pts=u.points||0;
+        const ls=u.last_seen_at?new Date(u.last_seen_at*1000).toLocaleString():'—';
+        const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+        return '<tr>'
+          +'<td>'+(i+1)+(medal?'&nbsp;'+medal:'')+'</td>'
+          +'<td><code style="font-size:11px">'+jid+'</code></td>'
+          +'<td><span class="badge b-mut">'+role+'</span></td>'
+          +'<td>'+quota+'</td>'
+          +'<td>'+used+'</td>'
+          +'<td style="font-weight:600;color:var(--accent)">'+pts+'</td>'
+          +'<td class="muted" style="font-size:11px">'+ls+'</td>'
+          +'</tr>';
+      }).join('')
+      +'</tbody></table></div>';
+  } catch(e){ cont.innerHTML='<div class="muted">Error: '+e.message+'</div>'; }
+}
+
+startWaPoll();
+loadBotUsers();
+loadUserRoles();
+loadJdAccounts();
+loadQuotaLeaderboard();
+
+/* ── Domain Doctor ─────────────────────────────────────────────────────── */
+function _ddMsg(msg, isErr){
+  const el=document.getElementById('dd-status-msg');
+  if(el){ el.textContent=msg; el.style.color=isErr?'var(--err)':'var(--ok)'; }
+}
+
+function _ddRender(sites){
+  const el=document.getElementById('dd-table');
+  if(!el) return;
+  const keys=Object.keys(sites);
+  if(!keys.length){ el.innerHTML='<div class="muted empty">No site data yet. Click "Run All Sites".</div>'; return; }
+  const statusBadge=s=>{
+    if(!s||!s.status) return '<span class="badge b-mut">unknown</span>';
+    if(s.status==='ok') return '<span class="badge b-ok">ok</span>';
+    return '<span class="badge b-err">down</span>';
+  };
+  const fmtTs=ts=>{
+    if(!ts) return '—';
+    const d=new Date(ts*1000);
+    return d.toLocaleString();
+  };
+  el.innerHTML='<div class="table-wrap"><table><thead><tr>'
+    +'<th>Site</th><th>Status</th><th>Active Domain</th><th>Stored Domain</th><th>Last Probed</th><th></th>'
+    +'</tr></thead><tbody>'
+    +keys.map(site=>{
+      const s=sites[site]||{};
+      const active=s.active_domain||s.stored_domain||'—';
+      const stored=s.stored_domain||'—';
+      const hasLink=active&&active!=='—'&&active!=='DOWN';
+      const activeCell=hasLink?'<a href="'+active+'" target="_blank" style="font-size:12px;word-break:break-all">'+active+'</a>':'<span class="muted">'+active+'</span>';
+      const storedCell=stored&&stored!=='—'?'<span style="font-size:11px;color:var(--muted);word-break:break-all">'+stored+'</span>':'<span class="muted">—</span>';
+      return '<tr>'
+        +'<td style="font-weight:600;text-transform:capitalize">'+site+'</td>'
+        +'<td>'+statusBadge(s)+'</td>'
+        +'<td>'+activeCell+'</td>'
+        +'<td>'+storedCell+'</td>'
+        +'<td class="muted" style="font-size:11px">'+fmtTs(s.last_probe_at||s.stored_at)+'</td>'
+        +'<td><button class="ghost" style="padding:3px 8px;font-size:11px" onclick="ddRunSite(\''+site+'\')">↺</button></td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table></div>';
+}
+
+async function ddRefreshStatus(){
+  try{
+    const d=await api('/admin/api/domain-doctor/status');
+    _ddRender(d.sites||{});
+    _ddMsg('Status loaded at '+new Date().toLocaleTimeString());
+  } catch(e){ _ddMsg('Error: '+e.message, true); }
+}
+
+async function ddRunAll(){
+  const btn=document.getElementById('btn-dd-run');
+  if(btn){ btn.disabled=true; btn.textContent='Running…'; }
+  _ddMsg('Discovery started — this may take 30–60 seconds…');
+  try{
+    await api('/admin/api/domain-doctor/run',{method:'POST'});
+    setTimeout(async()=>{
+      await ddRefreshStatus();
+      if(btn){ btn.disabled=false; btn.textContent='▶ Run All Sites'; }
+    }, 15000);
+  } catch(e){
+    _ddMsg('Error: '+e.message, true);
+    if(btn){ btn.disabled=false; btn.textContent='▶ Run All Sites'; }
+  }
+}
+
+async function ddRunSite(site){
+  _ddMsg('Probing '+site+'…');
+  try{
+    await api('/admin/api/domain-doctor/run',{method:'POST',body:{site}});
+    setTimeout(async()=>{
+      await ddRefreshStatus();
+    }, 8000);
+  } catch(e){ _ddMsg('Error: '+e.message, true); }
+}
+</script>{% endblock %}

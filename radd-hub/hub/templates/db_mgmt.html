@@ -1,0 +1,418 @@
+{% extends "base.html" %}
+{% block title %}Database Studio — Movie Library{% endblock %}
+
+{% block content %}
+<div class="studio-wrapper">
+    <!-- Header Area -->
+    <div class="studio-header card">
+        <div class="h-row" style="margin-bottom:0">
+            <div>
+                <h2 style="font-size:18px">Database Studio</h2>
+                <div class="muted" id="breadcrumb">Select a table to begin</div>
+            </div>
+            <div class="row">
+                <div class="stat-mini" id="db-size-stat">Size: ...</div>
+                <button class="ok sm" onclick="showInsertForm()">+ New Record</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="studio-layout">
+        <!-- Table Selector (Horizontal on mobile, Vertical on desktop) -->
+        <div class="studio-sidebar card">
+            <div class="sidebar-label">LIBRARY TABLES</div>
+            <div id="table-links" class="table-links">
+                <div class="muted" style="padding:10px">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Main Workspace -->
+        <div class="studio-main">
+            <!-- Navigation Tabs -->
+            <div class="studio-tabs" id="workspace-tabs" style="display:none">
+                <button class="s-tab active" id="tab-btn-browse" onclick="switchTab('browse')">Browse</button>
+                <button class="s-tab" id="tab-btn-structure" onclick="switchTab('structure')">Structure</button>
+                <button class="s-tab" id="tab-btn-sql" onclick="switchTab('sql')">SQL Console</button>
+                <button class="s-tab" id="tab-btn-export" onclick="switchTab('export')">Export</button>
+            </div>
+
+            <!-- View: Browse -->
+            <div id="view-browse" class="view-pane active">
+                <div class="toolbar card row" style="justify-content:space-between">
+                    <div class="row">
+                        <input type="text" id="studio-search" placeholder="Search rows..." class="studio-input" onkeyup="debounceSearch()">
+                        <button class="ghost sm" onclick="loadData()">Refresh</button>
+                    </div>
+                    <div class="muted" id="pagination-label"></div>
+                </div>
+
+                <div class="grid-container card no-padding">
+                    <div class="table-scroll">
+                        <table id="studio-table">
+                            <thead id="studio-thead"></thead>
+                            <tbody id="studio-tbody">
+                                <tr><td class="empty">Select a table to browse data</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="footer-actions card row" id="bulk-actions" style="display:none">
+                    <span class="muted">Bulk:</span>
+                    <button class="danger sm" onclick="bulkDelete()">Delete Selected</button>
+                    <button class="ghost sm" onclick="toggleAll(true)">All</button>
+                    <button class="ghost sm" onclick="toggleAll(false)">None</button>
+                </div>
+            </div>
+
+            <!-- View: Structure -->
+            <div id="view-structure" class="view-pane">
+                <div class="card no-padding">
+                    <table class="structure-table">
+                        <thead>
+                            <tr><th>Name</th><th>Type</th><th>Primary Key</th></tr>
+                        </thead>
+                        <tbody id="structure-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- View: SQL -->
+            <div id="view-sql" class="view-pane">
+                <div class="card">
+                    <label>SQL QUERY</label>
+                    <textarea id="sql-console" class="studio-textarea" placeholder="SELECT * FROM titles WHERE year > 2020"></textarea>
+                    <div class="row" style="justify-content:flex-end; margin-top:10px">
+                        <button class="btn" onclick="runConsoleSql()">Run Query</button>
+                    </div>
+                </div>
+                <div id="sql-output" style="margin-top:20px"></div>
+            </div>
+
+            <!-- View: Export -->
+            <div id="view-export" class="view-pane">
+                <div class="card text-center" style="padding:40px">
+                    <h3>Export "<span class="active-table-name"></span>"</h3>
+                    <p class="muted">Download your data in portable formats</p>
+                    <div class="row" style="justify-content:center; margin-top:20px">
+                        <button class="ok" onclick="exportData('csv')">Export CSV</button>
+                        <button class="ok" onclick="exportData('json')">Export JSON</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Insert / Edit -->
+<div id="editor-modal" class="sidebar-overlay" style="display:none; align-items:center; justify-content:center; padding:20px; z-index:2000">
+    <div class="card" style="width:100%; max-width:700px; max-height:90vh; overflow-y:auto">
+        <div class="h-row">
+            <h3 id="modal-title">New Record</h3>
+            <button class="ghost" onclick="closeEditor()">×</button>
+        </div>
+        <form id="editor-form">
+            <div id="editor-fields" class="editor-grid"></div>
+            <hr>
+            <div class="row" style="justify-content:flex-end">
+                <button type="button" class="ghost" onclick="closeEditor()">Cancel</button>
+                <button type="submit" class="btn">Save Record</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+/* ── Modern Studio Layout ────────────────────────────────────────────── */
+.studio-wrapper { display: flex; flex-direction: column; gap: 16px; max-width: 100%; }
+
+.studio-layout { 
+    display: grid; 
+    grid-template-columns: 200px 1fr; 
+    gap: 16px; 
+    align-items: start;
+}
+
+@media(max-width: 900px) {
+    .studio-layout { grid-template-columns: 1fr; }
+    .studio-sidebar { position: sticky; top: 0; z-index: 100; }
+    .table-links { display: flex !important; overflow-x: auto; padding-bottom: 5px; }
+    .table-links a { white-space: nowrap; border-left: none !important; border-bottom: 2px solid transparent; }
+    .table-links a.active { border-bottom-color: var(--accent) !important; background: var(--panel2); }
+}
+
+/* Sidebar */
+.sidebar-label { font-size: 10px; font-weight: 800; color: var(--muted); letter-spacing: 1px; padding: 8px 12px; }
+.table-links { display: flex; flex-direction: column; }
+.table-links a { 
+    padding: 10px 12px; font-size: 13px; color: var(--text); 
+    border-left: 3px solid transparent; transition: 0.2s; cursor: pointer;
+}
+.table-links a:hover { background: var(--panel2); text-decoration: none; }
+.table-links a.active { background: var(--panel2); border-left-color: var(--accent); font-weight: 600; }
+
+/* Tabs */
+.studio-tabs { display: flex; gap: 4px; margin-bottom: 12px; border-bottom: 1px solid var(--border); }
+.s-tab { 
+    background: none; border: none; padding: 10px 16px; color: var(--muted); 
+    font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent;
+}
+.s-tab:hover { color: var(--text); }
+.s-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Main Table */
+.view-pane { display: none; }
+.view-pane.active { display: block; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+.table-scroll { overflow-x: auto; max-width: 100%; }
+#studio-table { width: 100%; min-width: 800px; border-collapse: collapse; }
+#studio-table th { background: var(--panel2); position: sticky; top: 0; z-index: 10; border-bottom: 2px solid var(--border); }
+#studio-table td { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; }
+tr:hover td { background: var(--panel2); }
+
+.no-padding { padding: 0 !important; }
+
+/* Components */
+.studio-input { background: var(--panel2); border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; color: var(--text); font-size: 13px; }
+.studio-textarea { 
+    width: 100%; height: 160px; background: #0d1117; color: #79c0ff; 
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: monospace;
+}
+.stat-mini { background: var(--panel2); padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); font-size: 11px; }
+
+/* Editor Grid */
+.editor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 0; }
+@media(max-width: 600px) { .editor-grid { grid-template-columns: 1fr; } }
+
+.act-btn { background: none; border: none; cursor: pointer; opacity: 0.5; transition: 0.2s; font-size: 14px; padding: 4px; }
+.act-btn:hover { opacity: 1; transform: scale(1.2); }
+.act-edit { color: var(--blue); }
+.act-del { color: var(--err); }
+
+.poster-cell { width: 30px; height: 44px; background-size: cover; background-position: center; border-radius: 4px; border: 1px solid #333; cursor: zoom-in; }
+.poster-cell:hover { position: fixed; width: 200px; height: 300px; z-index: 3000; transform: translate(20px, -50%); border: 3px solid var(--accent); box-shadow: 0 10px 40px #000; }
+</style>
+
+<script>
+let activeTable = '';
+let columns = [];
+let currentPage = 0;
+let editMode = false;
+let editPks = null;
+
+async function init() {
+    await fetchStats();
+    await fetchTables();
+}
+
+async function fetchStats() {
+    const r = await fetch('/api/db_mgmt/api/stats');
+    const d = await r.json();
+    if (d.ok) document.getElementById('db-size-stat').innerText = `Size: ${(d.size_bytes/(1024*1024)).toFixed(2)} MB`;
+}
+
+async function fetchTables() {
+    const r = await fetch('/api/db_mgmt/api/tables');
+    const d = await r.json();
+    const list = document.getElementById('table-links');
+    list.innerHTML = '';
+    d.tables.forEach(t => {
+        const a = document.createElement('a');
+        a.innerText = t.toUpperCase();
+        a.id = `link-${t}`;
+        a.onclick = () => selectTable(t);
+        list.appendChild(a);
+    });
+}
+
+function selectTable(t) {
+    activeTable = t;
+    currentPage = 0;
+    document.getElementById('breadcrumb').innerText = `radd_hub / ${t}`;
+    document.querySelectorAll('.table-links a').forEach(a => a.classList.remove('active'));
+    document.getElementById(`link-${t}`).classList.add('active');
+    document.getElementById('workspace-tabs').style.display = 'flex';
+    document.querySelectorAll('.active-table-name').forEach(el => el.innerText = t);
+    switchTab('browse');
+}
+
+function switchTab(view) {
+    document.querySelectorAll('.s-tab').forEach(b => b.classList.remove('active'));
+    document.getElementById(`tab-btn-${view}`).classList.add('active');
+    document.querySelectorAll('.view-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById(`view-${view}`).classList.add('active');
+    
+    if (view === 'browse') loadData();
+    if (view === 'structure') loadStructure();
+    if (view === 'sql') document.getElementById('sql-console').value = `SELECT * FROM ${activeTable} LIMIT 100`;
+}
+
+async function loadData() {
+    if (!activeTable) return;
+    const q = document.getElementById('studio-search').value;
+    const offset = currentPage * 50;
+    
+    try {
+        const r = await fetch(`/api/db_mgmt/api/table/${activeTable}?limit=50&offset=${offset}&q=${encodeURIComponent(q)}`);
+        const d = await r.json();
+        columns = d.columns;
+        
+        // Header
+        const head = document.getElementById('studio-thead');
+        head.innerHTML = '<tr>' + 
+            '<th style="width:40px"><input type="checkbox" onclick="toggleAll(this.checked)"></th>' +
+            '<th style="width:80px">Action</th>' +
+            d.columns.map(c => `<th>${c.name}</th>`).join('') + '</tr>';
+            
+        // Body
+        const body = document.getElementById('studio-tbody');
+        if (!d.rows.length) {
+            body.innerHTML = `<tr><td colspan="${d.columns.length+2}" class="empty">No records found</td></tr>`;
+        } else {
+            body.innerHTML = d.rows.map(row => {
+                const pks = d.columns.filter(c => c.pk).map(c => `${c.name}:${row[c.name]}`).join('|');
+                const rowId = `row-${pks.replace(/[:|]/g, '-')}`;
+                
+                const cells = d.columns.map(col => {
+                    const val = row[col.name];
+                    if (val === null) return '<span class="muted">null</span>';
+                    if (col.name === 'poster' && val) return `<div class="poster-cell" style="background-image:url('${val}')"></div>`;
+                    if (typeof val === 'string' && val.length > 50) return `<span title="${val}">${val.substring(0, 47)}...</span>`;
+                    return val;
+                }).join('');
+                
+                return `<tr id="${rowId}">
+                    <td><input type="checkbox" class="row-sel" value="${pks}"></td>
+                    <td class="row">
+                        <button class="act-btn act-edit" onclick="editRecord('${pks}')">✎</button>
+                        <button class="act-btn act-del" onclick="deleteRecord('${pks}')">🗑</button>
+                    </td>
+                    ${cells}
+                </tr>`;
+            }).join('');
+        }
+        
+        document.getElementById('pagination-label').innerText = `Total: ${d.total}`;
+        document.getElementById('bulk-actions').style.display = d.rows.length ? 'flex' : 'none';
+        
+    } catch (e) { toast(e.message, 'err'); }
+}
+
+async function editRecord(pkStr) {
+    editMode = true;
+    editPks = Object.fromEntries(pkStr.split('|').map(p => p.split(':')));
+    
+    // Find row in current data to pre-fill
+    // For a better experience, we should fetch it fresh
+    const q = Object.entries(editPks).map(([k,v]) => `${k}=${v}`).join(' AND ');
+    const r = await fetch(`/api/db_mgmt/api/sql`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ sql: `SELECT * FROM ${activeTable} WHERE ${q}` })
+    });
+    const d = await r.json();
+    if (d.ok && d.rows.length) {
+        showInsertForm(d.rows[0]);
+    }
+}
+
+function showInsertForm(existingData = null) {
+    if (!activeTable) return;
+    const fields = document.getElementById('editor-fields');
+    document.getElementById('modal-title').innerText = existingData ? `Edit ${activeTable}` : `New ${activeTable}`;
+    
+    fields.innerHTML = columns.map(col => `
+        <div class="form-row">
+            <label>${col.name}</label>
+            <input type="text" name="${col.name}" value="${existingData ? (existingData[col.name] || '') : ''}" class="studio-input" style="width:100%" ${col.pk && existingData ? 'readonly' : ''}>
+        </div>
+    `).join('');
+    
+    document.getElementById('editor-modal').style.display = 'flex';
+}
+
+document.getElementById('editor-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const data = {};
+    new FormData(e.target).forEach((v, k) => { data[k] = v; });
+    
+    const url = `/api/db_mgmt/api/table/${activeTable}/row`;
+    const method = editMode ? 'PUT' : 'POST';
+    const body = editMode ? { _pks: editPks, _updates: data } : data;
+    
+    try {
+        const r = await fetch(url, {
+            method, headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(body)
+        });
+        const d = await r.json();
+        if (d.ok) {
+            toast("Success!");
+            closeEditor();
+            loadData();
+        } else throw new Error(d.error);
+    } catch (err) { toast(err.message, 'err'); }
+};
+
+async function deleteRecord(pkStr) {
+    if (!confirm("Delete this record permanently?")) return;
+    const pks = Object.fromEntries(pkStr.split('|').map(p => p.split(':')));
+    const r = await fetch(`/api/db_mgmt/api/table/${activeTable}/row`, {
+        method: 'DELETE', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(pks)
+    });
+    const d = await r.json();
+    if (d.ok) { toast("Deleted"); loadData(); }
+}
+
+async function runConsoleSql() {
+    const sql = document.getElementById('sql-console').value;
+    const out = document.getElementById('sql-output');
+    out.innerHTML = '<div class="muted">Running...</div>';
+    
+    const r = await fetch('/api/db_mgmt/api/sql', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({sql})
+    });
+    const d = await r.json();
+    if (d.ok) {
+        if (d.type === 'select') {
+            const h = '<tr>' + d.columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
+            const b = d.rows.map(row => '<tr>' + d.columns.map(c => `<td>${row[c]}</td>`).join('') + '</tr>').join('');
+            out.innerHTML = `<div class="card no-padding table-scroll"><table><thead>${h}</thead><tbody>${b}</tbody></table></div>`;
+        } else {
+            out.innerHTML = `<div class="card b-ok">Success. Changes: ${d.changes}</div>`;
+        }
+    } else out.innerHTML = `<div class="card b-err">${d.error}</div>`;
+}
+
+async function loadStructure() {
+    const body = document.getElementById('structure-body');
+    body.innerHTML = columns.map(c => `<tr><td class="bold">${c.name}</td><td>${c.type}</td><td>${c.pk ? '🔑 PK' : '—'}</td></tr>`).join('');
+}
+
+function closeEditor() { 
+    document.getElementById('editor-modal').style.display = 'none'; 
+    editMode = false;
+    editPks = null;
+}
+
+function debounceSearch() {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(loadData, 300);
+}
+
+function toggleAll(chk) { document.querySelectorAll('.row-sel').forEach(c => c.checked = chk); }
+
+function exportData(fmt) { window.open(`/api/db_mgmt/api/export/${activeTable}?format=${fmt}`); }
+
+function toast(m, t='ok') {
+    const el = document.getElementById('toast') || document.createElement('div');
+    el.id = 'toast'; el.className = `toast show b-${t}`; el.innerText = m;
+    document.body.appendChild(el);
+    setTimeout(() => el.className = 'toast', 3000);
+}
+
+window.onload = init;
+</script>
+{% endblock %}

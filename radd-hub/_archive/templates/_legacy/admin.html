@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Radd Movies — Admin</title>
+<style>
+  :root { --bg:#0e1015; --panel:#171a22; --line:#262a35; --text:#e7e9ee;
+          --muted:#8a93a4; --accent:#3a8dff; --green:#3ddc84; --red:#ff5b5b;
+          --yellow:#ffc857; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .app-header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .app-logo{display:flex;align-items:center;gap:8px}
+  .app-title{margin:0;font-size:18px;font-weight:700;color:var(--accent)}
+  .app-ver{color:var(--muted);font-size:12px}
+  .app-links{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .app-link{padding:8px 14px;background:#202534;color:var(--text);border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:13px}
+  .app-link:hover{border-color:var(--accent);color:var(--text)}
+  main { max-width:1100px; margin:0 auto; padding:24px 20px 80px;
+         display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px;
+          padding:20px; }
+  .card h2 { margin:0 0 14px; font-size:15px; color:var(--accent); letter-spacing:.04em; text-transform:uppercase; }
+  .card.full { grid-column:1/-1; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input[type=text], input[type=number], textarea, select {
+    width:100%; background:#0a0c11; border:1px solid var(--line); color:var(--text);
+    padding:10px 12px; border-radius:8px; outline:none; font:inherit;
+  }
+  textarea { min-height:90px; resize:vertical; font-family:inherit; }
+  input:focus, textarea:focus { border-color:var(--accent); }
+  button { background:linear-gradient(135deg,var(--accent),#2a6fdd); color:#fff;
+           border:0; padding:10px 16px; border-radius:8px; cursor:pointer;
+           font-weight:600; font-size:14px; }
+  button.ghost { background:#222633; color:var(--text); }
+  button.danger { background:linear-gradient(135deg,#e54848,#aa2727); }
+  button:hover { filter:brightness(1.1); }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > input { flex:1; }
+  .users { list-style:none; margin:8px 0 0; padding:0; max-height:220px; overflow:auto; }
+  .users li { display:flex; align-items:center; gap:8px; padding:6px 8px;
+              border-radius:6px; }
+  .users li:hover { background:#1f2330; }
+  .users .num { flex:1; font-variant-numeric:tabular-nums; }
+  .users .rm { background:transparent; color:var(--red); padding:4px 8px;
+               font-size:18px; line-height:1; border-radius:4px; }
+  .users .rm:hover { background:#3a1a1a; }
+  .toast { position:fixed; bottom:20px; right:20px; background:var(--panel);
+           border:1px solid var(--line); padding:12px 18px; border-radius:8px;
+           box-shadow:0 10px 30px rgba(0,0,0,.5); display:none; z-index:9999; }
+  .toast.show { display:block; }
+  .toast.ok { border-color:var(--green); }
+  .toast.err { border-color:var(--red); }
+  .qr-wrap { text-align:center; padding:14px; }
+  .qr-wrap img { max-width:280px; width:100%; border-radius:10px;
+                 background:#fff; padding:8px; }
+  .status-dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
+  .status-dot.green { background:var(--green); }
+  .status-dot.red   { background:var(--red); }
+  .status-dot.yellow{ background:var(--yellow); }
+  .help { font-size:12px; color:var(--muted); margin-top:6px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .otp-banner { display:none; background:linear-gradient(135deg,#5a1d1d,#3a1010);
+                border:1px solid var(--red); border-radius:10px;
+                padding:14px 18px; margin:0 auto 18px; max-width:1060px;
+                color:#ffd9d9; animation:pulseRed 1.6s ease-in-out infinite; }
+  .otp-banner.show { display:block; }
+  .otp-banner b { color:#fff; }
+  .otp-banner input { width:120px; display:inline-block; margin-left:8px;
+                      text-align:center; font-size:18px; letter-spacing:6px;
+                      font-weight:700; }
+  @keyframes pulseRed { 0%,100% { box-shadow:0 0 0 0 rgba(255,91,91,.45); }
+                        50%     { box-shadow:0 0 0 12px rgba(255,91,91,0); } }
+  .console { background:#080a0e; border:1px solid var(--line);
+             border-radius:8px; padding:12px; min-height:220px;
+             max-height:380px; overflow:auto; font:12px/1.5
+             ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+             white-space:pre-wrap; color:#cde0ff; }
+  .console .you  { color:#7dd87d; }
+  .console .bot  { color:#cde0ff; }
+  .console .err  { color:#ff8a8a; }
+  .console .meta { color:var(--muted); font-size:11px; }
+  code.kbd { background:#0a0c11; border:1px solid var(--line);
+             padding:2px 6px; border-radius:4px; font-size:12px;
+             color:var(--accent); }
+  .copy-row { display:flex; gap:6px; align-items:stretch; margin:6px 0; }
+  .copy-row input { flex:1; font-family:ui-monospace,monospace;
+                    font-size:12px; }
+  .copy-row button { padding:8px 12px; font-size:12px; }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="app-logo">
+    <span>🎬</span>
+    <h1 class="app-title">Radd Hub</h1>
+    <span class="app-ver">Bot Admin</span>
+  </div>
+  <div class="app-links">
+    <a class="app-link" href="/">Stream</a>
+    <a class="app-link" href="/?page=queue">Queue</a>
+    <a class="app-link" href="/?page=system-check">System Check</a>
+    <a class="app-link" href="/hub/">Hub</a>
+    <a class="app-link" href="/hub/settings">Keys</a>
+    <a class="app-link" href="/dbgen/">DB Generator</a>
+    <a class="app-link" href="/flixpro/">Flix Pro</a>
+    <a class="app-link" href="/flix">Flix Status</a>
+  </div>
+</header>
+<div id="otp-banner" class="otp-banner">
+  <b>📲 Jazz Drive needs an OTP</b>
+  for <b id="otp-msisdn">…</b> — expires in <b id="otp-eta">…</b>
+  <input id="otp-input" type="text" inputmode="numeric" maxlength="8"
+         placeholder="1234" />
+  <button onclick="submitOtp()" style="vertical-align:middle">Submit</button>
+  <span style="margin-left:14px;color:#ffd9d9;font-size:12px">
+    or set up auto-SMS-forward below to skip this step forever
+  </span>
+</div>
+<main>
+  <section class="card full">
+    <h2>💬 Web Admin Console</h2>
+    <p style="margin:0 0 10px;color:var(--muted)">
+      The bot's WhatsApp number is your own number — so you can't DM it
+      normally. Use this console to run the same <code class="kbd">/admin&nbsp;…</code>
+      commands you would send on WhatsApp. The bot replies inline below.
+    </p>
+    <div class="row">
+      <input id="cmd-input" type="text"
+             placeholder="/admin list   or   /admin link Iron Man 2008   or   help"
+             onkeydown="if(event.key==='Enter') runCmd()" />
+      <button onclick="runCmd()">▶ Run</button>
+      <button class="ghost" onclick="$('cmd-output').textContent=''">Clear</button>
+    </div>
+    <p class="help">
+      Quick try:
+      <a href="#" onclick="prefill('help');return false">help</a> ·
+      <a href="#" onclick="prefill('/admin stats');return false">/admin stats</a> ·
+      <a href="#" onclick="prefill('/admin list');return false">/admin list</a> ·
+      <a href="#" onclick="prefill('/admin queue');return false">/admin queue</a> ·
+      <a href="#" onclick="prefill('count');return false">count</a>
+    </p>
+    <div id="cmd-output" class="console" style="margin-top:10px"></div>
+  </section>
+  <section class="card full">
+    <h2>📢 Broadcast Center</h2>
+    <p style="margin:0 0 10px;color:var(--muted)">Send a message to all your bot users at once. Use this for updates or rewards.</p>
+    <textarea id="broadcast-msg" placeholder="Type your announcement here..." style="min-height:120px"></textarea>
+    <div class="row" style="margin-top:10px">
+      <select id="broadcast-target" style="width:auto">
+        <option value="all">All Users</option>
+        <option value="verified">Premium Only</option>
+        <option value="free">Free Only</option>
+      </select>
+      <button onclick="sendBroadcast()">🚀 Send Broadcast</button>
+    </div>
+  </section>
+  <section class="card full">
+    <h2>👥 Advanced User Controls</h2>
+    <p style="margin:0 0 10px;color:var(--muted)">Change a user's role or set a custom daily download limit (in MB).</p>
+    <div class="grid2">
+      <div>
+        <label>User Number (923...)</label>
+        <input id="user-ctrl-num" type="text" placeholder="923xxxxxxxxx" />
+      </div>
+      <div>
+        <label>New Role</label>
+        <select id="user-ctrl-role">
+          <option value="free">Free User</option>
+          <option value="verified">Premium (Verified)</option>
+          <option value="admin">Admin</option>
+          <option value="blocked">Blocked</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:10px">
+      <div>
+        <label>Daily Quota (MB) <span class="help">0 = default</span></label>
+        <input id="user-ctrl-quota" type="number" placeholder="2000" />
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button onclick="applyUserCtrl()" style="width:100%">⚙️ Apply Changes</button>
+      </div>
+    </div>
+  </section>
+  <section class="card full">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="margin:0">⏳ Live Queue Manager</h2>
+      <button class="ghost" onclick="pollQueue()" style="padding:4px 10px;font-size:12px">🔄 Refresh</button>
+    </div>
+    <div id="live-queue-list" style="display:grid;gap:10px">
+        <p style="color:var(--muted);text-align:center;padding:20px">No active downloads.</p>
+    </div>
+  </section>
+  <section class="card full">
+    <h2>📲 Auto-OTP via SMS Forwarder</h2>
+    <label>Webhook URL</label>
+    <div class="copy-row">
+      <input id="sms-url" type="text" readonly />
+      <button onclick="copyVal('sms-url')">Copy</button>
+    </div>
+    <label>Shared secret</label>
+    <div class="copy-row">
+      <input id="sms-secret" type="text" readonly />
+      <button onclick="copyVal('sms-secret')">Copy</button>
+    </div>
+    <label>JSON body template</label>
+    <textarea id="sms-body" readonly style="min-height:70px"></textarea>
+  </section>
+  <section class="card">
+    <h2>Branding & Info</h2>
+    <div class="grid2">
+      <div><label>Brand name</label><input id="brand_name" type="text" /></div>
+      <div><label>Bot name</label><input id="bot_name" type="text" /></div>
+      <div><label>Owner name</label><input id="owner_name" type="text" /></div>
+      <div><label>Currency</label><input id="currency" type="text" /></div>
+      <div><label>Price amount</label><input id="price_amount" type="number" min="0" /></div>
+      <div><label>Price period</label><input id="price_period" type="text" /></div>
+    </div>
+    <label>Payment instructions</label>
+    <textarea id="payment_instructions"></textarea>
+    <label>Premium pitch lines (one per line)</label>
+    <textarea id="premium_pitch_lines"></textarea>
+    <div style="margin-top:14px"><button onclick="saveSettings()">💾 Save settings</button></div>
+  </section>
+  <section class="card full">
+    <h2>⚙️ System Status</h2>
+    <div style="display:flex;gap:20px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="web-status-dot" class="status-dot red"></span>
+        <span>Web Interface</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="flix-status-dot" class="status-dot red"></span>
+        <span>Flix Watcher</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="bot-status-dot" class="status-dot red"></span>
+        <span>WhatsApp Bot</span>
+      </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>WhatsApp Number</h2>
+    <p style="margin:0 0 10px;color:var(--muted)">
+      <span id="bot-status-text">Loading…</span>
+    </p>
+    <div class="row" style="margin-bottom:10px">
+      <input id="pairing-phone-input" type="text" placeholder="923xxxxxxxxx (international format)"
+             style="flex:1" />
+      <button class="ghost" onclick="setPairingNumber()">Set Number</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin:0 0 10px">
+      Enter the WhatsApp phone number that will link to this bot. Must match the phone you'll enter the pairing code on.
+    </p>
+    <div class="row" style="gap:8px;margin-bottom:4px">
+      <button id="get-pairing-btn" onclick="requestPairingCode()" style="flex:1">🔑 Get Pairing Code</button>
+      <button class="danger ghost" onclick="relink()" style="flex:1">🔄 Re-link (logout)</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin:0 0 4px">
+      Click <b>Get Pairing Code</b> to generate a code — enter it on WhatsApp when prompted.
+      Use <b>Re-link</b> only to switch to a different number (logs out current session).
+    </p>
+    <div id="qr-area" style="display:none" class="qr-wrap">
+      <p id="qr-scan-header" style="color:var(--accent);margin:14px 0 8px"><b>📱 Scan this with WhatsApp</b></p>
+      <img id="qr-img" src="" alt="QR" />
+      <p id="qr-scan-instruction" style="color:var(--muted);font-size:12px;margin:10px 0 14px">
+        Settings → Linked Devices → Link a device
+      </p>
+      <div id="pairing-area" style="display:none;padding-top:14px">
+        <p style="color:var(--yellow);margin:0 0 8px"><b id="pairing-label">🔗 Pairing Code</b></p>
+        <p id="pairing-num-display" style="font-size:12px;color:var(--muted);margin-bottom:8px"></p>
+        <div class="copy-row">
+          <input id="bot-pairing-code" type="text" readonly style="text-align:center;font-size:18px;letter-spacing:2px;font-weight:700;color:var(--yellow)" />
+          <button onclick="copyVal('bot-pairing-code')">Copy</button>
+        </div>
+        <p style="color:var(--muted);font-size:11px;margin:6px 0 0">
+          Settings → Linked Devices → Link with phone number
+        </p>
+      </div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>👑 Admins</h2>
+    <div class="row">
+      <input id="add-admin" type="text" placeholder="923xxxxxxxxx" />
+      <button class="ghost" onclick="addUser('admins','add-admin')">Add</button>
+    </div>
+    <ul class="users" id="list-admins"></ul>
+  </section>
+  <section class="card">
+    <h2>✅ Verified (Premium)</h2>
+    <div class="row">
+      <input id="add-verified" type="text" placeholder="923xxxxxxxxx" />
+      <button class="ghost" onclick="addUser('verified','add-verified')">Add</button>
+    </div>
+    <ul class="users" id="list-verified"></ul>
+  </section>
+  <section class="card full">
+    <h2>🚫 Blocked</h2>
+    <div class="row">
+      <input id="add-blocked" type="text" placeholder="923xxxxxxxxx" />
+      <button class="ghost" onclick="addUser('blocked','add-blocked')">Add</button>
+    </div>
+    <ul class="users" id="list-blocked"></ul>
+  </section>
+</main>
+<div id="toast" class="toast"></div>
+<script>
+const $ = id => document.getElementById(id);
+function toast(msg, kind='ok') {
+  const t = $('toast'); t.textContent = msg;
+  t.className = 'toast show ' + kind;
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+async function loadAll() {
+  const r = await fetch('/api/admin/settings'); const d = await r.json();
+  const s = d.settings || {};
+  $('brand_name').value          = s.brand_name || '';
+  $('bot_name').value            = s.bot_name || '';
+  $('owner_name').value          = s.owner_name || '';
+  $('currency').value            = s.currency || 'PKR';
+  $('price_amount').value        = s.price_amount || 500;
+  $('price_period').value        = s.price_period || 'month';
+  $('payment_instructions').value = s.payment_instructions || '';
+  $('premium_pitch_lines').value  = (s.premium_pitch_lines || []).join('\n');
+  renderUsers('admins',   d.admins   || []);
+  renderUsers('verified', d.verified || []);
+  renderUsers('blocked',  d.blocked  || []);
+  // Pre-fill saved pairing number
+  try {
+    const pn = await (await fetch('/api/admin/get-pairing-number')).json();
+    if (pn.number) $('pairing-phone-input').value = pn.number;
+  } catch {}
+}
+function jidNum(j) { return (j || '').split('@')[0].split(':')[0]; }
+function renderUsers(role, arr) {
+  const ul = $('list-' + role); ul.innerHTML = '';
+  if (!arr.length) { ul.innerHTML = '<li style="color:var(--muted)">  (none)</li>'; return; }
+  for (const j of arr) {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="num">${jidNum(j)}</span>
+                    <button class="rm" title="Remove" onclick="removeUser('${role}','${jidNum(j)}')">✕</button>`;
+    ul.appendChild(li);
+  }
+}
+async function saveSettings() {
+  const lines = $('premium_pitch_lines').value.split('\n').map(x => x.trim()).filter(Boolean);
+  const body = {
+    settings: {
+      brand_name: $('brand_name').value.trim(),
+      bot_name: $('bot_name').value.trim(),
+      owner_name: $('owner_name').value.trim(),
+      currency: $('currency').value.trim() || 'PKR',
+      price_amount: parseInt($('price_amount').value, 10) || 500,
+      price_period: $('price_period').value.trim() || 'month',
+      payment_instructions: $('payment_instructions').value.trim(),
+      premium_pitch_lines: lines,
+    }
+  };
+  const r = await fetch('/api/admin/settings', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  const j = await r.json();
+  toast(j.ok ? '✓ Saved' : ('✗ ' + (j.error || 'Failed')), j.ok ? 'ok' : 'err');
+}
+async function addUser(role, inputId) {
+  const num = ($(inputId).value || '').replace(/\D/g, '');
+  if (!num) return;
+  const r = await fetch('/api/admin/users/add', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({role, number: num})
+  });
+  const j = await r.json();
+  if (j.ok) { $(inputId).value = ''; loadAll(); toast('✓ Added'); }
+  else toast('✗ ' + (j.error || 'Failed'), 'err');
+}
+async function removeUser(role, num) {
+  const r = await fetch('/api/admin/users/remove', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({role, number: num})
+  });
+  const j = await r.json();
+  if (j.ok) { loadAll(); toast('✓ Removed'); }
+  else toast('✗ ' + (j.error || 'Failed'), 'err');
+}
+async function setPairingNumber() {
+  const num = ($('pairing-phone-input').value || '').trim();
+  if (!num) { toast('✗ Enter a phone number first', 'err'); return; }
+  const r = await fetch('/api/admin/set-pairing-number', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ number: num })
+  });
+  const j = await r.json();
+  if (j.ok) toast(`✓ Pairing number set to +${j.number}`, 'ok');
+  else toast('✗ ' + (j.error || 'Failed'), 'err');
+}
+async function requestPairingCode() {
+  const btn = $('get-pairing-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Requesting…';
+  try {
+    const r = await fetch('/api/admin/request-pairing-code', { method: 'POST' });
+    const j = await r.json();
+    if (j.ok) {
+      toast('🔑 Pairing code on its way — check below in a few seconds', 'ok');
+    } else {
+      toast('✗ ' + (j.error || 'Failed to request code'), 'err');
+    }
+  } catch (e) {
+    toast('✗ Network error', 'err');
+  } finally {
+    setTimeout(() => { btn.disabled = false; btn.textContent = '🔑 Get Pairing Code'; }, 5000);
+  }
+}
+async function relink() {
+  const num = ($('pairing-phone-input').value || '').trim();
+  if (!num) {
+    toast('✗ Set the phone number first before re-linking', 'err');
+    $('pairing-phone-input').focus();
+    return;
+  }
+  // Save number first, then trigger relink
+  const sr = await fetch('/api/admin/set-pairing-number', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ number: num })
+  });
+  const sj = await sr.json();
+  if (!sj.ok) { toast('✗ ' + (sj.error || 'Could not save number'), 'err'); return; }
+  if (!confirm(`Re-link bot to +${sj.number}? This will log out the current WhatsApp session.`)) return;
+  const r = await fetch('/api/admin/relink', { method:'POST' });
+  const j = await r.json();
+  if (!j.ok) { toast('✗ ' + (j.error || 'Failed'), 'err'); return; }
+  toast(`🔄 Logging out and restarting… bot will be ready to link shortly`, 'ok');
+  $('qr-area').style.display = 'block';
+}
+async function pollBot() {
+  let d; try { d = await (await fetch('/api/admin/qr')).json(); } catch { return; }
+  // Update status dots
+  $('web-status-dot').className = 'status-dot green';
+  $('flix-status-dot').className = 'status-dot green'; // Assuming running
+  const dot  = $('bot-status-dot');
+  const txt  = $('bot-status-text');
+  const area = $('qr-area');
+  const img  = $('qr-img');
+  const pairArea = $('pairing-area');
+  const pairCode = $('bot-pairing-code');
+  const pairNum  = $('pairing-num-display');
+  if (d.connected) {
+    dot.className = 'status-dot green';
+    txt.textContent = 'Connected as ' + (d.bot_number || '—');
+    if (d.library_total) txt.textContent += `  ·  📚 ${d.library_total} titles`;
+    area.style.display = 'none';
+  } else if (d.qr_available || d.pairing_code) {
+    dot.className = 'status-dot yellow';
+    txt.textContent = 'Waiting for WhatsApp link…';
+    area.style.display = 'block';
+    const qrHeader = $('qr-scan-header');
+    const qrInstruction = $('qr-scan-instruction');
+    const pairLabel = $('pairing-label');
+    if (d.qr_available && !d.pairing_code) {
+      // QR-only mode
+      img.style.display = 'inline-block';
+      img.src = '/api/admin/qr.png?t=' + Date.now();
+      qrHeader.style.display = '';
+      qrInstruction.style.display = '';
+      pairArea.style.display = 'none';
+    } else if (d.pairing_code && !d.qr_available) {
+      // Pairing-code-only mode — hide all QR elements
+      img.style.display = 'none';
+      qrHeader.style.display = 'none';
+      qrInstruction.style.display = 'none';
+      pairLabel.textContent = '🔗 Pairing Code';
+      pairArea.style.borderTop = 'none';
+      pairArea.style.display = 'block';
+      pairCode.value = d.pairing_code;
+      if (d.pairing_number) {
+        pairNum.textContent = 'For number: +' + d.pairing_number;
+        const inp = $('pairing-phone-input');
+        if (!inp.value) inp.value = d.pairing_number;
+      } else {
+        pairNum.textContent = '';
+      }
+    } else if (d.qr_available && d.pairing_code) {
+      // Both available (fallback) — show QR with pairing as alternative
+      img.style.display = 'inline-block';
+      img.src = '/api/admin/qr.png?t=' + Date.now();
+      qrHeader.style.display = '';
+      qrInstruction.style.display = '';
+      pairLabel.textContent = '🔗 Or use Pairing Code';
+      pairArea.style.borderTop = '1px solid var(--line)';
+      pairArea.style.display = 'block';
+      pairCode.value = d.pairing_code;
+      if (d.pairing_number) {
+        pairNum.textContent = 'For number: +' + d.pairing_number;
+        const inp = $('pairing-phone-input');
+        if (!inp.value) inp.value = d.pairing_number;
+      } else {
+        pairNum.textContent = '';
+      }
+    }
+  } else {
+    dot.className = 'status-dot red';
+    txt.textContent = 'Bot offline';
+    area.style.display = 'none';
+  }
+}
+function appendConsole(klass, text) {
+  const out = $('cmd-output');
+  const span = document.createElement('div');
+  span.className = klass;
+  span.textContent = text;
+  out.appendChild(span);
+  out.scrollTop = out.scrollHeight;
+}
+function prefill(s) { $('cmd-input').value = s; $('cmd-input').focus(); }
+async function runCmd() {
+  const cmd = ($('cmd-input').value || '').trim();
+  if (!cmd) return;
+  appendConsole('you', '➤  ' + cmd);
+  $('cmd-input').value = '';
+  try {
+    const r = await fetch('/api/admin/cmd', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cmd })
+    });
+    const j = await r.json();
+    if (j.ok) {
+      if (!j.lines || !j.lines.length) appendConsole('meta', '(no reply)');
+      else for (const l of j.lines) appendConsole('bot', l);
+    } else toast('✗ ' + (j.error || 'failed'), 'err');
+  } catch (e) { appendConsole('err', '✗ ' + e.message); }
+}
+async function sendBroadcast() {
+  const msg = ($('broadcast-msg').value || '').trim();
+  const target = $('broadcast-target').value;
+  if (!msg) return toast('Message cannot be empty', 'err');
+  if (!confirm(`Send this broadcast to ${target} users?`)) return;
+  const cmd = `/admin broadcast ${target === 'all' ? '' : target + ' '}${msg}`;
+  const r = await fetch('/api/admin/cmd', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ cmd })
+  });
+  const j = await r.json();
+  if (j.ok) { toast('🚀 Broadcast sent'); $('broadcast-msg').value = ''; }
+  else toast('✗ Failed: ' + j.error, 'err');
+}
+async function applyUserCtrl() {
+  const num = ($('user-ctrl-num').value || '').replace(/\D/g, '');
+  const role = $('user-ctrl-role').value;
+  const quota = parseInt($('user-ctrl-quota').value, 10) || 0;
+  if (!num) return toast('Please enter a number', 'err');
+  await fetch('/api/admin/cmd', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ cmd: `/admin role ${num} ${role}` })
+  });
+  if (quota > 0) {
+    await fetch('/api/admin/cmd', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ cmd: `/admin quota ${num} ${quota}` })
+    });
+  }
+  toast('✅ User updated');
+  $('user-ctrl-num').value = '';
+  loadAll();
+}
+async function pollQueue() {
+  try {
+    const r = await fetch('/api/queue');
+    const jobs = await r.json();
+    const div = $('live-queue-list');
+    if (!jobs.length) {
+      div.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">No active downloads.</p>';
+      return;
+    }
+    div.innerHTML = jobs.map(j => `
+      <div style="background:#0a0c11;border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <b style="font-size:14px">${j.movie}</b><br>
+          <span style="font-size:11px;color:var(--muted)">Status: <b style="color:var(--accent)">${j.status}</b> · ${j.progress || 0}%</span>
+        </div>
+        <button class="ghost" onclick="cancelJob('${j.id}')" style="padding:4px 8px;color:var(--red)">✕</button>
+      </div>
+    `).join('');
+  } catch {}
+}
+async function cancelJob(id) {
+  if (!confirm('Cancel this download?')) return;
+  await fetch('/api/queue/' + id, { method:'DELETE' });
+  pollQueue();
+}
+async function loadSmsInfo() {
+  try {
+    const r = await fetch('/api/otp/webhook-info');
+    const j = await r.json();
+    $('sms-url').value    = j.url || '';
+    $('sms-secret').value = j.secret || '';
+    $('sms-body').value   = JSON.stringify(j.body_example || {}, null, 2);
+  } catch {}
+}
+function copyVal(id) {
+  const el = $(id); el.select(); el.setSelectionRange(0, 9999);
+  try { document.execCommand('copy'); toast('✓ Copied'); }
+  catch { toast('✗ Copy failed', 'err'); }
+}
+async function pollOtp() {
+  try {
+    const j = await (await fetch('/api/otp/status')).json();
+    const b = $('otp-banner');
+    if (j.pending) {
+      b.classList.add('show');
+      $('otp-msisdn').textContent = j.msisdn || '—';
+      const m = Math.max(0, Math.floor((j.seconds_left || 0) / 60));
+      const s = Math.max(0, (j.seconds_left || 0) % 60);
+      $('otp-eta').textContent = m + 'm ' + s + 's';
+    } else b.classList.remove('show');
+  } catch {}
+}
+async function submitOtp() {
+  const otp = ($('otp-input').value || '').trim();
+  if (!/^\d{3,8}$/.test(otp)) return toast('OTP must be 4-6 digits', 'err');
+  const r = await fetch('/api/otp/submit', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ otp })
+  });
+  const j = await r.json();
+  toast(j.ok ? '✓ OTP submitted' : '✗ Failed', j.ok ? 'ok' : 'err');
+  if (j.ok) { $('otp-input').value = ''; pollOtp(); }
+}
+loadAll();
+pollBot();
+loadSmsInfo();
+pollOtp();
+pollQueue();
+setInterval(pollBot, 3000);
+setInterval(pollOtp, 4000);
+setInterval(pollQueue, 5000);
+</script>
+</body>
+</html>

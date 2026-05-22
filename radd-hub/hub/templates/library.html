@@ -1,0 +1,508 @@
+{% extends "base.html" %}
+{% set active="library" %}
+{% block content %}
+<style>
+/* ── Filter bar ────────────────────────────────────────────────────── */
+.filter-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+.filter-btn{background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:5px 14px;border-radius:20px;cursor:pointer;font-size:12px;transition:all .15s;
+  text-decoration:none;white-space:nowrap}
+.filter-btn.active,.filter-btn:hover{background:var(--accent);border-color:var(--accent);color:#fff;text-decoration:none}
+.filter-input{background:var(--panel2);border:1px solid var(--border);color:var(--text);
+  padding:5px 10px;border-radius:6px;font-size:12px}
+.filter-input:focus{outline:none;border-color:var(--accent)}
+
+/* ── View toggle ───────────────────────────────────────────────────── */
+.view-toggle{display:flex;gap:4px}
+.view-btn{background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:5px 10px;border-radius:6px;cursor:pointer;font-size:13px}
+.view-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ── Poster grid ───────────────────────────────────────────────────── */
+.poster-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:12px}
+.poster-card{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.poster-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px #0005}
+.poster-img{width:100%;aspect-ratio:2/3;object-fit:cover;background:var(--border)}
+.poster-img-placeholder{width:100%;aspect-ratio:2/3;background:var(--panel2);
+  display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--border)}
+.poster-info{padding:8px}
+.poster-title{font-size:12px;font-weight:600;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.poster-meta{font-size:11px;color:var(--muted);margin-top:2px;display:flex;
+  justify-content:space-between;align-items:center}
+.poster-badge{display:inline-block;background:var(--accent);color:#fff;
+  font-size:9px;border-radius:3px;padding:1px 4px}
+
+/* ── Table enhancements ────────────────────────────────────────────── */
+.poster-thumb{width:36px;height:52px;object-fit:cover;border-radius:4px;
+  background:var(--panel2);cursor:pointer;vertical-align:middle}
+.poster-thumb-placeholder{width:36px;height:52px;background:var(--panel2);
+  border-radius:4px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:16px;vertical-align:middle;cursor:pointer}
+.title-link{cursor:pointer;color:var(--text);font-weight:600}
+.title-link:hover{color:var(--accent);text-decoration:underline}
+
+/* ── Detail modal ──────────────────────────────────────────────────── */
+.modal{position:fixed;z-index:1000;inset:0;background:#0009;display:flex;
+  align-items:center;justify-content:center;padding:12px}
+.modal-box{background:var(--panel);border:1px solid var(--border);border-radius:14px;
+  width:min(780px,100%);max-height:92vh;display:flex;flex-direction:column;overflow:hidden}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:10px}
+.modal-head h3{margin:0;font-size:16px;flex:1;min-width:0;overflow:hidden;
+  white-space:nowrap;text-overflow:ellipsis}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+.detail-layout{display:grid;grid-template-columns:160px 1fr;gap:20px}
+@media(max-width:560px){.detail-layout{grid-template-columns:1fr}}
+.detail-poster{border-radius:10px;width:100%;max-width:160px;aspect-ratio:2/3;
+  object-fit:cover;background:var(--panel2)}
+.detail-poster-ph{width:100%;max-width:160px;aspect-ratio:2/3;background:var(--panel2);
+  border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:48px}
+.detail-meta{font-size:13px;color:var(--muted);margin-top:4px;line-height:1.6}
+.detail-meta span{color:var(--text);font-weight:500}
+.genre-chip{display:inline-block;background:var(--panel2);border:1px solid var(--border);
+  border-radius:12px;padding:2px 8px;font-size:11px;margin:2px;cursor:pointer}
+.genre-chip:hover{border-color:var(--accent);color:var(--accent)}
+.file-row{display:flex;justify-content:space-between;align-items:center;
+  padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;flex-wrap:wrap;gap:6px}
+.file-row:last-child{border:none}
+.file-row a{color:var(--accent);text-decoration:none;word-break:break-all}
+.file-row a:hover{text-decoration:underline}
+
+/* ── Recs grid ─────────────────────────────────────────────────────── */
+.rec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:10px}
+.rec-card{background:var(--panel2);border:1px solid var(--border);border-radius:8px;
+  overflow:hidden;cursor:pointer;transition:transform .12s}
+.rec-card:hover{transform:translateY(-2px);border-color:var(--accent)}
+.rec-img{width:100%;aspect-ratio:2/3;object-fit:cover;background:var(--border)}
+.rec-title{font-size:10px;font-weight:600;padding:5px 6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-year{font-size:10px;color:var(--muted);padding:0 6px 5px}
+
+/* ── Sort bar ──────────────────────────────────────────────────────── */
+.sort-bar{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.sort-bar select{background:var(--panel2);border:1px solid var(--border);
+  color:var(--text);padding:4px 8px;border-radius:6px;font-size:12px;cursor:pointer;width:auto}
+.results-info{font-size:12px;color:var(--muted)}
+
+/* ── Responsive library ────────────────────────────────────────────── */
+@media(max-width:767px){
+  .lib-header-controls{flex-direction:column;align-items:stretch;gap:8px;width:100%}
+  .lib-header-controls form{width:100%}
+  .lib-header-controls form input[name=q]{width:100% !important}
+  .lib-export-row{width:100%;display:flex !important;gap:6px}
+  .lib-export-row a{flex:1;text-align:center}
+  .filter-bar .sort-bar{margin-left:0 !important}
+  .filter-bar form{width:100%}
+  .filter-bar form .filter-input{width:100% !important}
+  .poster-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+}
+@media(max-width:400px){
+  .poster-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+
+<!-- ── Page header ──────────────────────────────────────────────────── -->
+<div class="h-row">
+  <h2>Library</h2>
+  <div class="lib-header-controls row" style="gap:8px;flex-shrink:0">
+    <div class="view-toggle">
+      <button class="view-btn active" id="vbtn-table" onclick="setView('table')" title="Table view">☰</button>
+      <button class="view-btn" id="vbtn-grid" onclick="setView('grid')" title="Grid view">▦</button>
+    </div>
+    <form method="get" class="row" style="gap:6px;margin:0;flex-wrap:nowrap">
+      <input name="q" value="{{ query }}" placeholder="Search title…"
+             style="width:180px;padding:5px 10px;font-size:13px;min-width:0;flex:1">
+      {% if filter_type %}<input type="hidden" name="type" value="{{ filter_type }}">{% endif %}
+      {% if filter_genre %}<input type="hidden" name="genre" value="{{ filter_genre }}">{% endif %}
+      {% if filter_dir %}<input type="hidden" name="director" value="{{ filter_dir }}">{% endif %}
+      {% if filter_actor %}<input type="hidden" name="actor" value="{{ filter_actor }}">{% endif %}
+      <button style="padding:5px 12px;font-size:13px;flex-shrink:0">Search</button>
+      {% if query or filter_type or filter_genre or filter_dir or filter_actor %}
+      <a href="/library/" style="padding:5px 8px;font-size:13px;color:var(--muted);
+         text-decoration:none;line-height:1.8;flex-shrink:0">✕</a>
+      {% endif %}
+    </form>
+    <div class="lib-export-row row" style="gap:4px;flex-shrink:0">
+      <a href="/api/export/catalog?fmt=json{% if filter_type %}&type={{ filter_type }}{% endif %}"
+         style="padding:5px 10px;font-size:12px;text-decoration:none;white-space:nowrap;
+                border:1px solid var(--border);border-radius:6px;color:var(--muted);
+                display:inline-flex;align-items:center;gap:4px"
+         title="Export as JSON">⬇ JSON</a>
+      <a href="/api/export/catalog?fmt=csv{% if filter_type %}&type={{ filter_type }}{% endif %}"
+         style="padding:5px 10px;font-size:12px;text-decoration:none;white-space:nowrap;
+                border:1px solid var(--border);border-radius:6px;color:var(--muted);
+                display:inline-flex;align-items:center;gap:4px"
+         title="Export as CSV">⬇ CSV</a>
+    </div>
+  </div>
+</div>
+
+<!-- ── Stats ────────────────────────────────────────────────────────── -->
+<div class="grid grid-4">
+  <div class="stat"><div class="k">Titles</div><div class="v">{{ stats.titles }}</div></div>
+  <div class="stat"><div class="k">Files</div><div class="v">{{ stats.files }}</div></div>
+  <div class="stat"><div class="k">Scans</div><div class="v">{{ stats.scans }}</div></div>
+  <div class="stat">
+    <div class="k">Total size</div>
+    <div class="v" id="lib-sz">{{ '%0.1f GB' % (stats.total_size / 1073741824) if stats.total_size else '—' }}</div>
+  </div>
+</div>
+
+<!-- ── Filter bar ───────────────────────────────────────────────────── -->
+<div class="card" style="padding:14px 16px;margin-top:14px">
+  <div class="filter-bar">
+    <div style="font-size:12px;color:var(--muted);white-space:nowrap">Type:</div>
+    <a href="/library/?q={{ query }}" class="filter-btn {{ 'active' if not filter_type }}">All</a>
+    <a href="/library/?q={{ query }}&type=movie" class="filter-btn {{ 'active' if filter_type=='movie' }}">Movies</a>
+    <a href="/library/?q={{ query }}&type=series" class="filter-btn {{ 'active' if filter_type=='series' }}">Series</a>
+    <a href="/library/?q={{ query }}&type=anime" class="filter-btn {{ 'active' if filter_type=='anime' }}">Anime</a>
+
+    <div style="width:1px;background:var(--border);height:20px;margin:0 2px"></div>
+
+    <form method="get" class="row" style="gap:4px;margin:0">
+      <input type="hidden" name="q" value="{{ query }}">
+      {% if filter_type %}<input type="hidden" name="type" value="{{ filter_type }}">{% endif %}
+      <input class="filter-input" name="genre" placeholder="Genre…" value="{{ filter_genre }}" style="width:100px">
+      <button class="filter-btn" style="padding:5px 10px;border-radius:20px">Filter</button>
+    </form>
+
+    <form method="get" class="row" style="gap:4px;margin:0">
+      <input type="hidden" name="q" value="{{ query }}">
+      {% if filter_type %}<input type="hidden" name="type" value="{{ filter_type }}">{% endif %}
+      <input class="filter-input" name="director" placeholder="Director…" value="{{ filter_dir }}" style="width:100px">
+      <button class="filter-btn" style="padding:5px 10px;border-radius:20px">Filter</button>
+    </form>
+
+    <form method="get" class="row" style="gap:4px;margin:0">
+      <input type="hidden" name="q" value="{{ query }}">
+      {% if filter_type %}<input type="hidden" name="type" value="{{ filter_type }}">{% endif %}
+      <input class="filter-input" name="actor" placeholder="Actor…" value="{{ filter_actor }}" style="width:90px">
+      <button class="filter-btn" style="padding:5px 10px;border-radius:20px">Filter</button>
+    </form>
+
+    <div style="margin-left:auto" class="sort-bar">
+      <span>Sort:</span>
+      <select id="sort-sel" onchange="applySort(this.value)">
+        <option value="title" {{ 'selected' if sort=='title' }}>Title A–Z</option>
+        <option value="year_desc" {{ 'selected' if sort=='year_desc' }}>Year ↓</option>
+        <option value="year_asc" {{ 'selected' if sort=='year_asc' }}>Year ↑</option>
+        <option value="rating" {{ 'selected' if sort=='rating' }}>Rating ↓</option>
+        <option value="added" {{ 'selected' if sort=='added' }}>Date added ↓</option>
+      </select>
+    </div>
+  </div>
+
+  {% if filter_genre or filter_dir or filter_actor %}
+  <div style="font-size:12px;color:var(--muted);margin-top:4px">
+    Active filters:
+    {% if filter_genre %}<span class="genre-chip">Genre: {{ filter_genre }}
+      <a href="/library/?q={{ query }}{% if filter_type %}&type={{ filter_type }}{% endif %}"
+         style="color:var(--muted);text-decoration:none;margin-left:4px">✕</a></span>{% endif %}
+    {% if filter_dir %}<span class="genre-chip">Director: {{ filter_dir }}
+      <a href="/library/?q={{ query }}{% if filter_type %}&type={{ filter_type }}{% endif %}"
+         style="color:var(--muted);text-decoration:none;margin-left:4px">✕</a></span>{% endif %}
+    {% if filter_actor %}<span class="genre-chip">Actor: {{ filter_actor }}
+      <a href="/library/?q={{ query }}{% if filter_type %}&type={{ filter_type }}{% endif %}"
+         style="color:var(--muted);text-decoration:none;margin-left:4px">✕</a></span>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Results info ─────────────────────────────────────────────────── -->
+{% if titles %}
+<div class="row" style="margin:10px 0 8px;justify-content:space-between">
+  <div class="results-info">
+    Showing <strong>{{ titles|length }}</strong>
+    {% if titles|length >= 200 %} (limited to 200 — refine search){% endif %}
+    {% if query %} for "<strong>{{ query }}</strong>"{% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Table view ───────────────────────────────────────────────────── -->
+<div class="card" id="view-table" style="margin-top:10px">
+  {% if titles %}
+  <div class="table-wrap">
+  <table style="min-width:560px">
+    <thead>
+      <tr>
+        <th style="width:42px"></th>
+        <th>Title</th>
+        <th style="width:56px">Year</th>
+        <th style="width:72px">Type</th>
+        <th style="width:56px">Rating</th>
+        <th>Director</th>
+        <th>Languages</th>
+        <th style="width:60px">Files</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for t in titles %}
+    <tr onclick="openDetail({{ t.id }})" style="cursor:pointer">
+      <td style="padding:6px 8px">
+        {% if t.poster %}
+        <img src="{{ t.poster }}" class="poster-thumb" alt=""
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="poster-thumb-placeholder" style="display:none">🎬</div>
+        {% else %}
+        <div class="poster-thumb-placeholder">🎬</div>
+        {% endif %}
+      </td>
+      <td>
+        <span class="title-link">{{ t.title }}</span>
+        {% if t.genres_csv %}
+        <div style="margin-top:2px">
+        {% for g in (t.genres_csv or '').split(',')[:3] %}
+        <span class="genre-chip" style="font-size:10px;padding:1px 5px;cursor:default">{{ g.strip() }}</span>
+        {% endfor %}
+        </div>
+        {% endif %}
+      </td>
+      <td>{{ t.year or '—' }}</td>
+      <td><span class="badge b-info">{{ t.media_type or '?' }}</span></td>
+      <td>{{ '%0.1f' % t.rating if t.rating else '—' }}</td>
+      <td class="muted" style="font-size:12px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.director or '—' }}</td>
+      <td class="muted" style="font-size:12px">{{ (t.languages_csv or '—')[:20] }}</td>
+      <td style="text-align:center"><span class="badge b-mut">{{ t.file_count or 0 }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    {% if query or filter_type or filter_genre or filter_dir or filter_actor %}
+      No titles match your filters. <a href="/library/">Clear filters</a>
+    {% else %}
+      {% if not orphans %}
+      Library is empty. Add a JazzDrive account in <a href="/scan/">Scan</a>
+      or drop files in the media folder.
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if orphans %}
+  <div style="padding:16px; border-top: 1px solid var(--border)">
+    <h3 style="font-size:14px; margin-bottom:12px; color:var(--warn)">⚠️ Unidentified Media ({{ orphans|length }})</h3>
+    <div class="muted" style="font-size:12px; margin-bottom:12px">These files were found but could not be matched with movie metadata.</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Size</th>
+            <th>Source</th>
+            <th>Link</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for f in orphans %}
+          <tr>
+            <td style="font-family:monospace; font-size:11px">{{ f.filename }}</td>
+            <td class="muted">{{ (f.size_bytes / 1048576) | round(1) }} MB</td>
+            <td><span class="badge b-mut">{{ f.source }}</span></td>
+            <td>
+              {% if f.share_url %}
+              <a href="{{ f.share_url }}" target="_blank" style="color:var(--accent)">Open ↗</a>
+              {% else %}
+              <span class="muted">No link</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Poster grid view ─────────────────────────────────────────────── -->
+<div id="view-grid" style="display:none">
+  {% if titles %}
+  <div class="poster-grid">
+  {% for t in titles %}
+  <div class="poster-card" onclick="openDetail({{ t.id }})">
+    {% if t.poster %}
+    <img src="{{ t.poster }}" class="poster-img" alt="{{ t.title }}"
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="poster-img-placeholder" style="display:none">🎬</div>
+    {% else %}
+    <div class="poster-img-placeholder">🎬</div>
+    {% endif %}
+    <div class="poster-info">
+      <div class="poster-title" title="{{ t.title }}">{{ t.title }}</div>
+      <div class="poster-meta">
+        <span>{{ t.year or '—' }}</span>
+        {% if t.rating %}<span>⭐ {{ '%0.1f' % t.rating }}</span>{% endif %}
+      </div>
+      <div style="margin-top:4px">
+        <span class="poster-badge">{{ t.media_type or '?' }}</span>
+        {% if t.file_count %}<span class="muted" style="font-size:10px;margin-left:4px">{{ t.file_count }} file{{ 's' if t.file_count != 1 }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  </div>
+  {% else %}
+  <div class="card" style="margin-top:10px">
+    <div class="empty">
+      {% if query or filter_type or filter_genre or filter_dir or filter_actor %}
+        No titles match. <a href="/library/">Clear filters</a>
+      {% else %}
+        Library is empty.
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── Title detail modal ───────────────────────────────────────────── -->
+<div id="detail-modal" class="modal" style="display:none" onclick="if(event.target===this)closeDetail()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="detail-title">Loading…</h3>
+      <button class="ghost" style="padding:4px 10px;font-size:12px;flex-shrink:0" onclick="closeDetail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-layout">
+        <div>
+          <img id="detail-poster" class="detail-poster" src="" alt="" style="display:none">
+          <div id="detail-poster-ph" class="detail-poster-ph">🎬</div>
+          <div style="margin-top:10px;text-align:center">
+            <button id="detail-queue-btn" style="font-size:12px;padding:5px 14px;width:100%"
+                    onclick="queueTitle()">+ Add to Queue</button>
+          </div>
+        </div>
+        <div>
+          <div id="detail-overview" class="muted" style="font-size:13px;line-height:1.6;margin-bottom:12px"></div>
+          <div id="detail-meta" class="detail-meta"></div>
+          <div id="detail-genres" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <div style="margin-top:18px">
+        <h4 style="margin:0 0 8px">Files in Library</h4>
+        <div id="detail-files"><div class="muted">Loading…</div></div>
+      </div>
+      <div id="detail-recs-section" style="margin-top:18px;display:none">
+        <h4 style="margin:0 0 8px">You may also like</h4>
+        <div id="detail-recs" class="rec-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}<script>
+let _view = localStorage.getItem('lib-view') || 'table';
+function setView(v){
+  _view = v; localStorage.setItem('lib-view', v);
+  document.getElementById('view-table').style.display = v==='table' ? '' : 'none';
+  document.getElementById('view-grid').style.display  = v==='grid'  ? '' : 'none';
+  document.getElementById('vbtn-table').className = 'view-btn'+(v==='table'?' active':'');
+  document.getElementById('vbtn-grid').className  = 'view-btn'+(v==='grid' ?' active':'');
+}
+setView(_view);
+
+function applySort(val){
+  const url=new URL(location.href);
+  url.searchParams.set('sort',val);
+  location.href=url.toString();
+}
+const sortSel=document.getElementById('sort-sel');
+if(sortSel){ const cur=new URL(location.href).searchParams.get('sort')||'title'; sortSel.value=cur; }
+
+const _titles={};
+{% for t in titles %}
+_titles[{{ t.id }}]={
+  id:{{ t.id }},title:{{ t.title|tojson }},year:{{ (t.year or '')|tojson }},
+  rating:{{ t.rating or 'null' }},media_type:{{ (t.media_type or '')|tojson }},
+  director:{{ (t.director or '')|tojson }},languages_csv:{{ (t.languages_csv or '')|tojson }},
+  genres_csv:{{ (t.genres_csv or '')|tojson }},cast_names:{{ (t.cast_names or '')|tojson }},
+  overview:{{ (t.overview or '')|tojson }},poster:{{ (t.poster or '')|tojson }},
+  tmdb_id:{{ t.tmdb_id or 'null' }},
+};
+{% endfor %}
+
+let _currentTitle=null;
+function openDetail(id){
+  const t=_titles[id]; if(!t) return;
+  _currentTitle=t;
+  document.getElementById('detail-title').textContent=t.title+(t.year?' ('+t.year+')':'');
+  document.getElementById('detail-overview').textContent=t.overview||'No overview available.';
+  const img=document.getElementById('detail-poster');
+  const ph=document.getElementById('detail-poster-ph');
+  if(t.poster){ img.src=t.poster; img.style.display=''; ph.style.display='none'; }
+  else { img.style.display='none'; ph.style.display='flex'; }
+  const metaLines=[];
+  if(t.rating)       metaLines.push(`<span>Rating</span>  ⭐ ${parseFloat(t.rating).toFixed(1)}`);
+  if(t.media_type)   metaLines.push(`<span>Type</span>  ${t.media_type}`);
+  if(t.director)     metaLines.push(`<span>Director</span>  ${t.director}`);
+  if(t.languages_csv)metaLines.push(`<span>Languages</span>  ${t.languages_csv}`);
+  if(t.cast_names)   metaLines.push(`<span>Cast</span>  ${t.cast_names.split(',').slice(0,5).join(', ')}`);
+  document.getElementById('detail-meta').innerHTML=metaLines.map(l=>`<div>${l}</div>`).join('');
+  const genres=(t.genres_csv||'').split(',').map(g=>g.trim()).filter(Boolean);
+  document.getElementById('detail-genres').innerHTML=genres.map(g=>
+    `<span class="genre-chip" onclick="filterByGenre('${g}')">${g}</span>`).join('');
+  loadTitleFiles(id);
+  document.getElementById('detail-recs-section').style.display='none';
+  if(t.tmdb_id) loadRecs(t.tmdb_id,t.media_type||'movie');
+  document.getElementById('detail-modal').style.display='flex';
+}
+function closeDetail(){
+  document.getElementById('detail-modal').style.display='none'; _currentTitle=null;
+}
+function queueTitle(){
+  if(!_currentTitle) return;
+  const name=_currentTitle.title+(_currentTitle.year?' '+_currentTitle.year:'');
+  fetch('/stream/api/queue',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({movie:name,site:'auto'})})
+    .then(r=>r.json()).then(d=>{toast(d.ok?'Added "'+name+'" to queue!':('Failed: '+(d.error||'?')));})
+    .catch(e=>toast('Error: '+e.message));
+}
+async function loadTitleFiles(titleId){
+  const el=document.getElementById('detail-files');
+  try{
+    const d=await api('/library/api/title/'+titleId+'/files');
+    const files=d.files||[];
+    if(!files.length){ el.innerHTML='<div class="muted">No files in library.</div>'; return; }
+    el.innerHTML=files.map(f=>`
+      <div class="file-row">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.filename||'—'}</div>
+          <div class="muted" style="font-size:11px;margin-top:2px">${f.quality||''} ${f.source?'· '+f.source:''} ${f.size_bytes?'· '+fmtSize(f.size_bytes):''}</div>
+        </div>
+        ${f.share_url?`<a href="${f.share_url}" target="_blank" style="flex-shrink:0">☁ Open</a>`:'<span class="muted">No link</span>'}
+      </div>`).join('');
+  }catch(e){ el.innerHTML='<div class="muted">Error loading files.</div>'; }
+}
+async function loadRecs(tmdbId,mediaType){
+  try{
+    const d=await api(`/api/recommendations?tmdb_id=${tmdbId}&media_type=${mediaType}`);
+    const recs=d.results||[];
+    if(!recs.length) return;
+    const grid=document.getElementById('detail-recs');
+    grid.innerHTML=recs.slice(0,12).map(r=>`
+      <div class="rec-card" onclick="searchAndOpenRec(${JSON.stringify(r.title)})">
+        ${r.poster_path?`<img src="https://image.tmdb.org/t/p/w185${r.poster_path}" class="rec-img" alt="${r.title}" onerror="this.style.display='none'">`
+          :'<div class="rec-img" style="display:flex;align-items:center;justify-content:center;font-size:24px">🎬</div>'}
+        <div class="rec-title">${r.title}</div>
+        <div class="rec-year">${r.year||''}</div>
+      </div>`).join('');
+    document.getElementById('detail-recs-section').style.display='';
+  }catch(e){}
+}
+function searchAndOpenRec(title){
+  const url=new URL(location.href);
+  url.searchParams.set('q',title);
+  location.href=url.toString();
+}
+function filterByGenre(g){
+  const url=new URL(location.href);
+  url.searchParams.set('genre',g);
+  location.href=url.toString();
+}
+</script>{% endblock %}

@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0a0c11">
+<title>Radd-Stream</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c11;--surface:#12151e;--surface2:#181d28;--surface3:#1e2435;--border:#252d3d;
+  --accent:#6c63ff;--accent2:#8b85ff;--accent-glow:rgba(108,99,255,.18);
+  --green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#a855f7;
+  --text:#e2e8f0;--muted:#64748b;--muted2:#475569;
+  --radius:10px;--radius-sm:6px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,Helvetica,Arial,sans-serif;
+  --header-h:56px;
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--font);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;overflow:hidden}
+a{color:var(--accent2);text-decoration:none}a:hover{text-decoration:underline}
+button{cursor:pointer;border:none;font-family:inherit;font-size:.85rem;border-radius:var(--radius-sm);padding:.45rem .8rem;transition:transform .12s,opacity .15s,background .15s,border-color .15s,color .15s}
+button:hover{opacity:.9}button:active{transform:scale(.97)}
+button:disabled{opacity:.5;cursor:not-allowed}
+input,textarea,select{font-family:inherit;font-size:.9rem;border:1px solid var(--border);background:var(--surface2);color:var(--text);border-radius:var(--radius-sm);padding:.55rem .75rem;width:100%;outline:none;transition:border .18s,box-shadow .18s}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-glow)}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted2)}
+/* ── Header ─────────────────────────────────────────────── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:.6rem 1rem;display:flex;align-items:center;gap:.6rem;z-index:30;flex-shrink:0;height:var(--header-h)}
+.logo{display:flex;align-items:center;gap:.5rem;min-width:0}
+.logo-icon{font-size:1.4rem;line-height:1}
+header h1{font-size:1.15rem;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.version-badge{font-size:.65rem;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:.1rem .35rem}
+.header-spacer{flex:1}
+.nav-tabs{display:flex;gap:.2rem;background:var(--surface2);border-radius:8px;padding:3px;border:1px solid var(--border)}
+.nav-tab{background:transparent;color:var(--muted);border:none;padding:.4rem .85rem;font-size:.82rem;border-radius:6px;font-weight:500}
+.nav-tab.active{background:var(--accent);color:#fff}
+.nav-tab:not(.active):hover{color:var(--text)}
+#worker-status{font-size:.75rem;color:var(--muted);white-space:nowrap;display:flex;align-items:center;gap:.4rem;padding:.3rem .6rem;background:var(--surface2);border:1px solid var(--border);border-radius:20px}
+.status-dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.status-dot.active{background:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.18);animation:pulse-dot 1.6s infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.55}}
+.menu-btn{display:none;background:var(--surface2);border:1px solid var(--border);color:var(--text);width:36px;height:36px;border-radius:8px;font-size:1.05rem;align-items:center;justify-content:center}
+/* ── Layout ─────────────────────────────────────────────── */
+.app-body{display:flex;flex:1;overflow:hidden;position:relative}
+.sidebar{width:330px;min-width:300px;background:var(--surface);border-right:1px solid var(--border);overflow-y:auto;padding:1rem;display:flex;flex-direction:column;gap:.85rem;flex-shrink:0}
+.main-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.sidebar-backdrop{display:none;position:fixed;inset:var(--header-h) 0 0 0;background:rgba(0,0,0,.5);z-index:18;backdrop-filter:blur(2px)}
+/* ── Page panels (tabbed) ────────────────────────────────── */
+.page{display:none;flex:1;overflow:hidden;flex-direction:column}
+.page.active{display:flex}
+/* ── Card ─────────────────────────────────────────────── */
+.card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:.95rem}
+.card-title{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:.7rem;display:flex;align-items:center;gap:.4rem}
+label{font-size:.78rem;color:var(--muted);display:block;margin-bottom:.3rem}
+.add-section{display:flex;flex-direction:column;gap:.7rem}
+.add-section textarea{resize:vertical;min-height:90px;line-height:1.5;font-size:.88rem}
+.hint{font-size:.7rem;color:var(--muted)}
+.btn-add{background:var(--accent);color:#fff;font-weight:600;padding:.65rem 1rem;border-radius:8px;font-size:.9rem;width:100%;letter-spacing:.02em}
+.btn-add:hover{background:var(--accent2);opacity:1}
+.ai-indicator{background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.22);border-radius:6px;padding:.5rem .7rem;font-size:.76rem;display:none}
+.ai-indicator.show{display:block}
+.ai-cat{font-weight:600;color:var(--purple)}
+/* ── Toggle ──────────────────────────────────────────── */
+.toggle-row{display:flex;align-items:center;gap:.7rem;padding:.3rem 0}
+.toggle{position:relative;width:42px;height:22px;flex-shrink:0;display:inline-block}
+.toggle input{display:none}
+.toggle-slider{position:absolute;inset:0;border-radius:11px;background:var(--border);cursor:pointer;transition:.2s}
+.toggle-slider:before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+.toggle input:checked+.toggle-slider{background:var(--green)}
+.toggle input:checked+.toggle-slider:before{transform:translateX(20px)}
+.toggle-label{font-size:.85rem;color:var(--text);cursor:pointer;line-height:1.3}
+.toggle-label span{display:block;font-size:.7rem;color:var(--muted);margin-top:.1rem}
+/* ── Queue toolbar ─────────────────────────────────────── */
+.queue-toolbar{display:flex;align-items:center;gap:.5rem;padding:.7rem 1rem;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.queue-toolbar h2{font-size:1rem;font-weight:600}
+.spacer{flex:1}
+.badge{background:var(--surface2);border:1px solid var(--border);border-radius:20px;font-size:.7rem;padding:.2rem .6rem;color:var(--muted)}
+.btn-sm{background:var(--surface2);color:var(--muted);border:1px solid var(--border);padding:.32rem .65rem;font-size:.75rem;border-radius:6px}
+.btn-sm:hover{color:var(--text);border-color:var(--accent)}
+.btn-sm.danger:hover{border-color:var(--red);color:var(--red)}
+/* ── Queue list ─────────────────────────────────────────── */
+.queue-list{flex:1;overflow-y:auto;padding:.85rem 1rem 1.2rem;display:flex;flex-direction:column;gap:.55rem}
+.job-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;transition:border-color .2s}
+.job-card.done{border-left:3px solid var(--green)}
+.job-card.error{border-left:3px solid var(--red)}
+.job-card.paused{border-left:3px solid var(--yellow)}
+.job-card.cancelled{border-left:3px solid var(--muted)}
+.job-card.queued{border-left:3px solid var(--border)}
+.job-card.downloading{border-left:3px solid var(--purple);animation:pulse-border-p 2s infinite}
+.job-card.searching,.job-card.getting_link,.job-card.bridge,.job-card.generating{border-left:3px solid var(--accent);animation:pulse-border 2s infinite}
+@keyframes pulse-border{0%,100%{border-left-color:var(--accent)}50%{border-left-color:var(--accent2)}}
+@keyframes pulse-border-p{0%,100%{border-left-color:var(--purple)}50%{border-left-color:var(--accent2)}}
+.job-header{display:flex;align-items:center;gap:.5rem;padding:.65rem .85rem;cursor:pointer;user-select:none;flex-wrap:wrap}
+.job-header:hover{background:rgba(255,255,255,.015)}
+.job-title{font-weight:600;font-size:.88rem;flex:1;min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job-site{font-size:.68rem;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:.12rem .4rem;white-space:nowrap}
+.job-ai-tag{font-size:.65rem;color:var(--purple);background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.25);border-radius:4px;padding:.12rem .4rem}
+.status-pill{font-size:.68rem;font-weight:700;border-radius:20px;padding:.2rem .6rem;white-space:nowrap}
+.progress-wrap{padding:0 .85rem .55rem;display:flex;align-items:center;gap:.5rem}
+.progress-bar{flex:1;height:6px;background:var(--surface2);border:1px solid var(--border);border-radius:99px;overflow:hidden;position:relative}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));transition:width .4s ease;border-radius:99px}
+.progress-fill.done{background:var(--green)}
+.progress-fill.error{background:var(--red)}
+.progress-pct{font-size:.7rem;color:var(--muted);min-width:34px;text-align:right;font-variant-numeric:tabular-nums}
+.pill-queued{background:rgba(100,116,139,.12);color:var(--muted)}
+.pill-searching,.pill-getting_link,.pill-bridge,.pill-generating{background:rgba(108,99,255,.18);color:var(--accent2)}
+.pill-downloading{background:rgba(168,85,247,.18);color:var(--purple)}
+.pill-done{background:rgba(34,197,94,.18);color:var(--green)}
+.pill-error{background:rgba(239,68,68,.18);color:var(--red)}
+.pill-paused{background:rgba(245,158,11,.18);color:var(--yellow)}
+.pill-cancelled{background:rgba(100,116,139,.12);color:var(--muted)}
+.job-actions{display:flex;gap:.25rem;flex-wrap:wrap}
+.btn-icon{background:var(--surface2);border:1px solid var(--border);color:var(--muted);padding:.28rem .5rem;font-size:.75rem;border-radius:5px;line-height:1}
+.btn-icon:hover{color:var(--text);border-color:var(--accent)}
+.btn-icon.danger:hover{border-color:var(--red);color:var(--red)}
+.btn-icon.success:hover{border-color:var(--green);color:var(--green)}
+.job-body{padding:0 .85rem .8rem;display:none;flex-direction:column;gap:.5rem}
+.job-body.open{display:flex}
+.result-url{background:var(--surface2);border:1px solid rgba(34,197,94,.3);border-radius:6px;padding:.5rem .65rem;font-size:.78rem;word-break:break-all;display:flex;gap:.4rem;align-items:flex-start;flex-wrap:wrap}
+.result-url span{flex:1;color:var(--green);min-width:0}
+.btn-copy,.btn-open,.btn-dl{font-size:.7rem;padding:.28rem .55rem;white-space:nowrap;flex-shrink:0;border-radius:5px;color:#fff;border:none;font-family:inherit;cursor:pointer}
+.btn-copy{background:var(--green)}.btn-open{background:var(--blue)}.btn-dl{background:var(--purple)}
+.dl-path{background:rgba(168,85,247,.06);border:1px solid rgba(168,85,247,.2);border-radius:6px;padding:.45rem .65rem;font-size:.74rem;color:var(--purple);word-break:break-all}
+.error-msg{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.25);border-radius:6px;padding:.5rem .65rem;font-size:.78rem;color:var(--red)}
+.log-box{background:#080a0f;border:1px solid var(--border);border-radius:6px;padding:.5rem .65rem;font-size:.7rem;font-family:'SF Mono',Consolas,'Courier New',monospace;color:#94a3b8;max-height:160px;overflow-y:auto;line-height:1.65}
+.log-box p{margin:0;word-break:break-word}
+.spinner{width:13px;height:13px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+.spinner-purple{border-top-color:var(--purple)}
+.spinner-sm{width:11px;height:11px;border-width:1.5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ── Empty state ─────────────────────────────────────────── */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:.7rem;color:var(--muted);font-size:.9rem;text-align:center;padding:2rem}
+.empty-state svg{opacity:.25}
+/* ── Toast ─────────────────────────────────────────────── */
+#toast{position:fixed;bottom:calc(1.2rem + var(--safe-bottom));right:1.2rem;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.7rem .95rem;font-size:.84rem;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;z-index:999;max-width:90vw;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.ok{border-left:3px solid var(--green)}
+#toast.err{border-left:3px solid var(--red)}
+#toast.info{border-left:3px solid var(--blue)}
+/* ── Help / settings pages ─────────────────────────────── */
+.scroll-page{flex:1;overflow-y:auto;padding:1.4rem 1.4rem calc(1.4rem + var(--safe-bottom));max-width:900px;margin:0 auto;width:100%}
+.scroll-page h2{font-size:1.25rem;margin-bottom:1.2rem;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.help-section,.settings-group{margin-bottom:1.4rem;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem}
+.help-section h3,.settings-group h3{font-size:.78rem;font-weight:700;color:var(--accent2);margin-bottom:.7rem;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:.4rem}
+.help-section p,.help-section li{font-size:.86rem;color:#cbd5e1;line-height:1.65;margin-bottom:.35rem}
+.help-section ul{padding-left:1.2rem}
+.help-section ul li{list-style:disc}
+.help-code{background:#080a0f;border:1px solid var(--border);border-radius:6px;padding:.7rem .9rem;font-size:.78rem;font-family:'SF Mono',Consolas,monospace;color:#94a3b8;margin:.5rem 0;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.site-table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:.4rem}
+.site-table th,.site-table td{border:1px solid var(--border);padding:.5rem .7rem;text-align:left}
+.site-table th{background:var(--surface);color:var(--muted);font-size:.72rem;text-transform:uppercase}
+.site-table td:first-child{color:var(--accent2);font-weight:600}
+.highlight{color:var(--green);font-weight:600}
+.setting-row{display:flex;align-items:center;gap:.9rem;padding:.7rem 0;border-bottom:1px solid rgba(37,45,61,.5);flex-wrap:wrap}
+.setting-row:first-child{padding-top:0}
+.setting-row:last-child{border-bottom:none;padding-bottom:0}
+.setting-info{flex:1;min-width:200px}
+.setting-info .s-title{font-size:.88rem;font-weight:500}
+.setting-info .s-desc{font-size:.74rem;color:var(--muted);margin-top:.2rem;line-height:1.4}
+.setting-control{flex-shrink:0;min-width:180px}
+.setting-control input,.setting-control select{font-size:.84rem;padding:.45rem .65rem}
+.btn-save-settings{background:var(--accent);color:#fff;font-weight:600;padding:.6rem 1.4rem;border-radius:8px;font-size:.9rem;margin-top:.5rem}
+.btn-save-settings:hover{background:var(--accent2);opacity:1}
+.domain-grid{display:flex;flex-direction:column;gap:.5rem}
+.domain-row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.domain-row label{flex:0 0 150px;font-size:.78rem;color:var(--muted);margin-bottom:0}
+.domain-row input{flex:1;min-width:200px;font-size:.8rem;padding:.42rem .6rem}
+/* ── API keys ─────────────────────────────────────────── */
+.key-row{display:flex;flex-direction:column;gap:.55rem;padding:.85rem 0;border-bottom:1px solid rgba(37,45,61,.5)}
+.key-row:first-child{padding-top:0}
+.key-row:last-child{border-bottom:none;padding-bottom:0}
+.key-head{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+.key-head .name{font-weight:600;font-size:.92rem;display:flex;align-items:center;gap:.45rem}
+.key-status{font-size:.7rem;font-weight:700;padding:.18rem .55rem;border-radius:20px;background:rgba(100,116,139,.15);color:var(--muted)}
+.key-status.ok{background:rgba(34,197,94,.18);color:var(--green)}
+.key-status.warn{background:rgba(245,158,11,.18);color:var(--yellow)}
+.key-status.err{background:rgba(239,68,68,.18);color:var(--red)}
+.key-help{font-size:.76rem;color:var(--muted);line-height:1.5}
+.key-help a{color:var(--accent2)}
+.key-input-row{display:flex;gap:.45rem;flex-wrap:wrap}
+.key-input-row input{flex:1;min-width:160px;font-family:'SF Mono',Consolas,monospace;font-size:.82rem;letter-spacing:.5px}
+.btn-key{background:var(--surface3);color:var(--text);border:1px solid var(--border);padding:.5rem .85rem;font-size:.8rem;border-radius:6px;font-weight:500;display:inline-flex;align-items:center;gap:.4rem}
+.btn-key:hover{border-color:var(--accent);background:var(--surface2)}
+.btn-key.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-key.primary:hover{background:var(--accent2)}
+.btn-key.verify{background:var(--green);color:#fff;border-color:var(--green)}
+.btn-key.verify:hover{background:#1ea34d;opacity:1}
+.btn-key.ghost{background:transparent}
+.key-result{font-size:.78rem;padding:.5rem .65rem;border-radius:6px;display:none;line-height:1.5}
+.key-result.show{display:block}
+.key-result.ok{background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.key-result.err{background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+/* ── Plugin list ─────────────────────────────────────────── */
+.plugin-list{display:flex;flex-direction:column;gap:.4rem}
+.plugin-item{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:.5rem .7rem;font-size:.78rem;display:flex;align-items:center;gap:.55rem}
+.plugin-item strong{color:var(--text);font-size:.82rem;display:block}
+.plugin-item .desc{color:var(--muted);font-size:.7rem;display:block;margin-top:.1rem}
+.plugin-item .info{flex:1;min-width:0}
+.plugin-ver{font-size:.65rem;color:var(--muted2);background:var(--surface2);border:1px solid var(--border);padding:.1rem .4rem;border-radius:4px;flex-shrink:0}
+/* ── Responsive ──────────────────────────────────────────── */
+@media (max-width: 980px){
+  .sidebar{position:fixed;top:var(--header-h);bottom:0;left:0;z-index:20;width:300px;max-width:85vw;transform:translateX(-100%);transition:transform .25s ease;box-shadow:8px 0 24px rgba(0,0,0,.4)}
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-backdrop.show{display:block}
+  .menu-btn{display:flex}
+  .nav-tabs .nav-tab{padding:.4rem .65rem;font-size:.78rem}
+  #worker-status{display:none}
+}
+@media (max-width: 640px){
+  header{padding:.55rem .75rem;gap:.4rem}
+  header h1{font-size:1rem}
+  .version-badge{display:none}
+  .nav-tabs{gap:1px}
+  .nav-tab{padding:.4rem .55rem;font-size:.75rem}
+  .queue-toolbar{padding:.6rem .75rem}
+  .queue-toolbar h2{font-size:.92rem;width:100%}
+  .queue-toolbar .spacer{display:none}
+  .queue-list{padding:.7rem .75rem 1rem}
+  .job-header{padding:.55rem .7rem}
+  .scroll-page{padding:1rem}
+  .help-section,.settings-group{padding:.85rem}
+  .setting-control{min-width:0;width:100%}
+  .setting-control input,.setting-control select{width:100%}
+  .domain-row label{flex:0 0 100%}
+  .domain-row input{min-width:0}
+  .btn-sm{padding:.32rem .55rem;font-size:.72rem}
+}
+@media (max-width: 420px){
+  header h1{font-size:.95rem}
+  .nav-tab{padding:.35rem .5rem;font-size:.72rem}
+  #toast{right:.6rem;left:.6rem;max-width:none}
+}
+</style>
+</head>
+<body>
+<script>
+// Stub so onclick attributes never throw if a user clicks during page load
+// before the main <script> at the end of body has executed. Real
+// implementations later in the file overwrite these.
+window.toggleSidebar = window.toggleSidebar || function(){};
+window.showPage     = window.showPage     || function(){};
+</script>
+<header>
+  <button class="menu-btn" id="menu-btn" onclick="toggleSidebar()" aria-label="Menu">☰</button>
+  <div class="logo">
+    <div class="logo-icon">🎬</div>
+    <h1>Radd-Stream</h1>
+    <span class="version-badge" id="version-badge">v1.2</span>
+  </div>
+  <div class="header-spacer"></div>
+  <a href="/admin" style="margin-right:8px"><button class="btn-sm" style="background:var(--surface2);border-color:var(--accent);color:var(--text);display:flex;align-items:center;gap:6px">🤖 Bot Admin</button></a>
+  <a href="/dbgen/" style="margin-right:8px"><button class="btn-sm" style="background:#2d4a2d;border-color:#4a7a4a;color:var(--text);display:flex;align-items:center;gap:6px">🗄️ DB Generator</button></a>
+  <a href="/hub/" style="margin-right:8px"><button class="btn-sm" style="background:#4a2d3a;border-color:#9b6dff;color:var(--text);display:flex;align-items:center;gap:6px">🎬 Hub</button></a>
+  <a href="/flixpro/" style="margin-right:8px"><button class="btn-sm" style="background:#3a2d4a;border-color:#7a4ab8;color:var(--text);display:flex;align-items:center;gap:6px">📤 Flix Pro</button></a>
+  <a href="/flix" style="margin-right:8px"><button class="btn-sm" style="background:#3a2d4a;border-color:#7a4a9a;color:var(--text);display:flex;align-items:center;gap:6px">📤 Flix Uploader</button></a>
+  <div class="nav-tabs">
+    <button class="nav-tab active" data-page="queue" onclick="showPage('queue', this)">Queue</button>
+    <button class="nav-tab" data-page="cloud" onclick="showPage('cloud', this)">Cloud</button>
+    <button class="nav-tab" data-page="system-check" onclick="showPage('system-check', this)">System Check</button>
+    <button class="nav-tab" data-page="settings-main" onclick="showPage('settings-main', this)">Settings</button>
+    <button class="nav-tab" data-page="help" onclick="showPage('help', this)">Help</button>
+  </div>
+  <div id="worker-status"><div class="status-dot" id="status-dot"></div><span id="status-text">Idle</span></div>
+</header>
+<div id="dep-banner-wrap"></div>
+<template id="dep-banner-tmpl">
+  <div class="dep-banner" style="display:none;padding:.6rem .9rem;font-size:.84rem;border-bottom:1px solid var(--border);position:relative">
+    <span class="dep-icon" style="margin-right:.45rem">🧩</span>
+    <span class="dep-msg">Checking…</span>
+    <button class="dep-btn" style="margin-left:.7rem;padding:.25rem .7rem;font-size:.78rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;display:none"></button>
+    <button class="dep-log-toggle" style="margin-left:.4rem;padding:.25rem .7rem;font-size:.78rem;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--muted2);cursor:pointer" title="Show install log">Log ▾</button>
+    <pre class="dep-log" style="display:none;margin:.6rem 0 0;padding:.6rem .8rem;background:#080a0f;border:1px solid var(--border);border-radius:6px;font-size:.72rem;color:#94a3b8;max-height:160px;overflow:auto;white-space:pre-wrap"></pre>
+  </div>
+</template>
+<div class="app-body">
+  <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="card">
+      <div class="card-title">➕ Add Movies</div>
+      <div class="add-section">
+        <div>
+          <label>Movie names (one per line or comma-separated)</label>
+          <textarea id="movie-input" placeholder="Agent (2023) Indian&#10;Spider-Man (2002) English&#10;Sherlock Holmes [2009] English&#10;KGF 2, Naruto Anime" title="Tip: tags are optional. Add (YEAR) and a language like Indian/English/Anime/Telugu/Tamil for stricter matching. Punctuation (), [], {}, ; , : is auto-cleaned." oninput="previewAI()"></textarea>
+          <p style="font-size:.78rem;color:var(--muted2);margin:.35rem 0 0 .15rem">
+            💡 Tip: tags are <b>optional</b>. Use <code>Title (YEAR) Language</code> for stricter matches —
+            e.g. <code>Agent (2023) Indian</code>. Punctuation is auto-cleaned.
+          </p>
+          <div class="hint">Tip: paste 100s of movie names at once</div>
+        </div>
+        <div id="ai-preview" class="ai-indicator"></div>
+        <div>
+          <label>Site</label>
+          <select id="site-select"><option>AI (Auto)</option></select>
+        </div>
+        <button class="btn-add" onclick="addMovies()">+ Add to Queue</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">⬇ Download Option</div>
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="auto-dl-toggle" onchange="toggleAutoDownload()">
+          <div class="toggle-slider"></div>
+        </label>
+        <div class="toggle-label" onclick="document.getElementById('auto-dl-toggle').click()">
+          Auto-download files
+          <span>When ON, files download automatically after link generation</span>
+        </div>
+      </div>
+      <div id="dl-info" style="font-size:.74rem;color:var(--muted);margin-top:.5rem;display:none">
+        📁 Saving to: <span id="dl-dir" style="color:var(--accent2)">~/Downloads/radd-stream</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">⚡ Parallel Downloads</div>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <label style="white-space:nowrap;margin:0">Max parallel:</label>
+        <input type="number" id="max-parallel" min="1" max="10" value="2" style="width:80px" onchange="saveParallel()">
+        <span style="font-size:.74rem;color:var(--muted)">jobs at once</span>
+      </div>
+      <div style="font-size:.7rem;color:var(--muted);margin-top:.5rem">Set to 1 for sequential (one by one)</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔌 Site Plugins</div>
+      <div class="plugin-list" id="plugin-list">
+        <div style="color:var(--muted);font-size:.78rem">Loading...</div>
+      </div>
+    </div>
+  </aside>
+  <div class="main-panel">
+    <div id="page-queue" class="page active">
+      <div class="queue-toolbar">
+        <h2>Download Queue</h2>
+        <span class="badge" id="queue-count">0 jobs</span>
+        <div class="spacer"></div>
+        <button class="btn-sm" onclick="pauseAll()">⏸ Pause All</button>
+        <button class="btn-sm" onclick="resumeAll()">▶ Resume All</button>
+        <button class="btn-sm" onclick="clearDone()">🧹 Clear Done</button>
+        <button class="btn-sm danger" onclick="cancelAll()">✕ Cancel All</button>
+      </div>
+      <div class="queue-list" id="queue-list">
+        <div class="empty-state" id="empty-state">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M8 12l2 2 4-4"/>
+          </svg>
+          <div style="font-size:1.05rem;color:var(--text);font-weight:600;margin-top:.3rem">No downloads yet</div>
+          <div style="font-size:.85rem;max-width:420px">
+            Type a movie / series / anime name in the side panel to get started. The app will pick the best site automatically.
+          </div>
+          <div style="margin-top:1.2rem;font-size:.78rem;color:var(--muted2)">Try one of these:</div>
+          <div style="display:flex;flex-wrap:wrap;gap:.4rem;justify-content:center;max-width:520px">
+            <button class="btn-sm" onclick="quickAdd(this.textContent)">Oppenheimer (2023)</button>
+            <button class="btn-sm" onclick="quickAdd(this.textContent)">Agent (2023) Telugu</button>
+            <button class="btn-sm" onclick="quickAdd(this.textContent)">Demon Slayer S04</button>
+            <button class="btn-sm" onclick="quickAdd(this.textContent)">Breaking Bad S01</button>
+            <button class="btn-sm" onclick="quickAdd(this.textContent)">Inception (2010)</button>
+          </div>
+          <div style="font-size:.72rem;color:var(--muted);margin-top:1rem;max-width:420px">
+            Tip: include the year in brackets — like <b>Title (2023)</b> — to avoid wrong-match results, especially for remakes.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="page-cloud" class="page">
+      <div class="scroll-page">
+        <h2>☁ Jazz Drive Cloud</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-top:-.4rem">
+          Files downloaded here are auto-uploaded to your Jazz Drive by the Radd-Flix watcher.
+        </p>
+        <div class="help-section" id="cloud-session-card">
+          <h3>🔐 Session</h3>
+          <div id="cloud-session-body" style="font-size:.88rem;color:var(--muted)">Loading…</div>
+        </div>
+        <div class="help-section">
+          <h3>⏳ Pending in watch folder <span class="badge" id="cloud-pending-count">0</span></h3>
+          <div id="cloud-pending-list" style="font-size:.85rem;color:var(--muted)">None — drop a file or run a download.</div>
+        </div>
+        <div class="help-section">
+          <h3>✅ Recently uploaded to Jazz Drive <span class="badge" id="cloud-uploads-count">0</span></h3>
+          <div id="cloud-uploads-list" style="font-size:.85rem;color:var(--muted)">No uploads yet.</div>
+        </div>
+        <div style="font-size:.72rem;color:var(--muted);margin-top:1rem">
+          Watch folder: <code id="cloud-watch-folder">—</code>
+        </div>
+      </div>
+    </div>
+    <div id="page-settings-main" class="page">
+      <div class="scroll-page">
+        <h2>⚙ Settings</h2>
+        <div class="settings-group">
+          <h3>🤖 AI API Keys</h3>
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:.85rem;line-height:1.55">
+            AI keys help classify each movie to pick the best site. <b>Optional</b> — without keys, a built-in keyword fallback is used.
+          </p>
+          <div class="key-row">
+            <div class="key-head">
+              <div class="name">⚡ GROQ <span class="key-status" id="groq-status">Unknown</span></div>
+              <div class="spacer"></div>
+            </div>
+            <div class="key-help">
+              Primary AI (super fast). Get a free key at
+              <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>.
+              <span id="groq-source" style="color:var(--muted2);margin-left:.4rem"></span>
+            </div>
+            <div class="key-input-row">
+              <input type="password" id="key-groq" placeholder="gsk_..." autocomplete="off" spellcheck="false">
+              <button class="btn-key ghost" onclick="toggleReveal('key-groq', this)" title="Show/hide">👁</button>
+              <button class="btn-key primary" onclick="saveKey('groq')">💾 Save</button>
+              <button class="btn-key verify" onclick="verifyKey('groq')" id="verify-groq-btn">✓ Verify</button>
+            </div>
+            <div class="key-result" id="groq-result"></div>
+          </div>
+          <div class="key-row">
+            <div class="key-head">
+              <div class="name">✨ Gemini <span class="key-status" id="gemini-status">Unknown</span></div>
+            </div>
+            <div class="key-help">
+              Fallback AI (used if GROQ is unavailable). Get a free key at
+              <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>.
+              <span id="gemini-source" style="color:var(--muted2);margin-left:.4rem"></span>
+            </div>
+            <div class="key-input-row">
+              <input type="password" id="key-gemini" placeholder="AIza..." autocomplete="off" spellcheck="false">
+              <button class="btn-key ghost" onclick="toggleReveal('key-gemini', this)" title="Show/hide">👁</button>
+              <button class="btn-key primary" onclick="saveKey('gemini')">💾 Save</button>
+              <button class="btn-key verify" onclick="verifyKey('gemini')" id="verify-gemini-btn">✓ Verify</button>
+            </div>
+            <div class="key-result" id="gemini-result"></div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>🎬 Metadata API Keys <span style="color:var(--muted2);font-size:.78rem;font-weight:normal">(optional)</span></h3>
+          <p style="font-size:.82rem;color:var(--muted);margin-bottom:.85rem;line-height:1.55">
+            Used to look up canonical title, year, and original language so the relevance gate can
+            reject wrong-title matches (e.g., <i>Agent 2023</i> vs <i>Agent Elvis</i>).
+            <b>Optional</b> — skip these and the app still works using just tags + the strict gate.
+          </p>
+          <div class="key-row">
+            <div class="key-head">
+              <div class="name">🎞 TMDB <span class="key-status" id="tmdb-status">Unknown</span></div>
+            </div>
+            <div class="key-help">
+              Primary metadata source. Free at
+              <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>.
+              <span id="tmdb-source" style="color:var(--muted2);margin-left:.4rem"></span>
+            </div>
+            <div class="key-input-row">
+              <input type="password" id="key-tmdb" placeholder="32-char API key" autocomplete="off" spellcheck="false">
+              <button class="btn-key ghost"   onclick="toggleReveal('key-tmdb', this)" title="Show/hide">👁</button>
+              <button class="btn-key primary" onclick="saveKey('tmdb')">💾 Save</button>
+              <button class="btn-key verify"  onclick="verifyKey('tmdb')" id="verify-tmdb-btn">✓ Verify</button>
+            </div>
+            <div class="key-result" id="tmdb-result"></div>
+          </div>
+          <div class="key-row">
+            <div class="key-head">
+              <div class="name">🎥 OMDB / IMDB <span class="key-status" id="omdb-status">Unknown</span></div>
+            </div>
+            <div class="key-help">
+              IMDB-backed fallback (used if TMDB is unreachable). Free at
+              <a href="https://www.omdbapi.com/apikey.aspx" target="_blank">omdbapi.com/apikey.aspx</a>.
+              <span id="omdb-source" style="color:var(--muted2);margin-left:.4rem"></span>
+            </div>
+            <div class="key-input-row">
+              <input type="password" id="key-omdb" placeholder="8-char API key" autocomplete="off" spellcheck="false">
+              <button class="btn-key ghost"   onclick="toggleReveal('key-omdb', this)" title="Show/hide">👁</button>
+              <button class="btn-key primary" onclick="saveKey('omdb')">💾 Save</button>
+              <button class="btn-key verify"  onclick="verifyKey('omdb')" id="verify-omdb-btn">✓ Verify</button>
+            </div>
+            <div class="key-result" id="omdb-result"></div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Download</h3>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Auto-download files</div>
+              <div class="s-desc">Automatically download after finding link. OFF = link-only mode.</div>
+            </div>
+            <div class="setting-control" style="text-align:right">
+              <label class="toggle"><input type="checkbox" id="s-auto-dl"><div class="toggle-slider"></div></label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Download directory</div>
+              <div class="s-desc">Where downloaded files are saved</div>
+            </div>
+            <div class="setting-control"><input type="text" id="s-dl-dir" placeholder="~/Downloads/radd-stream"></div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Browser</h3>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Headless mode</div>
+              <div class="s-desc">ON = invisible browser (faster). OFF = browser window visible.</div>
+            </div>
+            <div class="setting-control" style="text-align:right">
+              <label class="toggle"><input type="checkbox" id="s-headless" checked><div class="toggle-slider"></div></label>
+            </div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Quality &amp; Language</h3>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Preferred quality</div>
+              <div class="s-desc">Which resolution to prioritize when multiple options exist</div>
+            </div>
+            <div class="setting-control">
+              <select id="s-quality">
+                <option value="360p">360p</option>
+                <option value="480p">480p</option>
+                <option value="720p" selected>720p (default)</option>
+                <option value="1080p">1080p Full HD</option>
+                <option value="4k">4K / 2160p</option>
+              </select>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Preferred language</div>
+              <div class="s-desc">Audio language to prefer</div>
+            </div>
+            <div class="setting-control">
+              <select id="s-language">
+                <option value="Hindi" selected>Hindi</option>
+                <option value="Urdu">Urdu</option>
+                <option value="Punjabi">Punjabi</option>
+                <option value="Dual Audio">Dual Audio (Hindi+Eng)</option>
+                <option value="Any">Any language</option>
+              </select>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Content type</div>
+              <div class="s-desc">Movie = single file. Anime/Series = ZIP/RAR archive preferred</div>
+            </div>
+            <div class="setting-control">
+              <select id="s-content-type">
+                <option value="movie" selected>Movie</option>
+                <option value="anime">Anime (ZIP/RAR)</option>
+                <option value="series">Series / Drama (ZIP/RAR)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Queue</h3>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Max parallel downloads</div>
+              <div class="s-desc">How many movies to process simultaneously (1 = sequential)</div>
+            </div>
+            <div class="setting-control"><input type="number" id="s-max-parallel" min="1" max="10" value="2"></div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Default site</div>
+              <div class="s-desc">Which site to use when adding movies</div>
+            </div>
+            <div class="setting-control">
+              <select id="s-active-site"><option>AI (Auto)</option></select>
+            </div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Priority Sites (per category)</h3>
+          <p style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">
+            Comma-separated site names — left to right is highest → lowest priority.
+            The first 2 sites race in parallel; whichever wins, the other is dropped.
+            Example: <code>VegaMovies, KatMovieHD</code>
+          </p>
+          <div id="s-priority-fields"></div>
+        </div>
+        <div class="settings-group">
+          <h3>Site Domains</h3>
+          <p style="font-size:.78rem;color:var(--muted);margin-bottom:.7rem">
+            Sites change domains often, but their pipeline stays the same — just update the URL here when a site moves.
+          </p>
+          <div class="domain-grid" id="s-domain-fields"></div>
+        </div>
+        <div class="settings-group">
+          <h3>Smart Controls</h3>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Auto-link quality scoring</div>
+              <div class="s-desc">Prefer faster/healthier hosts automatically when using AI/Auto modes.</div>
+            </div>
+            <div class="setting-control" style="text-align:right">
+              <label class="toggle"><input type="checkbox" id="s-link-score" checked><div class="toggle-slider"></div></label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Strict config validation</div>
+              <div class="s-desc">Reject invalid values and keep the last known good config.</div>
+            </div>
+            <div class="setting-control" style="text-align:right">
+              <label class="toggle"><input type="checkbox" id="s-strict-config" checked><div class="toggle-slider"></div></label>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="s-title">Self-healing mode</div>
+              <div class="s-desc">Auto-restart DB Generator and Bot if they go down.</div>
+            </div>
+            <div class="setting-control" style="text-align:right">
+              <label class="toggle"><input type="checkbox" id="s-self-heal" checked><div class="toggle-slider"></div></label>
+            </div>
+          </div>
+        </div>
+        <button class="btn-save-settings" onclick="saveAllSettings()">💾 Save All Settings</button>
+      </div>
+    </div>
+    <div id="page-system-check" class="page">
+      <div class="scroll-page">
+        <h2>🩺 One-click System Check</h2>
+        <p style="font-size:.85rem;color:var(--muted);margin-top:-.4rem">
+          Quick health pass for admins and users: runtime tools, service mounts, bot status, and session overview.
+        </p>
+        <div class="help-section">
+          <h3>Actions</h3>
+          <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+            <button class="btn-key primary" onclick="loadSystemCheck()">Run System Check</button>
+            <button class="btn-key" onclick="loadUnifiedSession()">Refresh Session Overview</button>
+          </div>
+          <div id="syscheck-summary" style="margin-top:.7rem;font-size:.82rem;color:var(--muted)">Not checked yet.</div>
+        </div>
+        <div class="help-section">
+          <h3>Unified Auth / Session</h3>
+          <div id="session-overview" style="font-size:.84rem;color:var(--muted)">Loading…</div>
+        </div>
+        <div class="help-section">
+          <h3>Check Results</h3>
+          <pre id="syscheck-json" class="help-code">Run check to see details.</pre>
+        </div>
+      </div>
+    </div>
+    <div id="page-help" class="page">
+      <div class="scroll-page">
+        <h2>📖 Help &amp; Guide</h2>
+        <div class="help-section">
+          <h3>🤖 AI-Powered Site Routing</h3>
+          <p>The AI classifies each movie and picks the best site(s) to search:</p>
+          <table class="site-table">
+            <thead><tr><th>Category</th><th>Sites Used (in order)</th></tr></thead>
+            <tbody>
+              <tr><td>English / Hollywood</td><td>VegaMovies → KatMovieHD → WatchMoviesPK → SSRMovies</td></tr>
+              <tr><td>Indian / Bollywood / South / Urdu</td><td>RogMovies → WatchMoviesPK → SSRMovies → VegaMovies</td></tr>
+              <tr><td>Anime</td><td>GokuHD → PikaHD → VegaMovies → KatMovieHD</td></tr>
+              <tr><td>Animated (Disney/Pixar)</td><td>VegaMovies → KatMovieHD → WatchMoviesPK → GokuHD → PikaHD</td></tr>
+              <tr><td>Mixed / Unknown</td><td>All sites in default order</td></tr>
+            </tbody>
+          </table>
+          <p style="margin-top:.6rem">Order: <span class="highlight">GROQ</span> → Gemini → Keyword fallback (always works).</p>
+          <p style="margin-top:.4rem;font-size:.82rem;color:var(--muted)">
+            <b>v4.0 fast path:</b> if you tag a language (e.g. <code>Indian</code>, <code>English</code>, <code>Anime</code>)
+            or your TMDB key resolves the original language, the AI call is <b>skipped</b> and routing happens instantly.
+          </p>
+        </div>
+        <div class="help-section">
+          <h3>🏷 Search Tags &amp; Punctuation <span style="color:var(--accent2);font-size:.7rem;font-weight:700;background:rgba(34,197,94,.12);padding:.1rem .4rem;border-radius:4px;margin-left:.4rem">NEW v4.0</span></h3>
+          <p>Tags are <b>optional</b> but help the matcher reject wrong results
+            (e.g. searching <i>Agent 2023</i> and getting <i>Agent Elvis</i>).</p>
+          <p>Format: <code>Title (YEAR) Language</code></p>
+          <div class="help-code">Agent (2023) Indian
+Spider-Man (2002) English
+Sherlock Holmes [2009]; English
+KGF 2 Telugu
+Naruto Anime
+Premalu (2024)         &larr; year only, no lang
+The Dark Knight        &larr; untagged still works</div>
+          <p><b>Recognised languages:</b> indian, hindi, telugu, tamil, malayalam,
+            kannada, punjabi, english, anime, animated, korean, japanese.</p>
+          <p><b>Punctuation tolerated:</b> <code>( ) [ ] { } ; , : . &amp; "</code>,
+            smart quotes, and en/em-dashes are auto-cleaned before searching.</p>
+        </div>
+        <div class="help-section">
+          <h3>🛡 Wrong-Match Protection <span style="color:var(--accent2);font-size:.7rem;font-weight:700;background:rgba(34,197,94,.12);padding:.1rem .4rem;border-radius:4px;margin-left:.4rem">NEW v4.0</span></h3>
+          <p>Every result URL is checked by a 3-signal relevance gate before downloading:</p>
+          <ul>
+            <li><b>Coverage</b> — at least 70 % of your title words must be in the result URL.</li>
+            <li><b>Pollution</b> — extra title words like <i>Elvis</i>, <i>No Way Home</i>, etc. are rejected. One-word queries get <b>zero</b> tolerance.</li>
+            <li><b>Year</b> — if you (or TMDB) supply a year, the URL must contain it ±1.</li>
+          </ul>
+          <p>If a site returns the wrong title, the race quietly falls through to the next site instead of downloading garbage.</p>
+        </div>
+        <div class="help-section">
+          <h3>🔑 Setting Up AI Keys</h3>
+          <p>AI keys are <b>optional</b> but recommended. Without them, a keyword-only fallback is used.</p>
+          <ul>
+            <li>Open <b>Settings → AI API Keys</b></li>
+            <li>Paste your GROQ key (free at <a href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a>) and/or Gemini key (free at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>)</li>
+            <li>Click <b>Save</b>, then <b>Verify</b> to confirm the key works</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>🎬 Setting Up Metadata Keys (TMDB / OMDB) <span style="color:var(--accent2);font-size:.7rem;font-weight:700;background:rgba(34,197,94,.12);padding:.1rem .4rem;border-radius:4px;margin-left:.4rem">NEW v4.0</span></h3>
+          <p><b>Both keys are optional</b> — the app works without them. Adding them
+            improves match accuracy by looking up the canonical title, year, and
+            original language for every search.</p>
+          <ul>
+            <li><b>TMDB</b> (primary) — free at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a></li>
+            <li><b>OMDB / IMDB</b> (fallback) — free at <a href="https://www.omdbapi.com/apikey.aspx" target="_blank">omdbapi.com/apikey.aspx</a></li>
+            <li>Open <b>Settings → 🎬 Metadata API Keys</b>, paste, Save, Verify.</li>
+          </ul>
+          <p>Looked-up data is cached on disk for 30 days, so the same query won't hit the API twice.</p>
+        </div>
+        <div class="help-section">
+          <h3>➕ Adding Movies</h3>
+          <ul>
+            <li>Type or paste movie names — one per line or comma-separated</li>
+            <li>Add 1 or 100s at once — they all go into the queue</li>
+            <li>Pick <span class="highlight">AI (Auto)</span> to let the AI choose the best site</li>
+            <li>Use the new tag format (above) for stricter matching when needed</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>⚡ Queue Controls</h3>
+          <ul>
+            <li><b>⏸ Pause:</b> Suspend an active job</li>
+            <li><b>▶ Resume:</b> Continue a paused job</li>
+            <li><b>✕ Cancel:</b> Stop the job immediately</li>
+            <li><b>↺ Retry:</b> Re-queue a failed/cancelled job</li>
+            <li><b>🗑 Remove:</b> Delete the job from the list</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>💻 CLI Version</h3>
+          <div class="help-code">python3 cli.py                    # Interactive mode
+python3 cli.py "Movie Name"       # Quick single movie
+python3 cli.py --file movies.txt  # Load list from file</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+// ── State ───────────────────────────────────────────────────
+let jobMap = {};
+let jobOrder = [];
+let openLogs = new Set();
+let config = {};
+let currentPage = 'queue';
+const STATUS_LABEL = {
+  queued:'Queued', searching:'Searching…', getting_link:'Reading post…',
+  bridge:'Bridge…', generating:'Generating…', downloading:'Downloading…',
+  done:'Done ✓', error:'Error', paused:'Paused', cancelled:'Cancelled'
+};
+const STATUS_PILL = {
+  queued:'pill-queued', searching:'pill-searching', getting_link:'pill-getting_link',
+  bridge:'pill-bridge', generating:'pill-generating', downloading:'pill-downloading',
+  done:'pill-done', error:'pill-error', paused:'pill-paused', cancelled:'pill-cancelled'
+};
+// ── Sidebar toggle ────────────────────────────────────────
+function toggleSidebar(force) {
+  const sb = document.getElementById('sidebar');
+  const bd = document.getElementById('sidebar-backdrop');
+  const open = force === undefined ? !sb.classList.contains('open') : !!force;
+  sb.classList.toggle('open', open);
+  bd.classList.toggle('show', open);
+}
+// ── Page navigation ────────────────────────────────────────
+function showPage(name, btn) {
+  currentPage = name;
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name)?.classList.add('active');
+  if(btn) btn.classList.add('active');
+  else document.querySelector(`.nav-tab[data-page="${name}"]`)?.classList.add('active');
+  if (name === 'system-check') {
+    loadSystemCheck();
+    loadUnifiedSession();
+  }
+  if (window.innerWidth <= 980) toggleSidebar(false);
+}
+// ── Init ───────────────────────────────────────────────────
+async function init() {
+  // Each step is isolated so one failure doesn't break the rest of the page.
+  // (Previously a thrown error in loadBrowserStatus killed OTP polling.)
+  const safe = async (fn) => { try { await fn(); } catch (e) { console.warn(fn.name || 'init step', 'failed:', e); } };
+  await safe(loadConfig);
+  await safe(loadPlugins);
+  await safe(loadHealthStatus);
+  await safe(loadKeys);
+  await safe(loadBrowserStatus);
+  await safe(loadSystemCheck);
+  await safe(loadUnifiedSession);
+  try {
+    const url = new URL(window.location.href);
+    const page = (url.searchParams.get('page') || '').trim();
+    if (page && document.getElementById('page-' + page)) showPage(page);
+  } catch (e) {}
+  try { pollQueue(); } catch {}
+  try { loadCloudStatus(); } catch {}
+  setInterval(() => safe(pollQueue), 2000);
+  setInterval(() => safe(loadHealthStatus), 15000);
+  setInterval(() => safe(loadBrowserStatus), 4000);
+  setInterval(() => safe(loadCloudStatus), 5000);
+  setInterval(() => safe(loadUnifiedSession), 20000);
+  // OTP popup poller — registered first thing in case anything below throws.
+  try { pollOtp(); } catch {}
+  setInterval(() => safe(pollOtp), 3000);
+}
+function _applyConfigResponse(payload) {
+  const next = (payload && payload.config) ? payload.config : payload;
+  const warns = (payload && payload.warnings) ? payload.warnings : [];
+  if (next && typeof next === 'object') config = next;
+  if (warns.length) toast('Saved with validation notes: ' + warns.join(' | '), 'info');
+}
+// ── Jazz Drive OTP popup ────────────────────────────────────────────────
+async function pollOtp(){
+  let d; try { d = await (await fetch('/api/otp/status')).json(); } catch { return; }
+  const m = document.getElementById('otp-modal');
+  if (!m) return;
+  if (d && d.pending) {
+    document.getElementById('otp-msisdn').textContent = d.msisdn || '—';
+    document.getElementById('otp-timer').textContent = d.seconds_left + 's left';
+    if (m.style.display !== 'flex') {
+      m.style.display = 'flex';
+      const inp = document.getElementById('otp-input');
+      inp.value = ''; inp.focus();
+    }
+  } else {
+    m.style.display = 'none';
+  }
+}
+async function submitOtp(){
+  const inp = document.getElementById('otp-input');
+  const otp = (inp.value || '').trim();
+  const status = document.getElementById('otp-status');
+  status.textContent = '';
+  if (!/^\d{3,8}$/.test(otp)) { status.textContent = 'Enter 4–6 digits.'; status.style.color = '#e66'; return; }
+  status.textContent = 'Sending…'; status.style.color = '#9c9';
+  try {
+    const r = await fetch('/api/otp/submit', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({otp})
+    });
+    const j = await r.json();
+    if (j.ok) {
+      status.textContent = '✓ OTP sent to Radd-Flix.'; status.style.color = '#7c7';
+      setTimeout(() => { document.getElementById('otp-modal').style.display = 'none'; }, 800);
+    } else {
+      status.textContent = '✗ ' + (j.error || 'Failed'); status.style.color = '#e66';
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message; status.style.color = '#e66';
+  }
+}
+function _fmtSize(n){ if(!n) return '0 B'; const u=['B','KB','MB','GB','TB']; let i=0; while(n>=1024&&i<u.length-1){n/=1024;i++;} return n.toFixed(n<10&&i>0?1:0)+' '+u[i]; }
+function _esc(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+async function loadCloudStatus(){
+  let d; try { d = await (await fetch('/api/cloud/status')).json(); } catch { return; }
+  const wf = document.getElementById('cloud-watch-folder');
+  if (wf) wf.textContent = d.watch_folder || '—';
+  // session
+  const s = d.session || {};
+  const sb = document.getElementById('cloud-session-body');
+  if (sb) {
+    if (s.logged_in) {
+      const hrs = (s.expires_in_min/60).toFixed(1);
+      sb.innerHTML = `<span style="color:var(--green);font-weight:600">● Active</span>
+        — MSISDN <b>${_esc(s.msisdn)}</b>, expires in ~${hrs} h.
+        ${d.auto_delete ? '<span style="color:var(--muted2)"> · Auto-delete after upload: on</span>' : ''}`;
+    } else if (s.msisdn) {
+      sb.innerHTML = `<span style="color:var(--red);font-weight:600">● Expired</span>
+        — MSISDN <b>${_esc(s.msisdn)}</b>. Watcher will request a fresh OTP on next file.`;
+    } else {
+      sb.innerHTML = `<span style="color:var(--yellow);font-weight:600">● Not logged in</span>
+        — open Radd-Flix CLI and run <code>python radd_flix.py --msisdn 03xxxxxxxxx</code>.`;
+    }
+  }
+  // pending
+  const pl = document.getElementById('cloud-pending-list');
+  const pc = document.getElementById('cloud-pending-count');
+  if (pc) pc.textContent = d.pending.length;
+  if (pl) {
+    pl.innerHTML = d.pending.length === 0
+      ? '<span style="color:var(--muted2)">None — drop a file or run a download.</span>'
+      : d.pending.map(f => `<div style="padding:.35rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:.6rem">
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">⏳ ${_esc(f.name)}</span>
+          <span style="color:var(--muted2);flex-shrink:0">${_fmtSize(f.size)}</span></div>`).join('');
+  }
+  // uploads
+  const ul = document.getElementById('cloud-uploads-list');
+  const uc = document.getElementById('cloud-uploads-count');
+  if (uc) uc.textContent = d.uploads.length;
+  if (ul) {
+    ul.innerHTML = d.uploads.length === 0
+      ? '<span style="color:var(--muted2)">No uploads yet.</span>'
+      : d.uploads.map(u => {
+          const link = u.share_url;
+          const linkHtml = link ? `<a href="${_esc(link)}" target="_blank" style="color:var(--accent);text-decoration:none">↗ open</a>` : '';
+          const when = (u.uploaded_at || '').replace('T',' ').replace('Z','');
+          return `<div style="padding:.4rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;gap:.6rem;align-items:center">
+            <div style="overflow:hidden">
+              <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">✅ ${_esc(u.name)}</div>
+              <div style="font-size:.7rem;color:var(--muted2)">${_esc(when)} · ${_fmtSize(u.size)}</div>
+            </div>
+            <span style="flex-shrink:0">${linkHtml}</span></div>`;
+        }).join('');
+  }
+}
+// ── Dependency banners (Chromium browser + aria2c) ─────────
+// Two near-identical banners stacked at the top. Each renders from the same
+// /api/<name>/status JSON shape and POSTs to /api/<name>/install on click.
+const DEPS = [
+  {
+    key: 'browser',
+    statusUrl: '/api/browser/status',
+    installUrl: '/api/browser/install',
+    name: 'browser engine (Chromium)',
+    sizeHint: '~170 MB, ~60 sec',
+    required: true,                      // hard-required for scraping
+    pathField: 'browser_path',
+    kindField: 'browser_kind',
+  },
+  {
+    key: 'aria2',
+    statusUrl: '/api/aria2/status',
+    installUrl: '/api/aria2/install',
+    name: 'fast downloader (aria2c)',
+    sizeHint: '~3 MB',
+    required: false,                     // optional — Python fallback works
+    pathField: 'path',
+    kindField: null,
+  },
+];
+const _depState = {};   // {key: {open:bool, lastJson:obj}}
+function _ensureDepBanner(dep) {
+  let el = document.getElementById('dep-banner-' + dep.key);
+  if (el) return el;
+  const tmpl = document.getElementById('dep-banner-tmpl');
+  el = tmpl.content.firstElementChild.cloneNode(true);
+  el.id = 'dep-banner-' + dep.key;
+  el.querySelector('.dep-btn').onclick      = () => installDep(dep);
+  el.querySelector('.dep-log-toggle').onclick = () => toggleDepLog(dep);
+  document.getElementById('dep-banner-wrap').appendChild(el);
+  _depState[dep.key] = {open: false};
+  return el;
+}
+async function loadDepStatus(dep) {
+  let s;
+  try {
+    s = await (await fetch(dep.statusUrl)).json();
+  } catch(e) { return; }
+  // FIX: ensure the per-dep state slot exists.  Previously this threw when a
+  // new dep was added at runtime, killing init() before pollOtp() could be
+  // registered, which is why the OTP popup never appeared.
+  if (!_depState[dep.key]) _depState[dep.key] = { lastJson: null };
+  _depState[dep.key].lastJson = s;
+  const el = _ensureDepBanner(dep);
+  const icon  = el.querySelector('.dep-icon');
+  const msg   = el.querySelector('.dep-msg');
+  const btn   = el.querySelector('.dep-btn');
+  const logEl = el.querySelector('.dep-log');
+  // Optional & already installed → hide. Required & installed → also hide.
+  if (s.installed && !s.running) { el.style.display = 'none'; return; }
+  // Optional dep that we can't auto-install on this OS and isn't installed:
+  // show a soft notice ONCE, but keep the dismiss footprint small.
+  if (!dep.required && !s.installed && !s.running &&
+      s.supports_auto_install === false) {
+    el.style.display = 'block';
+    el.style.background = 'rgba(148, 163, 184, .08)';
+    el.style.color = '#cbd5e1';
+    icon.textContent = 'ℹ';
+    msg.innerHTML = `<b>${escHtml(dep.name)}:</b> not installed (optional). ${escHtml(s.message || '')}`;
+    btn.style.display = 'none';
+    return;
+  }
+  el.style.display = 'block';
+  if (s.running) {
+    el.style.background = 'rgba(245, 158, 11, .12)';
+    el.style.color = '#fbbf24';
+    icon.textContent = '⏳';
+    msg.innerHTML = `<b>Downloading ${escHtml(dep.name)}…</b> (${escHtml(dep.sizeHint)})`;
+    btn.style.display = 'none';
+  } else if (s.installed) {
+    el.style.background = 'rgba(34, 197, 94, .10)';
+    el.style.color = '#86efac';
+    icon.textContent = '✓';
+    const where = String(s[dep.pathField] || '').split(/[\\/]/).pop();
+    msg.innerHTML = `<b>${escHtml(dep.name)} ready</b> (${escHtml(where)})`;
+    btn.textContent = 'Reinstall';
+    btn.style.display = '';
+  } else {
+    el.style.background = dep.required
+      ? 'rgba(239, 68, 68, .12)' : 'rgba(245, 158, 11, .10)';
+    el.style.color = dep.required ? '#fca5a5' : '#fcd34d';
+    icon.textContent = dep.required ? '⚠' : 'ℹ';
+    if (s.ok === false && s.message) {
+      msg.innerHTML = `<b>Install of ${escHtml(dep.name)} failed:</b> ${escHtml(s.message)}`;
+    } else {
+      msg.innerHTML = dep.required
+        ? `<b>${escHtml(dep.name)} not installed.</b> Click <b>Install</b> — it downloads itself (${escHtml(dep.sizeHint)}).`
+        : `<b>${escHtml(dep.name)} not installed</b> (optional, faster downloads). Click <b>Install</b> to add it.`;
+    }
+    btn.textContent = 'Install';
+    btn.style.display = '';
+  }
+  if (_depState[dep.key].open) {
+    logEl.textContent = (s.log_tail || []).join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+}
+async function loadBrowserStatus() {
+  // kept as a public name for the existing setInterval wiring
+  for (const dep of DEPS) await loadDepStatus(dep);
+}
+async function installDep(dep) {
+  const el = _ensureDepBanner(dep);
+  const btn = el.querySelector('.dep-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  try {
+    await fetch(dep.installUrl, {method:'POST',
+      headers:{'Content-Type':'application/json'}, body:'{}'});
+  } catch(e) {}
+  btn.disabled = false;
+  await loadDepStatus(dep);
+}
+function toggleDepLog(dep) {
+  const el = _ensureDepBanner(dep);
+  const logEl = el.querySelector('.dep-log');
+  const tog   = el.querySelector('.dep-log-toggle');
+  const st = _depState[dep.key];
+  st.open = !st.open;
+  logEl.style.display = st.open ? 'block' : 'none';
+  tog.textContent = st.open ? 'Log ▴' : 'Log ▾';
+  if (st.open) loadDepStatus(dep);
+}
+// ── Health status ──────────────────────────────────────────
+async function loadHealthStatus() {
+  try {
+    const r = await fetch('/api/health');
+    const h = await r.json();
+    const dot = document.getElementById('status-dot');
+    const txt = document.getElementById('status-text');
+    const ai = h.ai_router || {};
+    const aiText = ai.groq_configured ? 'GROQ' : (ai.gemini_configured ? 'Gemini' : 'Keywords');
+    const active = h.workers?.active || 0;
+    if(active > 0) { dot.classList.add('active'); txt.textContent = `${active} active · ${aiText}`; }
+    else           { dot.classList.remove('active'); txt.textContent = `Idle · ${aiText}`; }
+    if(h.version) document.getElementById('version-badge').textContent = `v${h.version}`;
+  } catch(e) {}
+}
+// ── Config ─────────────────────────────────────────────────
+async function loadConfig() {
+  const r = await fetch('/api/config');
+  _applyConfigResponse(await r.json());
+  const adt = document.getElementById('auto-dl-toggle');
+  adt.checked = !!config.auto_download;
+  toggleAutoDownloadUI(!!config.auto_download);
+  const mp = document.getElementById('max-parallel');
+  if(mp) mp.value = config.max_parallel || 2;
+  syncSettingsPage();
+}
+function syncSettingsPage() {
+  const sDl = document.getElementById('s-auto-dl');
+  if(sDl) sDl.checked = !!config.auto_download;
+  const sDir = document.getElementById('s-dl-dir');
+  if(sDir) sDir.value = config.download_dir || '';
+  const sHl = document.getElementById('s-headless');
+  if(sHl) sHl.checked = config.browser?.headless !== false;
+  const sMaxP = document.getElementById('s-max-parallel');
+  if(sMaxP) sMaxP.value = config.max_parallel || 2;
+  const sAs = document.getElementById('s-active-site');
+  if(sAs && config.active_site) sAs.value = config.active_site;
+  const sQ = document.getElementById('s-quality');
+  if(sQ && config.preferred_quality) sQ.value = config.preferred_quality;
+  const sL = document.getElementById('s-language');
+  if(sL && config.preferred_language) sL.value = config.preferred_language;
+  const sCt = document.getElementById('s-content-type');
+  if(sCt && config.content_type) sCt.value = config.content_type;
+  const sLs = document.getElementById('s-link-score');
+  if(sLs) sLs.checked = config.link_quality_scoring !== false;
+  const sSc = document.getElementById('s-strict-config');
+  if(sSc) sSc.checked = config.strict_config_validation !== false;
+  const sSh = document.getElementById('s-self-heal');
+  if(sSh) sSh.checked = config.self_healing_enabled !== false;
+  renderDomainFields();
+  renderPriorityFields();
+}
+function renderPriorityFields() {
+  const c = document.getElementById('s-priority-fields');
+  if(!c) return;
+  c.innerHTML = '';
+  const defaults = {
+    english:  ['VegaMovies','KatMovieHD','WatchMoviesPK','SSRMovies'],
+    indian:   ['RogMovies','WatchMoviesPK','SSRMovies'],
+    anime:    ['GokuHD','PikaHD','VegaMovies','KatMovieHD'],
+    animated: ['VegaMovies','KatMovieHD','WatchMoviesPK','GokuHD','PikaHD'],
+    both:     ['VegaMovies','RogMovies','KatMovieHD','SSRMovies','WatchMoviesPK','GokuHD','PikaHD'],
+  };
+  const labels = {
+    english:'🇺🇸 English / Hollywood', indian:'🇮🇳 Indian / Hindi / Pakistani',
+    anime:'🇯🇵 Anime', animated:'🎨 Western Animated', both:'🌐 Mixed / Unknown',
+  };
+  const cur = (config.priority_sites || {});
+  for(const cat of ['english','indian','anime','animated','both']) {
+    const list = (cur[cat] && cur[cat].length) ? cur[cat] : defaults[cat];
+    const row = document.createElement('div');
+    row.className = 'domain-row';
+    row.style.marginBottom = '.4rem';
+    row.innerHTML = `<label style="min-width:180px">${labels[cat]}</label>
+      <input type="text" id="prio_${cat}" value="${escAttr(list.join(', '))}" placeholder="${escAttr(defaults[cat].join(', '))}">`;
+    c.appendChild(row);
+  }
+}
+function renderDomainFields() {
+  const c = document.getElementById('s-domain-fields');
+  if(!c) return;
+  c.innerHTML = '';
+  const domains = config.domains || {};
+  const labels = {
+    vegamovies_domain:'VegaMovies', katmoviehd_domain:'KatMovieHD',
+    rogmovies_domain:'RogMovies', watchmoviespk_domain:'WatchMoviesPK',
+    ssrmovies_domain:'SSRMovies', pikahd_domain:'PikaHD (Anime)',
+    gokuhd_domain:'GokuHD (Anime)', nexdrive_domain:'Nexdrive (bridge)',
+    vcloud_domain:'vCloud (bridge)',
+  };
+  for(const [key,val] of Object.entries(domains)) {
+    const row = document.createElement('div');
+    row.className = 'domain-row';
+    row.innerHTML = `<label title="${key}">${labels[key]||key}</label>
+      <input type="text" id="dom_${key}" value="${escAttr(val)}" placeholder="${escAttr(val)}">`;
+    c.appendChild(row);
+  }
+}
+function toggleAutoDownloadUI(on) {
+  const info = document.getElementById('dl-info');
+  if(info) info.style.display = on ? 'block' : 'none';
+  const dlDir = document.getElementById('dl-dir');
+  if(dlDir) dlDir.textContent = config.download_dir || '~/Downloads/radd-stream';
+}
+async function toggleAutoDownload() {
+  const checked = document.getElementById('auto-dl-toggle').checked;
+  toggleAutoDownloadUI(checked);
+  const r = await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({auto_download:checked})});
+  _applyConfigResponse(await r.json());
+  config.auto_download = checked;
+  toast(checked ? 'Auto-download ENABLED — files will be downloaded' : 'Auto-download OFF — link-only mode', checked ? 'ok' : 'info');
+}
+async function saveParallel() {
+  const n = parseInt(document.getElementById('max-parallel').value) || 2;
+  const r = await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({max_parallel:n})});
+  _applyConfigResponse(await r.json());
+  config.max_parallel = n;
+}
+async function saveAllSettings() {
+  const sDl = document.getElementById('s-auto-dl').checked;
+  const sDir = document.getElementById('s-dl-dir').value.trim();
+  const sHl = document.getElementById('s-headless').checked;
+  const sMaxP = parseInt(document.getElementById('s-max-parallel').value)||2;
+  const sAs = document.getElementById('s-active-site').value;
+  const sQ  = document.getElementById('s-quality')?.value || '720p';
+  const sL  = document.getElementById('s-language')?.value || 'Hindi';
+  const sCt = document.getElementById('s-content-type')?.value || 'movie';
+  const sLinkScore = !!document.getElementById('s-link-score')?.checked;
+  const sStrictCfg = !!document.getElementById('s-strict-config')?.checked;
+  const sSelfHeal = !!document.getElementById('s-self-heal')?.checked;
+  const domains = {};
+  document.querySelectorAll('[id^="dom_"]').forEach(el => { domains[el.id.replace('dom_','')] = el.value.trim(); });
+  const priority_sites = {};
+  document.querySelectorAll('[id^="prio_"]').forEach(el => {
+    const cat = el.id.replace('prio_','');
+    const arr = el.value.split(',').map(s => s.trim()).filter(Boolean);
+    if(arr.length) priority_sites[cat] = arr;
+  });
+  const r = await fetch('/api/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      auto_download:sDl, download_dir:sDir, browser:{headless:sHl}, max_parallel:sMaxP,
+      active_site:sAs, preferred_quality:sQ, preferred_language:sL, content_type:sCt,
+      link_quality_scoring:sLinkScore, strict_config_validation:sStrictCfg,
+      self_healing_enabled:sSelfHeal,
+      domains, priority_sites
+    })
+  });
+  _applyConfigResponse(await r.json());
+  document.getElementById('auto-dl-toggle').checked = sDl;
+  toggleAutoDownloadUI(sDl);
+  document.getElementById('max-parallel').value = sMaxP;
+  toast('Settings saved!', 'ok');
+}
+async function loadUnifiedSession() {
+  try {
+    const r = await fetch('/api/system/session');
+    const d = await r.json();
+    const box = document.getElementById('session-overview');
+    if(!box) return;
+    const flix = d.flix_session || {};
+    const bot = d.bot || {};
+    box.innerHTML = `
+      <div>🔐 Stream Auth: <b>${d.stream_auth_enabled ? 'Enabled' : 'Disabled'}</b></div>
+      <div>☁ Flix Session: <b>${flix.logged_in ? 'Logged in' : 'Logged out'}</b> ${flix.msisdn ? `(${flix.msisdn})` : ''}</div>
+      <div>🤖 Bot Session: <b>${bot.connected ? 'Connected' : 'Disconnected'}</b> ${bot.number ? `(${bot.number})` : ''}</div>
+    `;
+  } catch (e) {}
+}
+async function loadSystemCheck() {
+  try {
+    const r = await fetch('/api/system/check');
+    const d = await r.json();
+    const sum = document.getElementById('syscheck-summary');
+    const pre = document.getElementById('syscheck-json');
+    if(sum){
+      const s = d.summary || {};
+      sum.textContent = `Health ${s.ok_count || 0}/${s.total || 0} checks passed. Suggested fix: ${d.suggested_fix_command || '-'}`;
+      sum.style.color = d.ok ? 'var(--green)' : 'var(--yellow)';
+    }
+    if(pre) pre.textContent = JSON.stringify(d, null, 2);
+  } catch (e) {}
+}
+// ── API Keys ───────────────────────────────────────────────
+async function loadKeys() {
+  try {
+    const r = await fetch('/api/keys');
+    const data = await r.json();
+    paintKeyStatus('groq',   data.groq);
+    paintKeyStatus('gemini', data.gemini);
+    if (data.tmdb) paintKeyStatus('tmdb', data.tmdb);
+    if (data.omdb) paintKeyStatus('omdb', data.omdb);
+  } catch(e) {}
+}
+function paintKeyStatus(name, info) {
+  const status = document.getElementById(name + '-status');
+  const source = document.getElementById(name + '-source');
+  const input  = document.getElementById('key-' + name);
+  if(info.configured) {
+    status.textContent = 'Saved';
+    status.className = 'key-status ok';
+    source.textContent = info.source === 'env'
+      ? `(from environment variable)`
+      : `(saved · ${info.masked || ''})`;
+    if(input && !input.value){
+      const def = {groq:'gsk_...', gemini:'AIza...', tmdb:'32-char API key', omdb:'8-char API key'};
+      input.placeholder = info.masked || def[name] || '';
+    }
+  } else {
+    status.textContent = 'Not set';
+    status.className = 'key-status';
+    source.textContent = '';
+  }
+}
+function toggleReveal(id, btn) {
+  const el = document.getElementById(id);
+  if(!el) return;
+  if(el.type === 'password') { el.type = 'text'; btn.textContent = '🙈'; }
+  else                       { el.type = 'password'; btn.textContent = '👁'; }
+}
+async function saveKey(name) {
+  const v = document.getElementById('key-' + name).value.trim();
+  const body = {}; body[name] = v;
+  const r = await fetch('/api/keys', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(r.ok) {
+    await loadKeys();
+    await loadHealthStatus();
+    const result = document.getElementById(name + '-result');
+    if(v) {
+      result.classList.remove('err');
+      result.classList.add('show','ok');
+      result.textContent = '✓ Saved. Click Verify to test the key against the provider.';
+    }
+    toast(v ? `${name.toUpperCase()} key saved — click Verify to test it` : `${name.toUpperCase()} key cleared`, 'ok');
+  } else {
+    toast('Failed to save key', 'err');
+  }
+}
+async function verifyKey(name) {
+  const btn = document.getElementById('verify-' + name + '-btn');
+  const result = document.getElementById(name + '-result');
+  const typed = document.getElementById('key-' + name).value.trim();
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<div class="spinner spinner-sm"></div> Testing…';
+  result.classList.remove('show','ok','err');
+  try {
+    const body = { provider: name };
+    if(typed) body[name] = typed;     // test the typed-but-not-saved value
+    const r = await fetch('/api/keys/test', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data = await r.json();
+    const info = data[name] || {};
+    result.classList.add('show', info.ok ? 'ok' : 'err');
+    result.textContent = (info.ok ? '✓ ' : '✗ ') + (info.message || (info.ok ? 'Key works' : 'Key failed'));
+    toast(info.ok ? `${name.toUpperCase()} key works` : `${name.toUpperCase()} key failed`, info.ok ? 'ok' : 'err');
+  } catch(e) {
+    result.classList.add('show','err');
+    result.textContent = '✗ Network error: ' + e.message;
+    toast('Verification failed', 'err');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+// ── AI preview ─────────────────────────────────────────────
+let previewTimer = null;
+function previewAI() {
+  clearTimeout(previewTimer);
+  const sel = document.getElementById('site-select');
+  if(sel.value !== 'AI (Auto)') { document.getElementById('ai-preview').classList.remove('show'); return; }
+  previewTimer = setTimeout(() => {
+    const raw = document.getElementById('movie-input').value.trim();
+    const first = raw.split('\n')[0].split(',')[0].trim();
+    if(!first) return;
+    const preview = document.getElementById('ai-preview');
+    preview.innerHTML = `🤖 AI will classify: <span class="ai-cat">"${escHtml(first)}"</span>`;
+    preview.classList.add('show');
+  }, 400);
+}
+// ── Plugins ────────────────────────────────────────────────
+async function loadPlugins() {
+  const r = await fetch('/api/sites');
+  const resp = await r.json();
+  const plugins = resp.sites || resp;
+  const list = document.getElementById('plugin-list');
+  list.innerHTML = '';
+  const sels = [document.getElementById('site-select'), document.getElementById('s-active-site')];
+  sels.forEach(sel => { if(sel) sel.innerHTML = ''; });
+  plugins.forEach(p => {
+    const isAI = p.name === 'AI (Auto)';
+    const item = document.createElement('div');
+    item.className = 'plugin-item';
+    item.innerHTML = `
+      <div style="font-size:1rem">${isAI ? '🤖' : '🔗'}</div>
+      <div class="info">
+        <strong>${escHtml(p.name)}</strong>
+        <span class="desc">${escHtml(p.description||'')}</span>
+      </div>
+      <span class="plugin-ver">v${escHtml(p.version||'1')}</span>
+    `;
+    list.appendChild(item);
+    sels.forEach(sel => {
+      if(sel) {
+        const opt = document.createElement('option');
+        opt.value = p.name; opt.textContent = p.name;
+        sel.appendChild(opt);
+      }
+    });
+  });
+  if(config.active_site) sels.forEach(sel => { if(sel) sel.value = config.active_site; });
+}
+// ── Queue polling ──────────────────────────────────────────
+async function pollQueue() {
+  try {
+    const r = await fetch('/api/queue');
+    const resp = await r.json();
+    updateQueue(resp.queue || resp);
+  } catch(e) {}
+}
+function updateQueue(jobs) {
+  jobOrder = jobs.map(j => j.id);
+  jobs.forEach(j => { jobMap[j.id] = j; });
+  Object.keys(jobMap).forEach(id => { if(!jobOrder.includes(id)) delete jobMap[id]; });
+  const done = jobs.filter(j => j.status === 'done').length;
+  const err  = jobs.filter(j => j.status === 'error').length;
+  document.getElementById('queue-count').textContent =
+    `${jobs.length} job${jobs.length!==1?'s':''}`
+    + (done ? ` · ${done}✓` : '')
+    + (err  ? ` · ${err}✗` : '');
+  const emptyState = document.getElementById('empty-state');
+  if(emptyState) emptyState.style.display = jobs.length===0?'flex':'none';
+  const list = document.getElementById('queue-list');
+  const existingIds = new Set([...list.querySelectorAll('.job-card')].map(el => el.dataset.id));
+  existingIds.forEach(id => { if(!jobOrder.includes(id)) list.querySelector(`[data-id="${id}"]`)?.remove(); });
+  jobs.forEach((job, idx) => {
+    let card = list.querySelector(`[data-id="${job.id}"]`);
+    if(!card) { card = buildJobCard(job); list.appendChild(card); }
+    else updateJobCard(card, job);
+    if(list.children[idx+1] !== card) list.appendChild(card);
+  });
+}
+function buildJobCard(job) {
+  const card = document.createElement('div');
+  card.className = `job-card ${job.status}`;
+  card.dataset.id = job.id;
+  card.innerHTML = jobCardHTML(job);
+  return card;
+}
+function updateJobCard(card, job) {
+  card.className = `job-card ${job.status}`;
+  card.innerHTML = jobCardHTML(job, openLogs.has(job.id));
+}
+function jobCardHTML(job, logOpen=false) {
+  const isActive = ['searching','getting_link','bridge','generating'].includes(job.status);
+  const isDling  = job.status === 'downloading';
+  const pill = `<span class="status-pill ${STATUS_PILL[job.status]||'pill-queued'}">${STATUS_LABEL[job.status]||job.status}</span>`;
+  const spin = isActive ? `<div class="spinner"></div>` : isDling ? `<div class="spinner spinner-purple"></div>` : '';
+  const canPause  = isActive;
+  const canResume = job.status === 'paused';
+  const canCancel = !['done','cancelled','error'].includes(job.status);
+  const canRetry  = ['error','cancelled'].includes(job.status);
+  const canDL     = job.status === 'done' && job.result_url;
+  const actions = `<div class="job-actions">
+    ${canPause  ? `<button class="btn-icon" title="Pause" onclick="jobAction(event,'${job.id}','pause')">⏸</button>` : ''}
+    ${canResume ? `<button class="btn-icon success" title="Resume" onclick="jobAction(event,'${job.id}','resume')">▶</button>` : ''}
+    ${canRetry  ? `<button class="btn-icon success" title="Retry" onclick="jobAction(event,'${job.id}','retry')">↺</button>` : ''}
+    ${canCancel ? `<button class="btn-icon danger" title="Cancel" onclick="jobAction(event,'${job.id}','cancel')">✕</button>` : ''}
+    <button class="btn-icon danger" title="Remove" onclick="jobAction(event,'${job.id}','remove')">🗑</button>
+  </div>`;
+  let siteBadge = `<span class="job-site">${escHtml(job.site)}</span>`;
+  if(job.site_used && job.site_used !== job.site) {
+    siteBadge = `<span class="job-site" style="color:var(--green)" title="Found via ${escHtml(job.site_used)}">✓ ${escHtml(job.site_used)}</span>`;
+  }
+  const aiTag = job.ai_category ? `<span class="job-ai-tag">${escHtml(job.ai_category)}</span>` : '';
+  let body = '';
+  if(job.result_url) {
+    body += `<div class="result-url">
+      <span>${escHtml(job.result_url)}</span>
+      <button class="btn-copy" onclick="copyUrl('${job.id}')">Copy</button>
+      <a class="btn-open" href="${job.result_url}" target="_blank" rel="noopener">Open</a>
+      ${canDL ? `<button class="btn-dl" onclick="manualDownload(event,'${job.id}')">⬇ Download</button>` : ''}
+    </div>`;
+  }
+  if(job.download_path) body += `<div class="dl-path">📁 Saved: ${escHtml(job.download_path)}</div>`;
+  if(job.error) {
+    body += `<div class="error-msg">⚠ ${escHtml(job.error)}</div>`;
+    // Per-site breakdown when the auto/AI mode tried multiple sites and all failed.
+    if (Array.isArray(job.site_failures) && job.site_failures.length) {
+      const items = job.site_failures.map(s =>
+        `<li>${escHtml(String(s).slice(0, 200))}</li>`).join('');
+      body += `<details class="site-fail-details" style="margin:.4rem 0;font-size:.78rem">
+        <summary style="cursor:pointer;color:var(--muted2)">
+          Tried ${job.site_failures.length} site(s) — show details
+        </summary>
+        <ul style="margin:.4rem 0 0 1rem;color:#fca5a5;line-height:1.5">${items}</ul>
+      </details>`;
+    }
+  }
+  const logs = (job.logs||[]).slice(-80);
+  const logLines = logs.map(l => `<p>${escHtml(l)}</p>`).join('');
+  body += `<div class="log-actions" style="display:flex;justify-content:flex-end;margin:.3rem 0 .15rem">
+      <button class="btn-copy" onclick="copyLogs(event,'${job.id}')" title="Copy all logs">📋 Copy Logs</button>
+    </div>`;
+  body += `<div class="log-box" id="log_${job.id}">${logLines}</div>`;
+  const prog = Math.max(0, Math.min(100, Math.round(job.progress || 0)));
+  const progClass = job.status === 'done' ? 'done' : (job.status === 'error' ? 'error' : '');
+  const showProgress = !['queued','cancelled'].includes(job.status);
+  // Live elapsed-time + idle heartbeat. Updated every tick by the poll loop.
+  const elapsed = job.created_at
+    ? _fmtDuration((Date.now() / 1000) - job.created_at) : '';
+  const idle = job.last_activity
+    ? Math.max(0, Math.floor((Date.now() / 1000) - job.last_activity)) : 0;
+  const isActiveStage = isActive || isDling || job.status === 'ai';
+  const idleWarn = (isActiveStage && idle >= 12)
+    ? ` · <span style="color:var(--yellow)" title="No new log lines for ${idle}s — slow site or slow connection. The app is still trying.">still working (${idle}s idle)</span>`
+    : '';
+  // Friendly stage label under the title
+  const stage = (isActiveStage && job.stage_label)
+    ? `<div class="stage-line" style="font-size:.75rem;color:var(--muted2);margin:.15rem 0 .25rem">
+         ${escHtml(job.stage_label)}${elapsed ? ` · ${elapsed} elapsed` : ''}${idleWarn}
+       </div>` : '';
+  // Download speed / ETA strip (only while downloading)
+  const dlInfo = (isDling && (job.download_speed || job.download_eta || job.download_total))
+    ? `<div class="dl-stats" style="display:flex;gap:1rem;font-size:.74rem;color:var(--muted2);margin:.2rem 0">
+         ${job.download_speed ? `<span>⚡ <b style="color:var(--purple)">${escHtml(job.download_speed)}</b></span>` : ''}
+         ${job.download_eta   ? `<span>⏱ ETA <b>${escHtml(job.download_eta)}</b></span>` : ''}
+         ${job.download_total ? `<span>💾 ${escHtml(job.download_total)}</span>` : ''}
+       </div>` : '';
+  const progressBar = showProgress ? `
+    <div class="progress-wrap">
+      <div class="progress-bar"><div class="progress-fill ${progClass}" style="width:${prog}%"></div></div>
+      <div class="progress-pct">${prog}%</div>
+    </div>${dlInfo}` : '';
+  return `
+    <div class="job-header" onclick="toggleLog('${job.id}')">
+      ${spin}
+      <div class="job-title" title="${escAttr(job.movie)}">${escHtml(job.movie)}</div>
+      ${aiTag}${siteBadge}${pill}${actions}
+    </div>
+    ${stage}
+    ${progressBar}
+    <div class="job-body ${logOpen?'open':''}" id="body_${job.id}">${body}</div>
+  `;
+}
+// Format seconds → "1m 23s" / "2h 14m" / "45s" — used for elapsed-time line.
+function _fmtDuration(secs) {
+  secs = Math.max(0, Math.floor(secs || 0));
+  if (secs < 60)   return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs/60)}m ${secs%60}s`;
+  return `${Math.floor(secs/3600)}h ${Math.floor((secs%3600)/60)}m`;
+}
+// Quick-add buttons in the empty state
+function quickAdd(text) {
+  const inp = document.querySelector('#movie-input, #movie-name, input[name="movie"]');
+  if (inp) { inp.value = text; inp.focus(); }
+  // try to also click an Add button if one exists
+  const btn = document.querySelector('#add-movie-btn, button[onclick*="addMovie"]');
+  if (btn) btn.click();
+}
+function toggleLog(id) {
+  const body = document.getElementById(`body_${id}`);
+  if(!body) return;
+  if(openLogs.has(id)) { openLogs.delete(id); body.classList.remove('open'); }
+  else {
+    openLogs.add(id); body.classList.add('open');
+    const lb = document.getElementById(`log_${id}`);
+    if(lb) lb.scrollTop = lb.scrollHeight;
+  }
+}
+function copyUrl(id) {
+  const job = jobMap[id];
+  if(!job?.result_url) return;
+  navigator.clipboard.writeText(job.result_url).then(() => toast('URL copied!', 'ok'));
+}
+function copyLogs(evt, id) {
+  evt.stopPropagation();
+  const job = jobMap[id];
+  if(!job) return;
+  const header = `=== ${job.movie} ===\nStatus: ${job.status}` +
+                 (job.site_used ? `   Site: ${job.site_used}` : '') +
+                 (job.result_url ? `\nFinal URL: ${job.result_url}` : '') +
+                 (job.download_path ? `\nSaved: ${job.download_path}` : '') +
+                 (job.error ? `\nError: ${job.error}` : '') + '\n\n';
+  const text = header + (job.logs || []).join('\n');
+  navigator.clipboard.writeText(text).then(
+    () => toast('Logs copied to clipboard!', 'ok'),
+    () => toast('Copy failed — select & copy manually', 'err')
+  );
+}
+async function manualDownload(evt, id) {
+  evt.stopPropagation();
+  const r = await fetch(`/api/queue/${id}/download`, {method:'POST'});
+  if(r.ok) toast('Download started!', 'ok');
+  else toast('Failed to start download', 'err');
+}
+// ── Job actions ────────────────────────────────────────────
+async function jobAction(evt, id, action) {
+  evt.stopPropagation();
+  let url, method;
+  if(action==='remove') { url=`/api/queue/${id}`; method='DELETE'; }
+  else { url=`/api/queue/${id}/${action}`; method='POST'; }
+  const r = await fetch(url, {method});
+  if(r.ok) {
+    if(action==='remove') { jobOrder=jobOrder.filter(x=>x!==id); delete jobMap[id]; }
+    await pollQueue();
+    toast({remove:'Removed',pause:'Paused',resume:'Resumed',cancel:'Cancelled',retry:'Queued for retry'}[action]||`${action}!`, 'ok');
+  } else {
+    const e = await r.json().catch(()=>({}));
+    toast(e.error||'Action failed', 'err');
+  }
+}
+async function pauseAll(){ await fetch('/api/queue/pause-all',{method:'POST'}); await pollQueue(); toast('All paused','ok'); }
+async function resumeAll(){ await fetch('/api/queue/resume-all',{method:'POST'}); await pollQueue(); toast('All resumed','ok'); }
+async function clearDone(){
+  const r = await fetch('/api/queue/clear',{method:'POST'});
+  const d = await r.json();
+  await pollQueue();
+  toast(`Cleared ${d.removed} job(s)`, 'ok');
+}
+async function cancelAll(){
+  const active = Object.values(jobMap).filter(j => !['done','cancelled','error'].includes(j.status));
+  await Promise.all(active.map(j => fetch(`/api/queue/${j.id}/cancel`,{method:'POST'})));
+  await pollQueue();
+  toast(`Cancelled ${active.length} job(s)`,'ok');
+}
+// ── Add movies ─────────────────────────────────────────────
+async function addMovies() {
+  const raw = document.getElementById('movie-input').value.trim();
+  const site = document.getElementById('site-select').value;
+  if(!raw) { toast('Enter at least one movie name','err'); return; }
+  const r = await fetch('/api/queue/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({movies:raw, site})});
+  const data = await r.json();
+  if(data.added) {
+    document.getElementById('movie-input').value = '';
+    document.getElementById('ai-preview').classList.remove('show');
+    toast(`Added ${data.added.length} movie(s) to queue`, 'ok');
+    await pollQueue();
+    showPage('queue');
+  } else {
+    toast(data.error||'Failed to add', 'err');
+  }
+}
+// ── Toast ──────────────────────────────────────────────────
+let toastTimer = null;
+function toast(msg, type='ok') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+function escHtml(str){ return String(str==null?'':str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(str){ return escHtml(str); }
+window.addEventListener('DOMContentLoaded', init);
+</script>
+<div id="otp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);
+     z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(4px)">
+  <div style="background:#1a1d24;color:#eee;border:1px solid #333;border-radius:14px;
+              padding:28px 32px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.6)">
+    <div style="font-size:13px;letter-spacing:.12em;color:#9bf;margin-bottom:6px">RADD MOVIES · ADMIN</div>
+    <h2 style="margin:0 0 4px;font-size:22px">📲 Jazz Drive OTP needed</h2>
+    <p style="margin:0 0 18px;color:#aab">An SMS code is on its way to
+      <b id="otp-msisdn" style="color:#eee">—</b>.
+      <span id="otp-timer" style="color:#9bf;float:right;font-variant-numeric:tabular-nums"></span>
+    </p>
+    <input id="otp-input" type="tel" inputmode="numeric" autocomplete="one-time-code"
+           pattern="[0-9]{4,6}" maxlength="8" placeholder="• • • •"
+           style="width:100%;padding:14px 16px;font-size:24px;letter-spacing:8px;text-align:center;
+                  background:#0e1015;border:1px solid #333;border-radius:8px;color:#fff;outline:none"
+           onkeydown="if(event.key==='Enter') submitOtp()" />
+    <button onclick="submitOtp()"
+            style="margin-top:14px;width:100%;padding:12px;font-size:15px;font-weight:600;
+                   background:linear-gradient(135deg,#3a8dff,#2a6fdd);border:0;border-radius:8px;
+                   color:#fff;cursor:pointer">Submit OTP</button>
+    <div id="otp-status" style="margin-top:10px;font-size:13px;min-height:18px"></div>
+    <div style="margin-top:10px;font-size:11px;color:#788;text-align:center">
+      You can also send <code style="color:#9bf">/otp 1234</code> from WhatsApp as admin.
+    </div>
+  </div>
+</div>
+</body>
+</html>

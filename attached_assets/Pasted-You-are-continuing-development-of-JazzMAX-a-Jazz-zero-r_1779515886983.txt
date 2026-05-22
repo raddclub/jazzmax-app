@@ -1,0 +1,97 @@
+You are continuing development of JazzMAX — a Jazz zero-rated streaming app for Pakistan. 
+Read JAZZMAX_COMPLETE_PLAN.md first — it has everything. Here is a quick summary to orient you:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROJECT: JazzMAX
+A streaming app for Jazz SIM users in Pakistan. All videos hosted on JazzDrive (Jazz's cloud 
+storage), which is zero-rated — meaning Jazz users watch without using mobile data.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CRITICAL RULE:
+JazzDrive is used ONLY for video streaming and file downloads. 
+NEVER use JazzDrive for images (posters, backdrops, thumbnails).
+All images must come from TMDB API or local disk cache.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CURRENT STATE (what is already working):
+- Watch Prototype: Flask app running on port 8000, entry: _watch_prototype/run.py
+- Radd Hub: Admin backend running on port 5000, entry: radd-hub/radd_hub.py
+- Both share the same SQLite database at radd-hub/data/
+- 14 movies + 4 TV shows in the database
+- JazzDrive link generation works: radd-hub/hub/jazzdrive.py
+  - generate_direct_link(share_url, target_filename=filename) — for specific files in folders
+  - All episodes share the same folder share_url; MUST pass target_filename to get right episode
+- Stream links cached 6 hours (LINK_CACHE_SECONDS = 21600 in routes/watch.py)
+- Posters cached locally: _watch_prototype/posters/title_{id}.jpg and show_{file_id}.jpg
+- TMDB used for all poster and backdrop images
+- Web UI: JazzMAX branded app with Swiper.js 11 + GSAP 3.12, mobile-first
+  - Featured showcase carousel at top (peeking cards, not full-screen hero)
+  - Horizontal Swiper content rows for Movies and TV Shows
+  - Bottom navigation: Home | Search | Downloads | My
+  - Slide-up bottom sheet for title details + episode list
+  - Full-screen video player overlay
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT FILES:
+- _watch_prototype/routes/watch.py       Main API (catalog, play, posters, show episodes)
+- _watch_prototype/templates/watch/index.html   JazzMAX web UI
+- _watch_prototype/run.py               Flask entry point
+- radd-hub/hub/jazzdrive.py             JazzDrive link generation
+- radd-hub/hub/db.py                    Database connection
+- JAZZMAX_COMPLETE_PLAN.md              Complete architecture, DB schema, auth plan, API list
+- WATCH_APP.md                          Server architecture + Oracle migration plan
+- MOBILE_APP_PLAN.md                    Flutter Android app detailed plan
+- DESIGN_PLAN.md                        Branding and design language
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DATABASE SCHEMA (SQLite — titles table key columns):
+id, title, year, media_type (movie/show), poster, backdrop, backdrop_share_url,
+rating, plot, overview, runtime, genres (JSON string), language,
+trailer_url, is_free, folder_share_url, poster_share_url
+
+Files table: id, title_id, filename, file_id, share_url, season, episode
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+BRANDING:
+- App name: JazzMAX
+- Primary color: #E8002D (Jazz Pakistan's official red)
+- Background: #08080E (Obsidian dark)
+- Surface: #0E0E1C / #151528
+- Font: Inter (Google Fonts)
+- Logo format: "Jazz" white + "MAX" red gradient + small pulsing red dot
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHAT WAS BEING WORKED ON (last session):
+The web UI (index.html) was just redesigned. The hero section was changed from a 
+full-screen background image to a modern "Showcase Slider" — compact peeking cards 
+using Swiper centeredSlides with partial next-slide visible. This feels more like 
+iQiyi/WeTV/Bilibili mobile apps rather than a traditional website.
+
+WHAT TO DO NEXT (pick up from here):
+1. Add "Continue Watching" row — use localStorage to track last-played progress,
+   show a row above Movies with resume cards
+2. Build auth system — POST /api/auth/register and /api/auth/login endpoints,
+   JWT tokens, phone + OTP flow (schema in JAZZMAX_COMPLETE_PLAN.md section 6)
+3. OR start Flutter Android app — scaffold with Flutter + Riverpod + Drift,
+   auth screens, home screen mirroring web design (plan in MOBILE_APP_PLAN.md)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WORKFLOWS (Replit):
+- "Watch Prototype"  →  cd _watch_prototype && PORT=8000 python run.py
+- "Radd Hub"         →  cd radd-hub && python3 radd_hub.py run --skip-setup
+
+Preview URL: http://localhost:8000/watch
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Please read JAZZMAX_COMPLETE_PLAN.md now for the full auth design, subscription plans,
+all API endpoints, Flutter app architecture, and production Oracle server setup.
+Then ask me what I want to work on next, or continue from the "What to do next" list above.

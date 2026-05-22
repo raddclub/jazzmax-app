@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Radd Hub — Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{
+    --bg:#0d0c14; --surface:#161420; --surface2:#1f1c2c; --line:#2c2839;
+    --text:#e8e6f0; --muted:#8b87a0; --accent:#9b6dff; --green:#4ade80;
+    --red:#f87171; --yellow:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  .app-header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .app-logo{display:flex;align-items:center;gap:8px}
+  .app-title{margin:0;font-size:18px;font-weight:700;color:var(--accent)}
+  .app-ver{color:var(--muted);font-size:12px}
+  .app-links{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .app-link{padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:13px;cursor:pointer}
+  .app-link:hover{border-color:var(--accent)}
+  .app-link.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn{padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  main{padding:20px;max-width:1200px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:16px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .card h3{margin:0 0 10px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .card .num{font-size:32px;font-weight:700;color:var(--accent)}
+  .card .sub{color:var(--muted);font-size:12px;margin-top:4px}
+  .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .badge{padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+  .badge.ok{background:rgba(74,222,128,.15);color:var(--green)}
+  .badge.bad{background:rgba(248,113,113,.15);color:var(--red)}
+  .svc{display:flex;justify-content:space-between;align-items:center;padding:10px;border-radius:8px;background:var(--surface2);margin-bottom:8px}
+  .svc a{color:var(--accent);text-decoration:none;font-size:12px}
+  .actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  pre{background:#000;color:#0f0;padding:10px;border-radius:6px;font-size:11px;overflow:auto;max-height:200px}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="app-logo">
+    <span>🎬</span>
+    <h1 class="app-title">Radd Hub</h1>
+    <span class="app-ver">v{{ VERSION }}</span>
+  </div>
+  <div class="app-links">
+    <a class="app-link" href="/">Stream</a>
+    <a class="app-link" href="/?page=queue">Queue</a>
+    <a class="app-link" href="/?page=cloud">Cloud</a>
+    <a class="app-link" href="/?page=system-check">System Check</a>
+    <a class="app-link" href="/flixpro/">Flix Pro</a>
+    <a class="app-link" href="/flix">Flix Status</a>
+    <a class="app-link" href="/dbgen/">DB Generator</a>
+    <a class="app-link" href="/admin">Bot Admin</a>
+    <a class="app-link primary" href="{{ BASE }}/settings">⚙ Settings</a>
+  </div>
+</header>
+<main>
+  <h2 style="margin:0">Welcome to Radd Hub</h2>
+  <p style="color:var(--muted);margin:6px 0 0">One control surface for the scraper, uploader, library indexer, and bots.</p>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Library — Unified</h3>
+      <div class="num" id="merged-titles">…</div>
+      <div class="sub"><span id="merged-files">…</span> files indexed</div>
+    </div>
+    <div class="card">
+      <h3>Flix Uploads</h3>
+      <div class="num" id="flix-total">…</div>
+      <div class="sub"><span id="flix-today">0</span> today</div>
+    </div>
+    <div class="card">
+      <h3>DB Generator Library</h3>
+      <div class="num" id="dbgen-titles">…</div>
+      <div class="sub"><span id="dbgen-files">0</span> files</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Services</h3>
+    <div id="services"></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h3>Sync</h3>
+    <p style="color:var(--muted);margin:0 0 10px">Push every Flix upload into the DB Generator's unified library so bots can find it.</p>
+    <div class="actions">
+      <button class="btn primary" id="btn-sync">▶ Sync Flix → DB Generator</button>
+      <button class="btn" id="btn-refresh">↻ Refresh status</button>
+    </div>
+    <pre id="sync-log" style="margin-top:10px;display:none"></pre>
+  </div>
+</main>
+
+<script>
+const BASE = "{{ BASE }}";
+const $ = sel => document.querySelector(sel);
+
+async function loadStatus(){
+  try{
+    const r = await fetch(BASE + "/api/services").then(r=>r.json());
+    if(!r.ok) return;
+    const lib = r.library || {};
+    if(lib.merged){
+      $("#merged-titles").textContent = lib.merged.titles ?? 0;
+      $("#merged-files").textContent  = lib.merged.files ?? 0;
+    }
+    if(lib.flix){
+      $("#flix-total").textContent = lib.flix.total ?? 0;
+      $("#flix-today").textContent = lib.flix.today ?? 0;
+    }
+    if(lib.dbgen){
+      $("#dbgen-titles").textContent = lib.dbgen.titles ?? 0;
+      $("#dbgen-files").textContent  = lib.dbgen.files ?? 0;
+    }
+    const wrap = $("#services");
+    wrap.innerHTML = "";
+    Object.entries(r.services).forEach(([id, s]) => {
+      const div = document.createElement("div");
+      div.className = "svc";
+      const cls = s.alive ? "ok" : "bad";
+      const txt = s.alive ? "online" : "offline";
+      const left = document.createElement("div");
+      const name = document.createElement("b");
+      name.textContent = s.label || id;
+      const badge = document.createElement("span");
+      badge.className = `badge ${cls}`;
+      badge.textContent = txt;
+      left.appendChild(name);
+      left.appendChild(document.createTextNode(" "));
+      left.appendChild(badge);
+      const link = document.createElement("a");
+      link.href = (typeof s.url === "string" && s.url) ? s.url : "#";
+      link.textContent = "open ↗";
+      div.appendChild(left);
+      div.appendChild(link);
+      wrap.appendChild(div);
+    });
+  }catch(e){
+    console.error(e);
+    $("#services").innerHTML = `<p style="color:var(--red)">Could not load status: ${String(e)}</p>`;
+  }
+}
+
+$("#btn-refresh").addEventListener("click", loadStatus);
+
+$("#btn-sync").addEventListener("click", async () => {
+  const btn = $("#btn-sync");
+  btn.disabled = true; btn.textContent = "Syncing…";
+  const log = $("#sync-log");
+  log.style.display = "block";
+  log.textContent = "Running sync…\n";
+  try{
+    const r = await fetch(BASE + "/api/sync/flix-to-dbgen", {method:"POST"}).then(r=>r.json());
+    log.textContent += JSON.stringify(r, null, 2);
+    loadStatus();
+  }catch(e){
+    log.textContent += "ERROR: " + e;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = "▶ Sync Flix → DB Generator";
+  }
+});
+
+loadStatus();
+setInterval(loadStatus, 15000);
+</script>
+</body>
+</html>

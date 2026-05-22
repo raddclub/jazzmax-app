@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Radd Hub — Settings</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root{
+    --bg:#0d0c14; --surface:#161420; --surface2:#1f1c2c; --line:#2c2839;
+    --text:#e8e6f0; --muted:#8b87a0; --accent:#9b6dff; --green:#4ade80;
+    --red:#f87171; --yellow:#fbbf24;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+  .app-header{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface)}
+  .app-logo{display:flex;align-items:center;gap:8px}
+  .app-title{margin:0;font-size:18px;font-weight:700;color:var(--accent)}
+  .app-ver{color:var(--muted);font-size:12px}
+  .app-links{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .app-link{padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:13px;cursor:pointer}
+  .app-link:hover{border-color:var(--accent)}
+  .app-link.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn{padding:8px 14px;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:8px;text-decoration:none;font-size:13px;cursor:pointer}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  main{padding:20px;max-width:1100px;margin:0 auto}
+  .group{background:var(--surface);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden}
+  .group-h{padding:14px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;user-select:none}
+  .group-h:hover{background:var(--surface2)}
+  .group-h .icon{font-size:20px}
+  .group-h .title{font-weight:600}
+  .group-h .desc{color:var(--muted);font-size:12px}
+  .group-h .chev{margin-left:auto;color:var(--muted);transition:transform .2s}
+  .group.open .chev{transform:rotate(90deg)}
+  .group-body{display:none;padding:0 18px 18px;border-top:1px solid var(--line)}
+  .group.open .group-body{display:block}
+  .field{display:grid;grid-template-columns:200px 1fr 90px;gap:10px;align-items:center;margin:10px 0}
+  .field label{color:var(--text);font-size:13px}
+  .field .hint{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+  .field input{width:100%;padding:8px 10px;background:var(--surface2);border:1px solid var(--line);border-radius:6px;color:var(--text);font:inherit;font-family:ui-monospace,monospace}
+  .field .actions{display:flex;gap:4px}
+  .actions-row{margin-top:14px;display:flex;gap:8px;align-items:center}
+  .toast{position:fixed;bottom:20px;right:20px;padding:12px 18px;border-radius:8px;background:var(--surface);border:1px solid var(--line);max-width:380px;display:none;z-index:99}
+  .toast.ok{border-color:var(--green)}
+  .toast.err{border-color:var(--red)}
+  .pill{padding:2px 8px;border-radius:99px;font-size:10px;font-weight:600;background:var(--surface2);color:var(--muted)}
+  .pill.set{background:rgba(74,222,128,.15);color:var(--green)}
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="app-logo">
+    <span>🎬</span>
+    <h1 class="app-title">Radd Hub</h1>
+    <span class="app-ver">Settings v{{ VERSION }}</span>
+  </div>
+  <div class="app-links">
+    <a class="app-link" href="{{ BASE }}/">Dashboard</a>
+    <a class="app-link" href="/">Stream</a>
+    <a class="app-link" href="/?page=queue">Queue</a>
+    <a class="app-link" href="/?page=system-check">System Check</a>
+    <a class="app-link" href="/admin">Bot Admin</a>
+    <a class="app-link" href="/flixpro/">Flix Pro</a>
+    <a class="app-link" href="/flix">Flix Status</a>
+    <a class="app-link" href="/dbgen/">DB Generator</a>
+  </div>
+</header>
+<main>
+  <p style="color:var(--muted);margin:0 0 14px">
+    Edit every API key, token, and configuration in one place. Values are written to your <code id="env-path">.env</code> file
+    (a timestamped backup is saved each time).
+  </p>
+  <div id="groups"></div>
+  <div class="actions-row">
+    <button class="btn primary" id="btn-save-all">💾 Save All Changes</button>
+    <button class="btn" id="btn-reload">↻ Reload</button>
+    <span style="color:var(--muted);margin-left:auto" id="env-status"></span>
+  </div>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const BASE = "{{ BASE }}";
+const $ = sel => document.querySelector(sel);
+
+let state = {};   // key -> {original, current, dirty}
+
+function toast(msg, kind="ok"){
+  const t = $("#toast");
+  t.textContent = msg;
+  t.className = "toast " + kind;
+  t.style.display = "block";
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=> t.style.display="none", 3500);
+}
+
+async function loadKeys(){
+  const r = await fetch(BASE + "/api/keys").then(r=>r.json());
+  if(!r.ok) return toast("Load failed: " + r.error, "err");
+  $("#env-path").textContent = r.env_path;
+  $("#env-status").textContent = r.env_exists ? "✓ .env exists" : "⚠ .env will be created on save";
+  state = {};
+  const wrap = $("#groups");
+  wrap.innerHTML = "";
+  r.groups.forEach(grp => {
+    const div = document.createElement("div");
+    div.className = "group";
+    const setCount = grp.items.filter(i => i.set).length;
+    div.innerHTML = `
+      <div class="group-h" onclick="this.parentNode.classList.toggle('open')">
+        <span class="icon">${grp.icon || "•"}</span>
+        <div>
+          <div class="title">${grp.title} <span class="pill ${setCount>0?'set':''}">${setCount}/${grp.items.length} set</span></div>
+          <div class="desc">${grp.desc || ""}</div>
+        </div>
+        <span class="chev">›</span>
+      </div>
+      <div class="group-body" id="grp-${grp.id}"></div>
+    `;
+    wrap.appendChild(div);
+    const body = div.querySelector(".group-body");
+    grp.items.forEach(item => {
+      state[item.key] = { original: "", current: "", dirty: false, masked: item.masked, set: item.set, secret: item.secret };
+      const f = document.createElement("div");
+      f.className = "field";
+      f.innerHTML = `
+        <label>${item.label}<span class="hint">${item.key}${item.hint?' · '+item.hint:''}</span></label>
+        <input type="${item.secret?'password':'text'}" data-key="${item.key}"
+               placeholder="${item.set ? '(set: ' + item.masked + ')' : '(empty)'}" autocomplete="off">
+        <div class="actions">
+          ${item.secret ? `<button class="btn small" data-show="${item.key}">👁</button>`:""}
+        </div>
+      `;
+      body.appendChild(f);
+    });
+    if(grp.test_endpoint){
+      const t = document.createElement("button");
+      t.className = "btn small";
+      t.style.marginTop = "10px";
+      t.textContent = "🧪 Test " + grp.title;
+      t.onclick = async () => {
+        t.disabled = true; t.textContent = "Testing…";
+        const r = await fetch(grp.test_endpoint, {method:"POST"}).then(r=>r.json()).catch(e=>({ok:false,error:String(e)}));
+        toast(r.ok ? (r.message||"OK") : ("Test failed: "+r.error), r.ok?"ok":"err");
+        t.disabled = false; t.textContent = "🧪 Test " + grp.title;
+      };
+      body.appendChild(t);
+    }
+  });
+
+  // Open the first group by default
+  const first = wrap.querySelector(".group");
+  if(first) first.classList.add("open");
+
+  // Wire input changes + show buttons
+  wrap.querySelectorAll("input[data-key]").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const k = inp.dataset.key;
+      state[k].current = inp.value;
+      state[k].dirty = true;
+    });
+  });
+  wrap.querySelectorAll("button[data-show]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const k = btn.dataset.show;
+      const inp = wrap.querySelector(`input[data-key="${k}"]`);
+      if(inp.type === "password"){
+        const r = await fetch(BASE + "/api/keys/raw?key=" + encodeURIComponent(k)).then(r=>r.json());
+        if(r.ok){ inp.type = "text"; inp.value = r.value; btn.textContent = "🙈"; }
+      } else {
+        inp.type = "password";
+        inp.value = "";
+        btn.textContent = "👁";
+      }
+    });
+  });
+}
+
+$("#btn-reload").addEventListener("click", loadKeys);
+
+$("#btn-save-all").addEventListener("click", async () => {
+  const updates = {};
+  for(const [k,v] of Object.entries(state)){
+    if(!v.dirty) continue;
+    const trimmed = (v.current ?? "").trim();
+    if(trimmed === "" && v.set) continue;
+    updates[k] = trimmed;
+  }
+  if(!Object.keys(updates).length){
+    return toast("Nothing to save — edit a value first.", "err");
+  }
+  const btn = $("#btn-save-all");
+  btn.disabled = true; btn.textContent = "Saving…";
+  const r = await fetch(BASE + "/api/keys", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({updates})
+  }).then(r=>r.json());
+  btn.disabled = false; btn.textContent = "💾 Save All Changes";
+  if(r.ok){
+    toast(`Saved ${r.changed} key(s). Backup: ${r.backup}`);
+    loadKeys();
+  } else {
+    toast("Save failed: " + r.error, "err");
+  }
+});
+
+loadKeys();
+</script>
+</body>
+</html>
