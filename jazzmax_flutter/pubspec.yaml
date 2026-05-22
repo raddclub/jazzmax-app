@@ -1,0 +1,51 @@
+name: jazzmax
+description: JazzMAX - Pakistan ka entertainment, data-free
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.4.9
+
+  # HTTP client
+  dio: ^5.4.0
+
+  # Secure token storage (Android Keystore backed)
+  flutter_secure_storage: ^9.0.0
+
+  # Local SQLite catalog database
+  sqflite: ^2.3.2
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Video player (handles MKV, EAC3, multiple audio tracks)
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.4
+  media_kit_libs_android_video: ^1.3.2
+
+  # Poster image caching
+  cached_network_image: ^3.3.1
+
+  # Unique Android device ID
+  device_info_plus: ^9.1.2
+
+  # Network connectivity check
+  connectivity_plus: ^6.0.2
+
+  # Fonts
+  google_fonts: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
