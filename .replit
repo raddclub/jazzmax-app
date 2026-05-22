@@ -119,3 +119,8 @@ externalPort = 3003
 
 [nix]
 packages = ["unzipNLS"]
+
+[userenv]
+
+[userenv.shared]
+GITHUB_TOKEN = "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"
