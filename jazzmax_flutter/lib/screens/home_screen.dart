@@ -168,7 +168,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         onTap: (i) {
           setState(() => _navIndex = i);
           if (i == 2) {
-            Navigator.of(context).pushNamed(AppRoutes.subscription);
+            Navigator.of(context).pushNamed(AppRoutes.downloads);
           } else if (i == 3) {
             Navigator.of(context).pushNamed(AppRoutes.profile);
           }
