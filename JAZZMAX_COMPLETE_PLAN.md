@@ -246,7 +246,7 @@ GET  /api/auth/me                Returns user profile + subscription
 ```
 GET  /api/catalog                Returns movies + shows (public, limited for free)
 GET  /api/catalog/version        Returns {version: "20260522-001", count: 18}
-GET  /api/catalog/sync?since=V   Returns only titles changed since version V (delta sync)
+4gbGET  /api/catalog/sync?since=V   Returns only titles changed since version V (delta sync)
 ```
 
 ### Content

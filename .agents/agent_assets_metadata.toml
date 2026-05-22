@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "tcyolDtp59h7Uy4fuMGJD"
+uri = "file://jazzmax_20260522_1959.zip"
+type = "unspecified"
+title = "JazzMAX Project Export — jazzmax_20260522_1959.zip"

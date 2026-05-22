@@ -8,6 +8,24 @@
 
 ---
 
+## ⚡ QUICK START FOR NEW REPLIT ACCOUNT
+> If you just unzipped this project on a new account, do these 4 things first:
+> 1. `pip install flask flask-cors pyjwt werkzeug requests` (in Shell)
+> 2. Create Workflow: **Radd Hub** → `cd radd-hub && python3 radd_hub.py run --skip-setup`
+> 3. Create Workflow: **Watch Prototype** → `cd _watch_prototype && PORT=8000 python run.py`
+> 4. Add Replit Secret: `SESSION_SECRET` → ask Muhammad Rehan for the value
+> 5. Read section 14 (Task Checklist) → find first unchecked `[ ]` → build that
+
+## ⚡ END OF SESSION — CREATE ZIP BEFORE LEAVING
+> **Every account must run this before finishing:**
+> ```bash
+> bash create_zip.sh
+> ```
+> Then download `jazzmax_YYYYMMDD_HHMM.zip` from the Files panel and upload to next account.
+> The zip is ~80 MB and contains everything needed to continue.
+
+---
+
 ## TABLE OF CONTENTS
 1. [What Is JazzMAX](#1-what-is-jazzmax)
 2. [How The App Works](#2-how-the-app-works)
@@ -549,6 +567,30 @@ At the end of your session, write a short note at the bottom of this file under 
 
 ## 16. Manual Shell Commands (Do These Yourself)
 
+### CREATE ZIP — Run this at end of every session (REQUIRED):
+```bash
+bash create_zip.sh
+```
+- Creates `jazzmax_YYYYMMDD_HHMM.zip` (~80 MB) in the workspace root
+- Excludes: 641MB local binaries, 372MB node_modules, 227MB .pythonlibs, logs, pycache
+- Includes: all source code, database, posters, config files
+- Then: Files panel → right-click the zip → Download → upload to next Replit account
+
+### UNZIP on next Replit account:
+```bash
+# After uploading the zip to the new account's Files panel:
+cd /home/runner/workspace
+python3 -c "
+import zipfile
+zf = zipfile.ZipFile('jazzmax_20260522_1957.zip')  # change filename
+zf.extractall('.')
+zf.close()
+print('Done!')
+"
+```
+
+---
+
 These are simple things you can run yourself in the Replit shell to save time:
 
 ### Publish all titles so they appear in the app:
@@ -682,6 +724,19 @@ pip3 install flask flask-cors pyjwt werkzeug gunicorn
 
 ## Session Notes
 
+### How to add a session note (every account must do this):
+At the end of your work, add a new session block below in this format:
+```
+### Session N — Date
+Account: [whose account]
+Built: [list of what you completed]
+Checkboxes updated: [yes/no]
+Zip created: [filename]
+Next account should: [what to do first]
+```
+
+---
+
 ### Session 1 — May 22, 2026
 **Account:** Muhammad Rehan (main account)  
 **Built:**
@@ -692,10 +747,15 @@ pip3 install flask flask-cors pyjwt werkzeug gunicorn
 - All database tables: app_users, app_subscriptions, app_refresh_tokens, tid_payments
 - Payment numbers set to 03286839827 (Muhammad Rehan)
 - JWT tokens working correctly (PyJWT v2 string sub fix applied)
+- `JAZZMAX_MASTER.md` — this master file (all project info + task checklist)
+- `create_zip.sh` — export script for moving between Replit accounts
+**Checkboxes updated:** Yes (Phase 0 all done)
+**Zip created:** `jazzmax_20260522_1957.zip` (~80 MB)
 
 **Next account should do:**
-1. Run the "publish all titles" shell command from section 16 first
-2. Start building the Flutter app — begin with Phase 1 (project setup + GitHub Actions)
-3. Use `com.jazzmax.app` as the package name
-4. Read `MOBILE_APP_PLAN.md` for the full Flutter architecture before starting
-5. The API server is fully ready — Flutter app just needs to connect to it
+1. Unzip project, install packages, create 2 workflows (see Quick Start at top of this file)
+2. Run the "publish all titles" shell command from section 16
+3. Start Phase 1 of Flutter app — install Flutter, create project, set up GitHub Actions
+4. Use `com.jazzmax.app` as package name, GitHub: `raddclub/jazzmax-app`
+5. Read `MOBILE_APP_PLAN.md` before writing any Flutter code
+6. API server is fully ready — Flutter just needs to connect to `http://YOUR_SERVER/api/`
