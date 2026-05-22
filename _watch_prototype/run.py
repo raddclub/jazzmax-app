@@ -26,6 +26,7 @@ from routes.watch import bp as watch_bp
 from routes.app_auth import bp as app_auth_bp
 from routes.app_catalog import bp as app_catalog_bp
 from routes.app_subscription import bp as app_subscription_bp
+from routes.app_history import bp as app_history_bp
 
 # Read PORT before load_env() — radd-hub .env may override it otherwise
 _port = int(os.environ.get("PORT", 6000))
@@ -45,6 +46,7 @@ app.register_blueprint(watch_bp)
 app.register_blueprint(app_auth_bp)
 app.register_blueprint(app_catalog_bp)
 app.register_blueprint(app_subscription_bp)
+app.register_blueprint(app_history_bp)
 
 @app.route("/")
 def root():
