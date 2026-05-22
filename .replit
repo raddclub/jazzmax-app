@@ -12,66 +12,43 @@ env = { "CI" = "true" }
 runButton = "Project"
 
 [[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Radd Hub"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Watch Prototype"
+
+[[workflows.workflow]]
 name = "Radd Hub"
 author = "agent"
 
+[workflows.workflow.metadata]
+agentBlocking = false
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd radd-hub && python3 radd_hub.py run --skip-setup"
+args = "pip3 install -r requirements.txt -q 2>/dev/null | tail -1; cd radd-hub && python3 radd_hub.py run --skip-setup"
 waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
-
-[[workflows.workflow]]
-name = "artifacts/api-server: API Server"
-author = "agent"
-mode = "sequential"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-artifactId = "3B4_FFSkEVBkAeYMFRJ2e"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run dev"
-cwd = "./artifacts/api-server"
-waitForPort = 8080
-
-[workflows.workflow.tasks.env]
-PORT = "8080"
-
-[[workflows.workflow]]
-name = "artifacts/mockup-sandbox: Component Preview Server"
-author = "agent"
-mode = "sequential"
-
-[workflows.workflow.metadata]
-outputType = "webview"
-artifactId = "XegfDyZt7HqfW2Bb8Ghoy"
-isCanvasWorkflow = true
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/mockup-sandbox run dev"
-cwd = "./artifacts/mockup-sandbox"
-waitForPort = 8081
-
-[workflows.workflow.tasks.env]
-PORT = "8081"
-BASE_PATH = "/__mockup"
 
 [[workflows.workflow]]
 name = "Watch Prototype"
 author = "agent"
 
+[workflows.workflow.metadata]
+agentBlocking = false
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd _watch_prototype && PORT=8000 python run.py"
+args = "cd _watch_prototype && PORT=8000 python3 run.py"
 waitForPort = 8000
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [agent]
 stack = "PNPM_WORKSPACE"
@@ -79,15 +56,11 @@ expertMode = true
 
 [postMerge]
 path = "scripts/post-merge.sh"
-timeoutMs = 20000
+timeoutMs = 30000
 
 [[ports]]
 localPort = 5000
 externalPort = 5000
-
-[[ports]]
-localPort = 6000
-externalPort = 6000
 
 [[ports]]
 localPort = 8000
@@ -99,28 +72,7 @@ externalPort = 8080
 
 [[ports]]
 localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 3001
-
-[[ports]]
-localPort = 8083
 externalPort = 80
 
-[[ports]]
-localPort = 24571
-externalPort = 3000
-
-[[ports]]
-localPort = 24572
-externalPort = 3003
-
 [nix]
-packages = ["unzipNLS"]
-
-[userenv]
-
-[userenv.shared]
-GITHUB_TOKEN = "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"
+channel = "stable-25_05"

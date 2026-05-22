@@ -9,7 +9,7 @@
 # ║                                                                      ║
 # ║  REQUIREMENT FIRST: Add GITHUB_TOKEN to Replit Secrets              ║
 # ║    Sidebar → Secrets (lock icon) → + Add Secret                     ║
-# ║    Name: GITHUB_TOKEN   Value: (your token)                         ║
+# ║    Name: GITHUB_TOKEN   Value: (your token with repo permission)    ║
 # ╚══════════════════════════════════════════════════════════════════════╝
 
 set -e
@@ -31,7 +31,7 @@ if [ -z "$GITHUB_TOKEN" ]; then
     echo "  Fix:"
     echo "    1. Replit sidebar → Secrets (🔒 lock icon) → + Add Secret"
     echo "    2. Name:  GITHUB_TOKEN"
-    echo "    3. Value: (your GitHub personal access token)"
+    echo "    3. Value: (your GitHub personal access token with repo permission)"
     echo "    4. Run this script again"
     echo ""
     exit 1
@@ -57,7 +57,7 @@ echo "  ✓ Access confirmed: github.com/$GITHUB_USER/$GITHUB_REPO"
 # ── Step 2: Download project zip from GitHub ──────────────────────────────────
 echo ""
 echo "▶ Step 2/4 — Downloading project from GitHub..."
-echo "  (This may take 30-60 seconds — the repo is ~90MB)"
+echo "  (This may take 30–90 seconds)"
 echo ""
 
 curl -s -L \
@@ -68,11 +68,11 @@ curl -s -L \
 ZIP_SIZE=$(du -sh /tmp/jazzmax_github.zip | cut -f1)
 echo "  ✓ Downloaded: $ZIP_SIZE"
 
-# ── Step 3: Extract project files (Node.js — always available on Replit) ──────
+# ── Step 3: Extract project files using Node.js ───────────────────────────────
 echo ""
 echo "▶ Step 3/4 — Extracting project files..."
 
-# Install adm-zip quietly (tiny package, ~1 second)
+# Install adm-zip (tiny package, ~1 second, always available on Replit)
 cd /tmp && npm install adm-zip --save --silent 2>/dev/null; cd "$WORKSPACE"
 
 node << 'JSEOF'
@@ -80,18 +80,25 @@ const AdmZip = require('/tmp/node_modules/adm-zip');
 const fs = require('fs');
 const path = require('path');
 
+// Files that belong to the Replit platform — never overwrite these
+// NOTE: .replit is NOT protected so our project workflows auto-load correctly
 const PROTECTED = new Set([
-  '.replit', 'replit.nix', '.replitignore',
-  'pnpm-workspace.yaml', 'pnpm-lock.yaml', 'package.json',
-  'tsconfig.json', 'tsconfig.base.json',
+  'replit.nix',
+  '.replitignore',
+  'pnpm-lock.yaml',
 ]);
-const PROTECTED_DIRS = ['node_modules/', 'artifacts/', 'lib/', 'scripts/'];
-const SKIP_CONTAINS = ['local/browsers/', 'local/.chromium'];
+
+// Entire directories to skip (Replit/pnpm infra)
+const PROTECTED_DIRS = ['node_modules/'];
+
+// Paths that are too large or not needed at runtime
+const SKIP_CONTAINS = ['local/browsers/', 'local/.chromium', '.git/'];
 
 const dest = '/home/runner/workspace';
 const zip = new AdmZip('/tmp/jazzmax_github.zip');
 const entries = zip.getEntries();
 
+// GitHub zip has a top-level folder like "raddclub-jazzmax-app-abc123/"
 const prefix = entries[0].entryName.split('/')[0] + '/';
 let extracted = 0, skipped = 0;
 
@@ -102,6 +109,7 @@ for (const entry of entries) {
   const base = path.basename(rel);
   if (PROTECTED.has(base)) { skipped++; continue; }
   if (PROTECTED_DIRS.some(pd => rel.startsWith(pd))) { skipped++; continue; }
+
   const destPath = path.join(dest, rel);
   if (entry.isDirectory) {
     fs.mkdirSync(destPath, { recursive: true });
@@ -111,46 +119,57 @@ for (const entry of entries) {
     extracted++;
   }
 }
-console.log(`  ✓ Extracted ${extracted} files  (skipped ${skipped} protected/binary files)`);
+console.log(`  ✓ Extracted ${extracted} files  (skipped ${skipped} protected/system files)`);
 JSEOF
 
-# ── Step 4: Install Python packages (if Python is available) ──────────────────
+# ── Step 4: Install Python packages ──────────────────────────────────────────
 echo ""
-echo "▶ Step 4/4 — Python packages..."
+echo "▶ Step 4/4 — Installing Python packages..."
 
-if command -v python3 &>/dev/null && command -v pip3 &>/dev/null; then
-    pip3 install flask flask-cors pyjwt werkzeug requests -q
-    echo "  ✓ Python packages ready"
-elif command -v pip &>/dev/null; then
-    pip install flask flask-cors pyjwt werkzeug requests -q
-    echo "  ✓ Python packages ready"
+REQUIREMENTS="$WORKSPACE/requirements.txt"
+
+if [ -f "$REQUIREMENTS" ]; then
+    if command -v pip3 &>/dev/null; then
+        pip3 install -r "$REQUIREMENTS" -q && echo "  ✓ Python packages installed"
+    elif command -v pip &>/dev/null; then
+        pip install -r "$REQUIREMENTS" -q && echo "  ✓ Python packages installed"
+    else
+        echo "  ⚠  pip not found — packages will be installed when workflows start"
+        echo "     Or tell the Agent: \"Install python3 and pip, then restart workflows\""
+    fi
 else
-    echo "  ⚠  Python3/pip not found — the Replit Agent will install it automatically."
-    echo "  Just tell the Agent: \"Set up the Radd Hub and Watch Prototype workflows\""
+    if command -v pip3 &>/dev/null; then
+        pip3 install flask flask-cors pyjwt werkzeug requests -q
+        echo "  ✓ Core Python packages installed (no requirements.txt found)"
+    fi
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo "══════════════════════════════════════════════════════════════"
 echo ""
-echo "  ✅ FILES SETUP COMPLETE!"
+echo "  ✅ SETUP COMPLETE!"
 echo ""
 echo "  ──────────────────────────────────────────────────────────"
-echo "  NEXT STEPS (do these now):"
+echo "  NEXT STEPS:"
 echo "  ──────────────────────────────────────────────────────────"
 echo ""
-echo "  1. Add SESSION_SECRET to Replit Secrets (if not already):"
+echo "  1. REFRESH your browser (F5)"
+echo "     Workflows should appear automatically from the .replit file."
+echo ""
+echo "  2. If workflows don't appear, tell the Agent:"
+echo '     "Create Radd Hub workflow: cd radd-hub && python3 radd_hub.py run --skip-setup'
+echo '      (port 5000) and Watch Prototype: cd _watch_prototype && PORT=8000 python3 run.py'
+echo '      (port 8000)"'
+echo ""
+echo "  3. Add SESSION_SECRET to Replit Secrets if not already:"
 echo "     Sidebar → Secrets (🔒) → + Add Secret"
-echo "     Name: SESSION_SECRET   Value: (ask Muhammad Rehan)"
+echo "     Name: SESSION_SECRET   Value: (check your notes)"
 echo ""
-echo "  2. Tell the Replit Agent (type this in the chat):"
+echo "  4. Update jazzmax_config.json with this account's dev domain URL"
+echo "     See HANDOFF.md Step 5 for exact instructions."
 echo ""
-echo '     "Set up the Radd Hub and Watch Prototype workflows"'
-echo ""
-echo "     The agent will create both workflows automatically."
-echo ""
-echo "  3. Read JAZZMAX_MASTER.md → go to Section 14 (Task Checklist)"
-echo "     Find the first unchecked [ ] item → tell the agent to build it"
+echo "  5. Read HANDOFF.md for full details and troubleshooting."
 echo ""
 echo "══════════════════════════════════════════════════════════════"
 echo ""
