@@ -19,20 +19,19 @@ bp = Blueprint("app_history", __name__, url_prefix="/api/history")
 SECRET = os.environ.get("SESSION_SECRET", "dev-secret")
 
 
-def _ensure_table():
+def _ensure_table() -> None:
     """Create watch_history table if it doesn't exist yet."""
-    conn = db.get_conn()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS watch_history (
-            user_id          INTEGER NOT NULL,
-            file_id          TEXT    NOT NULL,
-            progress_seconds INTEGER DEFAULT 0,
-            completed        INTEGER DEFAULT 0,
-            updated_at       TEXT    DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (user_id, file_id)
-        )
-    """)
-    conn.commit()
+    with db.conn() as c:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS watch_history (
+                user_id          INTEGER NOT NULL,
+                file_id          TEXT    NOT NULL,
+                progress_seconds INTEGER DEFAULT 0,
+                completed        INTEGER DEFAULT 0,
+                updated_at       TEXT    DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, file_id)
+            )
+        """)
 
 
 def _get_user_id() -> int | None:
@@ -42,13 +41,16 @@ def _get_user_id() -> int | None:
         return None
     token = auth[7:]
     try:
-        payload = jwt.decode(token, SECRET, algorithms=["HS256"])
+        payload = jwt.decode(
+            token, SECRET, algorithms=["HS256"],
+            options={"verify_sub": False},
+        )
         return int(payload["sub"])
     except Exception:
         return None
 
 
-# ── Ensure table exists on first import ──────────────────────────────────────
+# ── Ensure table exists at import time ───────────────────────────────────────
 try:
     _ensure_table()
 except Exception as e:
@@ -59,7 +61,7 @@ except Exception as e:
 
 @bp.route("/<file_id>", methods=["POST"])
 def save_position(file_id: str):
-    """Save watch position for a file.
+    """Save/update watch position for a file.
 
     Body JSON:
       progress_seconds  int   current playback position in seconds
@@ -74,16 +76,16 @@ def save_position(file_id: str):
     completed = 1 if data.get("completed", False) else 0
 
     try:
-        conn = db.get_conn()
-        conn.execute("""
-            INSERT INTO watch_history (user_id, file_id, progress_seconds, completed, updated_at)
-            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-            ON CONFLICT(user_id, file_id) DO UPDATE SET
-                progress_seconds = excluded.progress_seconds,
-                completed        = excluded.completed,
-                updated_at       = excluded.updated_at
-        """, (user_id, file_id, progress, completed))
-        conn.commit()
+        with db.conn() as c:
+            c.execute("""
+                INSERT INTO watch_history
+                    (user_id, file_id, progress_seconds, completed, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(user_id, file_id) DO UPDATE SET
+                    progress_seconds = excluded.progress_seconds,
+                    completed        = excluded.completed,
+                    updated_at       = excluded.updated_at
+            """, (user_id, file_id, progress, completed))
         return jsonify({"ok": True})
     except Exception as e:
         log.error("save_position error: %s", e)
@@ -94,7 +96,7 @@ def save_position(file_id: str):
 def get_history():
     """Return user's last 50 watched items, newest first.
 
-    Response:
+    Response JSON:
       { "history": [ { file_id, progress_seconds, completed, updated_at } ] }
     """
     user_id = _get_user_id()
@@ -102,14 +104,14 @@ def get_history():
         return jsonify({"error": "Unauthorized"}), 401
 
     try:
-        conn = db.get_conn()
-        rows = conn.execute("""
-            SELECT file_id, progress_seconds, completed, updated_at
-            FROM watch_history
-            WHERE user_id = ?
-            ORDER BY updated_at DESC
-            LIMIT 50
-        """, (user_id,)).fetchall()
+        with db.conn() as c:
+            rows = c.execute("""
+                SELECT file_id, progress_seconds, completed, updated_at
+                FROM watch_history
+                WHERE user_id = ?
+                ORDER BY updated_at DESC
+                LIMIT 50
+            """, (user_id,)).fetchall()
 
         history = [
             {
