@@ -87,6 +87,83 @@ tap() {
   return 0
 }
 
+# Tap specifically a CLICKABLE node with this text.
+# Avoids hitting non-interactive headings that share the same text as a button
+# (e.g. the "Sign In" heading vs the "Sign In" ElevatedButton).
+tap_button() {
+  local text="$1"
+  dump_ui
+  local b
+  b=$(python3 - "$text" <<'PYEOF'
+import sys, xml.etree.ElementTree as ET
+target = sys.argv[1]
+try:
+    tree = ET.parse('/tmp/ui.xml')
+    # Prefer clickable="true" nodes; fall back to any match
+    best = ''
+    for n in tree.iter('node'):
+        t = n.get('text','')
+        d = n.get('content-desc','')
+        if target in t or target == d:
+            if n.get('clickable') == 'true':
+                print(n.get('bounds',''))
+                sys.exit(0)
+            elif not best:
+                best = n.get('bounds','')
+    print(best)
+except Exception:
+    pass
+PYEOF
+)
+  if [ -z "$b" ]; then
+    echo "  ⚠  tap_button: '$text' not found on screen"
+    return 1
+  fi
+  read -r cx cy <<< "$(center_of "$b")"
+  adb shell input tap "$cx" "$cy"
+  echo "  👆 Tapped button '$text' at ($cx,$cy)"
+  sleep 1
+  return 0
+}
+
+# Tap a text field by hint/label text (InputDecoration label)
+# Flutter TextFormField labels appear as content-desc or text in accessibility
+tap_field() {
+  local label="$1"
+  local fallback_x="${2:-540}"
+  local fallback_y="${3:-680}"
+  dump_ui
+  local b
+  b=$(python3 - "$label" <<'PYEOF'
+import sys, xml.etree.ElementTree as ET
+target = sys.argv[1]
+try:
+    tree = ET.parse('/tmp/ui.xml')
+    for n in tree.iter('node'):
+        t  = n.get('text','')
+        d  = n.get('content-desc','')
+        h  = n.get('hint','')
+        if target in t or target in d or target in h:
+            bounds = n.get('bounds','')
+            if bounds:
+                print(bounds)
+                sys.exit(0)
+except Exception:
+    pass
+PYEOF
+)
+  if [ -n "$b" ]; then
+    read -r cx cy <<< "$(center_of "$b")"
+    adb shell input tap "$cx" "$cy"
+    echo "  👆 Tapped field '$label' at ($cx,$cy)"
+  else
+    echo "  ⚠  tap_field: '$label' not found — using fallback ($fallback_x,$fallback_y)"
+    adb shell input tap "$fallback_x" "$fallback_y"
+  fi
+  sleep 1
+  return 0
+}
+
 # Tap by raw coordinates
 tap_xy() {
   adb shell input tap "$1" "$2"
@@ -271,25 +348,27 @@ if wait_for "Sign In" 20; then
 elif wait_for "Next" 10; then
   pass "App loaded — onboarding visible"
   # Tap Skip to dismiss all 4 onboarding pages at once → goes directly to login
-  if tap "Skip"; then
-    sleep 3
+  if tap_button "Skip"; then
+    sleep 4
     pass "Onboarding dismissed via Skip"
   else
     # Fallback: tap through all 4 pages (Next×3 then Get Started)
     tap "Next" || true; sleep 2
     tap "Next" || true; sleep 2
     tap "Next" || true; sleep 2
-    tap "Get Started" || true; sleep 3
+    tap_button "Get Started" || true; sleep 3
     warn "Used Next×3+GetStarted to dismiss onboarding"
   fi
+  # Wait for login screen to appear after Skip/GetStarted
+  wait_for "Sign In" 15 || true
   shot "02_after_onboarding"
 else
   warn "Could not confirm screen after launch"
   shot "02_unknown_screen"
 fi
 
-# Tap Register link
-if tap "Register"; then
+# Tap Register link (TextButton — clickable)
+if tap_button "Register"; then
   sleep 2
   shot "03_register_screen"
   if has "Create Account"; then
@@ -303,22 +382,21 @@ fi
 
 # Fill phone
 REG_PHONE="030$(date +%s | tail -c 7)"  # unique per second
-tap "Phone Number" || true; sleep 1
-adb shell input tap 540 680; sleep 1    # fallback coordinate
+tap_field "Phone Number" 540 680
 type_text "$REG_PHONE"
 
 # Fill password
-adb shell input tap 540 780; sleep 1
+tap_field "Password" 540 780
 type_text "$PASSWORD"
 
-# Fill confirm password
+# Fill confirm password (y=880 on 1920px screen)
 adb shell input tap 540 880; sleep 1
 type_text "$PASS_CONFIRM"
 
 shot "04_register_form_filled"
 
-# Submit — button text is "Create Account"
-if tap "Create Account"; then
+# Submit — ElevatedButton with text "Create Account"
+if tap_button "Create Account"; then
   sleep 5
   shot "05_after_register"
   if has "Movies" || has "Search movies" || has "No content"; then
@@ -345,7 +423,7 @@ sleep 3
 
 # Dismiss onboarding first (always shown on fresh install), then login
 if wait_for "Next" 12; then
-  tap "Skip" || true; sleep 3
+  tap_button "Skip" || true; sleep 4
 fi
 if wait_for "Sign In" 15; then
   pass "Login screen ready"
@@ -353,12 +431,11 @@ if wait_for "Sign In" 15; then
 fi
 
 # Tap Phone Number field and type
-tap "Phone Number" || true
-adb shell input tap 540 680; sleep 1
+tap_field "Phone Number" 540 680
 type_text "$PHONE"
 
 # Tap Password field
-adb shell input tap 540 780; sleep 1
+tap_field "Password" 540 780
 type_text "$PASSWORD"
 
 shot "07_login_filled"
@@ -366,8 +443,8 @@ shot "07_login_filled"
 # Dismiss keyboard
 adb shell input keyevent 111; sleep 1
 
-# Tap Sign In
-if tap "Sign In"; then
+# Tap Sign In button (ElevatedButton — clickable, not the heading)
+if tap_button "Sign In"; then
   sleep 6
   shot "08_after_login"
   if has "Movies" || has "TV Shows" || has "No content"; then
@@ -442,7 +519,7 @@ shot "12_tapped_first_card"
 if has "Watch Now"; then
   pass "Detail sheet opened with 'Watch Now' button"
   shot "12b_detail_sheet"
-  tap "Watch Now"; sleep 5
+  tap_button "Watch Now"; sleep 5
   shot "13_player_loading"
   if has "Loading" || has "Buffering"; then
     pass "Player opened — loading video"
@@ -497,7 +574,7 @@ if has "TV Shows"; then
     shot "16b_show_detail"
     # Record which fileId is being played via logcat
     echo "  === Play Episode 1 ==="
-    tap "Watch Now"; sleep 5
+    tap_button "Watch Now"; sleep 5
     shot "17_episode1_player"
     if has "Error" || has "Failed"; then
       warn "Episode 1 player shows error"
@@ -653,13 +730,13 @@ sleep 4
 
 # Dismiss onboarding → login screen
 if wait_for "Next" 12; then
-  tap "Skip" || true; sleep 3
+  tap_button "Skip" || true; sleep 4
 fi
 wait_for "Sign In" 15 || true
 shot "24_guest_login_screen"
 
-# Tap Continue as Guest
-if tap "Continue as Guest"; then
+# Tap Continue as Guest (OutlinedButton — clickable)
+if tap_button "Continue as Guest"; then
   sleep 6
   shot "25_guest_home"
   if has "Movies" || has "TV Shows" || has "No content"; then
@@ -673,7 +750,7 @@ if tap "Continue as Guest"; then
   shot "26_guest_tapped_card"
 
   if has "Watch Now"; then
-    tap "Watch Now"; sleep 5
+    tap_button "Watch Now"; sleep 5
     shot "27_guest_player"
     pass "Guest player opened — 10-min timer now running (verified via logcat)"
   else
@@ -721,16 +798,15 @@ sleep 4
 
 # Dismiss onboarding then login
 if wait_for "Next" 12; then
-  tap "Skip" || true; sleep 3
+  tap_button "Skip" || true; sleep 4
 fi
 if wait_for "Sign In" 15; then
-  tap "Phone Number" || true
-  adb shell input tap 540 680; sleep 1
+  tap_field "Phone Number" 540 680
   type_text "$PHONE"
-  adb shell input tap 540 780; sleep 1
+  tap_field "Password" 540 780
   type_text "$PASSWORD"
   adb shell input keyevent 111; sleep 1
-  tap "Sign In"; sleep 6
+  tap_button "Sign In"; sleep 6
 fi
 
 if has "Movies" || has "TV Shows" || has "No content"; then
