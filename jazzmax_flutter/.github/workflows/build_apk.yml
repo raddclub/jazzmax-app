@@ -11,14 +11,24 @@ jobs:
   build:
     name: Build & Sign APK
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
+    defaults:
+      run:
+        working-directory: jazzmax_flutter   # ← ALL flutter commands run here
 
     steps:
       # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Flutter ───────────────────────────────────────────────────────────
+      # ── 2. Java (needed by Gradle) ────────────────────────────────────────────
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ── 3. Flutter ───────────────────────────────────────────────────────────
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -29,53 +39,66 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
-      # ── 3. Dependencies ──────────────────────────────────────────────────────
-      - name: Get Flutter packages
+      # ── 4. Dependencies ──────────────────────────────────────────────────────
+      - name: Get Flutter dependencies
         run: flutter pub get
 
-      # ── 4. Build debug APK ───────────────────────────────────────────────────
+      # ── 5. Analyze (non-blocking) ─────────────────────────────────────────────
+      - name: Flutter analyze
+        run: flutter analyze --no-fatal-warnings
+        continue-on-error: true
+
+      # ── 6. Build debug APK ────────────────────────────────────────────────────
       - name: Build debug APK
         run: flutter build apk --debug --no-tree-shake-icons
         env:
           FLUTTER_BUILD_NUMBER: ${{ github.run_number }}
 
-      # ── 5. Build release APK (signed) ────────────────────────────────────────
+      # ── 7. Build release APK (only if keystore secrets are set) ──────────────
       - name: Decode keystore
-        if: secrets.KEYSTORE_BASE64 != ''
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/jazzmax.keystore
         continue-on-error: true
 
       - name: Build release APK
-        if: secrets.KEYSTORE_BASE64 != ''
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         run: |
           flutter build apk --release --no-tree-shake-icons \
-            --dart-define=KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }} \
-            --dart-define=KEY_ALIAS=${{ secrets.KEY_ALIAS }} \
-            --dart-define=KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}
+            --dart-define=KEYSTORE_PASSWORD="${{ secrets.KEYSTORE_PASSWORD }}" \
+            --dart-define=KEY_ALIAS="${{ secrets.KEY_ALIAS }}" \
+            --dart-define=KEY_PASSWORD="${{ secrets.KEY_PASSWORD }}"
         continue-on-error: true
 
-      # ── 6. Upload APK artifacts ──────────────────────────────────────────────
+      # ── 8. Print APK size ─────────────────────────────────────────────────────
+      - name: APK info
+        run: |
+          echo "=== Debug APK ==="
+          ls -lh build/app/outputs/flutter-apk/app-debug.apk || echo "Debug APK not found"
+          echo "=== Release APK ==="
+          ls -lh build/app/outputs/flutter-apk/app-release.apk 2>/dev/null || echo "Release APK not built"
+
+      # ── 9. Upload debug APK as artifact ──────────────────────────────────────
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: jazzmax-debug-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          path: jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 14
 
       - name: Upload release APK (if built)
         uses: actions/upload-artifact@v4
-        if: secrets.KEYSTORE_BASE64 != ''
+        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
         with:
           name: jazzmax-release-${{ github.run_number }}
-          path: build/app/outputs/flutter-apk/app-release.apk
+          path: jazzmax_flutter/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
         continue-on-error: true
 
-      # ── 7. Create GitHub Release on main push ────────────────────────────────
+      # ── 10. Create GitHub Release on main push ────────────────────────────────
       - name: Create Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "JazzMAX Build #${{ github.run_number }}"
@@ -84,52 +107,55 @@ jobs:
             **Branch:** main
             **Date:** ${{ github.event.head_commit.timestamp }}
 
-            ### Install
-            Download `jazzmax-debug-*.apk` and install on your Android device.
-            Enable "Install from unknown sources" in Android settings.
-          files: build/app/outputs/flutter-apk/app-debug.apk
+            ### How to install
+            1. Download `app-debug.apk` below
+            2. Transfer to your Android phone
+            3. Enable **Install from unknown sources** in Settings → Security
+            4. Open the APK file and install
+          files: jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      # ── 8. Deploy to Oracle emulator (if SSH key is set) ─────────────────────
+      # ── 11. Oracle emulator test (if ORACLE_SSH_KEY secret is set) ────────────
       - name: Install APK on Oracle emulator
-        if: secrets.ORACLE_SSH_KEY != ''
+        if: ${{ secrets.ORACLE_SSH_KEY != '' }}
+        working-directory: ${{ github.workspace }}   # reset to repo root for scp
         run: |
-          # Write SSH key
-          echo "${{ secrets.ORACLE_SSH_KEY }}" > /tmp/oracle_key
+          printf '%s' "${{ secrets.ORACLE_SSH_KEY }}" > /tmp/oracle_key
           chmod 600 /tmp/oracle_key
 
           ORACLE_IP="92.4.95.252"
-          APK_PATH="build/app/outputs/flutter-apk/app-debug.apk"
+          APK="jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk"
 
           echo "=== Copying APK to Oracle server ==="
           scp -i /tmp/oracle_key \
               -o StrictHostKeyChecking=no \
               -o ConnectTimeout=30 \
-              "$APK_PATH" \
+              "$APK" \
               ubuntu@$ORACLE_IP:/tmp/jazzmax-latest.apk
 
-          echo "=== Installing APK on emulator ==="
+          echo "=== Running emulator test ==="
           ssh -i /tmp/oracle_key \
               -o StrictHostKeyChecking=no \
-              -o ConnectTimeout=30 \
+              -o ConnectTimeout=60 \
               ubuntu@$ORACLE_IP \
               'bash /opt/jazzmax/scripts/emulator_test.sh /tmp/jazzmax-latest.apk'
 
           echo "=== Downloading screenshots ==="
+          mkdir -p /tmp/screenshots
           scp -i /tmp/oracle_key \
               -o StrictHostKeyChecking=no \
-              ubuntu@$ORACLE_IP:/tmp/jazzmax_screenshots/*.png \
-              /tmp/screenshots/ 2>/dev/null || true
+              ubuntu@$ORACLE_IP:"/tmp/jazzmax_screenshots/*.png" \
+              /tmp/screenshots/ 2>/dev/null || echo "No screenshots available"
 
           rm -f /tmp/oracle_key
         continue-on-error: true
 
       - name: Upload emulator screenshots
-        if: secrets.ORACLE_SSH_KEY != ''
+        if: ${{ secrets.ORACLE_SSH_KEY != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: emulator-screenshots-${{ github.run_number }}
