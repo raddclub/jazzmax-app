@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -54,6 +56,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Seek flash
   bool _showSeekFwd = false;
   bool _showSeekBwd = false;
+
+  // Subtitles
+  SubtitleTrack? _currentSubtitle;
+  String? _externalSrtPath;
 
   // Guest mode
   bool _isGuest = false;
@@ -353,6 +359,133 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  // ── Subtitles ─────────────────────────────────────────────────────────────
+
+  void _showSubtitles() {
+    final builtIn = _player.state.tracks.subtitle
+        .where((t) => t.id != 'no' && t.id != 'auto')
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'Subtitles',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+
+            // Off option
+            ListTile(
+              leading: Icon(
+                _currentSubtitle == null
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: AppColors.primary,
+              ),
+              title: const Text('Off',
+                  style: TextStyle(color: AppColors.textPrimary)),
+              onTap: () {
+                _player.setSubtitleTrack(SubtitleTrack.no());
+                setState(() { _currentSubtitle = null; _externalSrtPath = null; });
+                Navigator.pop(context);
+              },
+            ),
+
+            // Built-in tracks from MKV/file
+            ...builtIn.map((t) {
+              final isCurrent = _currentSubtitle?.id == t.id;
+              final label = t.title != null && t.title!.isNotEmpty
+                  ? t.title!
+                  : (t.language != null && t.language!.isNotEmpty
+                      ? t.language!.toUpperCase()
+                      : 'Track ${t.id}');
+              return ListTile(
+                leading: Icon(
+                  isCurrent
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: AppColors.primary,
+                ),
+                title: Text(label,
+                    style: const TextStyle(color: AppColors.textPrimary)),
+                onTap: () {
+                  _player.setSubtitleTrack(t);
+                  setState(() { _currentSubtitle = t; _externalSrtPath = null; });
+                  Navigator.pop(context);
+                },
+              );
+            }),
+
+            // External .srt file option
+            ListTile(
+              leading: Icon(
+                _externalSrtPath != null
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+                color: AppColors.primary,
+              ),
+              title: Text(
+                _externalSrtPath != null
+                    ? _externalSrtPath!.split('/').last
+                    : 'Load .srt file from device...',
+                style: TextStyle(
+                  color: _externalSrtPath != null
+                      ? AppColors.textPrimary
+                      : AppColors.textMuted,
+                  fontStyle: _externalSrtPath != null
+                      ? FontStyle.normal
+                      : FontStyle.italic,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.folder_open_rounded,
+                  color: AppColors.textMuted, size: 18),
+              onTap: () async {
+                Navigator.pop(context);
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['srt', 'ass', 'ssa', 'vtt'],
+                  allowMultiple: false,
+                );
+                if (result != null && result.files.single.path != null) {
+                  final path = result.files.single.path!;
+                  if (File(path).existsSync()) {
+                    final track = SubtitleTrack.uri('file://$path');
+                    _player.setSubtitleTrack(track);
+                    if (mounted) {
+                      setState(() {
+                        _currentSubtitle = track;
+                        _externalSrtPath = path;
+                      });
+                    }
+                  }
+                }
+              },
+            ),
+
+            const SizedBox(height: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Aspect ratio ──────────────────────────────────────────────────────────
 
   void _cycleAspectRatio() {
@@ -610,6 +743,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   color: Colors.white, size: 20),
               tooltip: 'Audio Track',
               onPressed: _showAudioTracks,
+            ),
+            // Subtitle selector
+            IconButton(
+              icon: Icon(
+                Icons.subtitles_rounded,
+                color: _currentSubtitle != null
+                    ? AppColors.primary
+                    : Colors.white,
+                size: 20,
+              ),
+              tooltip: 'Subtitles',
+              onPressed: _showSubtitles,
             ),
             // Aspect ratio
             TextButton(
