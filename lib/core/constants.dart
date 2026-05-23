@@ -5,7 +5,6 @@ class AppConstants {
   static const String tagline = 'Pakistan ka entertainment, data-free';
 
   /// Runtime-mutable: updated by RemoteConfig.fetch() on every app start.
-  /// To switch servers, edit jazzmax_config.json in GitHub — no APK rebuild needed.
   static String apiBaseUrl =
       'https://3a8b5394-ca6e-4969-becf-58950da98c8b-00-sta8fz28dnzk.pike.replit.dev';
 
@@ -16,7 +15,7 @@ class AppConstants {
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'jazzmax_catalog.db';
-  static const int catalogDbVersion = 5;
+  static const int catalogDbVersion = 6;
 }
 
 class AppColors {
@@ -42,6 +41,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String player = '/player';
   static const String detail = '/detail';
+  static const String search = '/search';
   static const String subscription = '/subscription';
   static const String profile = '/profile';
   static const String downloads = '/downloads';
