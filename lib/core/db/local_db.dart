@@ -7,7 +7,8 @@ import '../../models/catalog_item.dart';
 /// Shared local SQLite database for:
 /// - Catalog (titles + episodes)
 /// - Watch history / resume positions
-/// - Download metadata
+/// - Downloads metadata
+/// - Watchlist (saved favorites)
 /// Stream URLs are NEVER stored here — always fetched live.
 class LocalDb {
   static Database? _db;
@@ -23,7 +24,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -67,6 +68,9 @@ class LocalDb {
     await db.execute('''
       CREATE TABLE watch_positions (
         file_id     TEXT PRIMARY KEY,
+        title_id    INTEGER,
+        title_text  TEXT,
+        poster_url  TEXT,
         position_ms INTEGER DEFAULT 0,
         duration_ms INTEGER DEFAULT 0,
         updated_at  INTEGER DEFAULT 0
@@ -82,6 +86,22 @@ class LocalDb {
         progress      REAL DEFAULT 0.0,
         file_size     INTEGER DEFAULT 0,
         downloaded_at INTEGER DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE watchlist (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        title_id    INTEGER NOT NULL UNIQUE,
+        title       TEXT NOT NULL,
+        year        INTEGER,
+        media_type  TEXT,
+        description TEXT,
+        rating      REAL,
+        genres      TEXT,
+        poster_url  TEXT,
+        is_free     INTEGER DEFAULT 0,
+        file_id     TEXT,
+        added_at    INTEGER DEFAULT 0
       )
     ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
@@ -114,12 +134,39 @@ class LocalDb {
       ''');
     }
     if (oldV < 4) {
-      // Add file_id column to titles so movies can be played directly
       try {
         await db.execute('ALTER TABLE titles ADD COLUMN file_id TEXT');
-      } catch (_) {
-        // Column may already exist on some upgrade paths — safe to ignore
-      }
+      } catch (_) {}
+    }
+    if (oldV < 5) {
+      // Add extra columns to watch_positions for richer history display
+      try {
+        await db.execute('ALTER TABLE watch_positions ADD COLUMN title_id INTEGER');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE watch_positions ADD COLUMN title_text TEXT');
+      } catch (_) {}
+      try {
+        await db.execute('ALTER TABLE watch_positions ADD COLUMN poster_url TEXT');
+      } catch (_) {}
+
+      // Create watchlist table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS watchlist (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          title_id    INTEGER NOT NULL UNIQUE,
+          title       TEXT NOT NULL,
+          year        INTEGER,
+          media_type  TEXT,
+          description TEXT,
+          rating      REAL,
+          genres      TEXT,
+          poster_url  TEXT,
+          is_free     INTEGER DEFAULT 0,
+          file_id     TEXT,
+          added_at    INTEGER DEFAULT 0
+        )
+      ''');
     }
   }
 
@@ -128,15 +175,29 @@ class LocalDb {
   static Future<List<CatalogItem>> getMovies() async {
     final db = await instance;
     final rows = await db.query('titles',
-        where: 'media_type = ?', whereArgs: ['movie'], orderBy: 'title ASC');
+        where: 'media_type = ?', whereArgs: ['movie'], orderBy: 'rating DESC, title ASC');
     return rows.map(_rowToItem).toList();
   }
 
   static Future<List<CatalogItem>> getShows() async {
     final db = await instance;
     final rows = await db.query('titles',
-        where: 'media_type = ?', whereArgs: ['show'], orderBy: 'title ASC');
+        where: 'media_type = ?', whereArgs: ['show'], orderBy: 'rating DESC, title ASC');
     return rows.map(_rowToItem).toList();
+  }
+
+  static Future<List<CatalogItem>> getFreeItems() async {
+    final db = await instance;
+    final rows = await db.query('titles',
+        where: 'is_free = 1', orderBy: 'rating DESC, title ASC', limit: 20);
+    return rows.map(_rowToItem).toList();
+  }
+
+  static Future<CatalogItem?> getTitle(int id) async {
+    final db = await instance;
+    final rows = await db.query('titles', where: 'id = ?', whereArgs: [id]);
+    if (rows.isEmpty) return null;
+    return _rowToItem(rows.first);
   }
 
   static Future<List<CatalogItem>> searchTitles(String query) async {
@@ -144,7 +205,7 @@ class LocalDb {
     final rows = await db.query('titles',
         where: 'title LIKE ?',
         whereArgs: ['%$query%'],
-        orderBy: 'title ASC',
+        orderBy: 'rating DESC, title ASC',
         limit: 50);
     return rows.map(_rowToItem).toList();
   }
@@ -224,7 +285,7 @@ class LocalDb {
     return (result.first['c'] as int?) ?? 0;
   }
 
-  // ── Watch Positions (resume) ───────────────────────────────────────────────
+  // ── Watch Positions (resume + history) ────────────────────────────────────
 
   static Future<int> getSavedPosition(String fileId) async {
     final db = await instance;
@@ -234,13 +295,22 @@ class LocalDb {
     return rows.first['position_ms'] as int? ?? 0;
   }
 
-  static Future<void> savePosition(String fileId, int positionMs,
-      {int durationMs = 0}) async {
+  static Future<void> savePosition(
+    String fileId,
+    int positionMs, {
+    int durationMs = 0,
+    int? titleId,
+    String? titleText,
+    String? posterUrl,
+  }) async {
     final db = await instance;
     await db.insert(
       'watch_positions',
       {
         'file_id': fileId,
+        'title_id': titleId,
+        'title_text': titleText,
+        'poster_url': posterUrl,
         'position_ms': positionMs,
         'duration_ms': durationMs,
         'updated_at': DateTime.now().millisecondsSinceEpoch,
@@ -253,6 +323,86 @@ class LocalDb {
     final db = await instance;
     await db.delete('watch_positions',
         where: 'file_id = ?', whereArgs: [fileId]);
+  }
+
+  static Future<void> clearAllPositions() async {
+    final db = await instance;
+    await db.delete('watch_positions');
+  }
+
+  /// Get watch history sorted by most recent, with title info joined
+  static Future<List<Map<String, dynamic>>> getWatchHistory({int limit = 50}) async {
+    final db = await instance;
+    final rows = await db.rawQuery('''
+      SELECT wp.file_id, wp.position_ms, wp.duration_ms, wp.updated_at,
+             COALESCE(wp.title_text, t.title) as title,
+             COALESCE(wp.poster_url, t.poster_url) as poster_url,
+             wp.title_id
+      FROM watch_positions wp
+      LEFT JOIN titles t ON t.file_id = wp.file_id OR t.id = wp.title_id
+      WHERE wp.position_ms > 0
+      ORDER BY wp.updated_at DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows;
+  }
+
+  /// Get items that have been partially watched (for "Continue Watching")
+  static Future<List<Map<String, dynamic>>> getContinueWatching({int limit = 10}) async {
+    final db = await instance;
+    final rows = await db.rawQuery('''
+      SELECT wp.file_id, wp.position_ms, wp.duration_ms, wp.updated_at,
+             COALESCE(wp.title_text, t.title) as title,
+             COALESCE(wp.poster_url, t.poster_url) as poster_url,
+             t.id as title_id, t.media_type, t.year, t.rating, t.genres, t.is_free
+      FROM watch_positions wp
+      LEFT JOIN titles t ON t.file_id = wp.file_id OR t.id = wp.title_id
+      WHERE wp.position_ms > 0
+        AND (wp.duration_ms = 0 OR wp.position_ms < wp.duration_ms * 0.95)
+      ORDER BY wp.updated_at DESC
+      LIMIT ?
+    ''', [limit]);
+    return rows;
+  }
+
+  // ── Watchlist ─────────────────────────────────────────────────────────────
+
+  static Future<List<CatalogItem>> getWatchlist() async {
+    final db = await instance;
+    final rows = await db.query('watchlist', orderBy: 'added_at DESC');
+    return rows.map(_watchlistRowToItem).toList();
+  }
+
+  static Future<Set<int>> getWatchlistIds() async {
+    final db = await instance;
+    final rows = await db.query('watchlist', columns: ['title_id']);
+    return rows.map((r) => r['title_id'] as int).toSet();
+  }
+
+  static Future<void> addToWatchlist(CatalogItem item) async {
+    final db = await instance;
+    await db.insert(
+      'watchlist',
+      {
+        'title_id': item.id,
+        'title': item.title,
+        'year': item.year,
+        'media_type': item.mediaType,
+        'description': item.description,
+        'rating': item.rating,
+        'genres': item.genres,
+        'poster_url': item.posterUrl,
+        'is_free': item.isFree ? 1 : 0,
+        'file_id': item.fileId,
+        'added_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> removeFromWatchlist(int titleId) async {
+    final db = await instance;
+    await db.delete('watchlist', where: 'title_id = ?', whereArgs: [titleId]);
   }
 
   // ── Downloads ─────────────────────────────────────────────────────────────
@@ -308,13 +458,14 @@ class LocalDb {
 
   static Future<void> deleteDownload(String fileId) async {
     final db = await instance;
-    // Delete local file too
     final rows = await db.query('downloads',
         where: 'file_id = ?', whereArgs: [fileId]);
     if (rows.isNotEmpty) {
       final path = rows.first['local_path'] as String?;
       if (path != null) {
-        try { await File(path).delete(); } catch (_) {}
+        try {
+          await File(path).delete();
+        } catch (_) {}
       }
     }
     await db.delete('downloads', where: 'file_id = ?', whereArgs: [fileId]);
@@ -334,6 +485,21 @@ class LocalDb {
       posterUrl: row['poster_url'] as String?,
       isFree: (row['is_free'] as int? ?? 0) == 1,
       dbVersion: row['db_version'] as int? ?? 0,
+      fileId: row['file_id'] as String?,
+    );
+  }
+
+  static CatalogItem _watchlistRowToItem(Map<String, dynamic> row) {
+    return CatalogItem(
+      id: row['title_id'] as int,
+      title: row['title'] as String,
+      year: row['year'] as int?,
+      mediaType: row['media_type'] as String? ?? 'movie',
+      description: row['description'] as String?,
+      rating: (row['rating'] as num?)?.toDouble(),
+      genres: row['genres'] as String?,
+      posterUrl: row['poster_url'] as String?,
+      isFree: (row['is_free'] as int? ?? 0) == 1,
       fileId: row['file_id'] as String?,
     );
   }
