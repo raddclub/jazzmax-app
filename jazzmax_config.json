@@ -1,1 +1,4 @@
-{"api_base_url":"https://69e61727-e90a-4be9-878e-93d6505ff9ab-00-kxjqv1u8qg32.pike.replit.dev"}
+{
+  "api_base_url": "http://92.4.95.252",
+  "_comment": "Oracle production server — permanent IP. Edit only this file to switch servers, no APK rebuild needed."
+}
