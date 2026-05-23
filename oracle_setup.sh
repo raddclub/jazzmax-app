@@ -174,6 +174,43 @@ sudo ufw allow 80/tcp 2>/dev/null || true
 sudo ufw allow 8000/tcp 2>/dev/null || true
 sudo ufw --force enable 2>/dev/null || true
 
+# ── Step 6b: Publish all titles in DB ────────────────────────
+echo -e "${CYAN}[6b/7] Publishing all titles in database...${NC}"
+sqlite3 "$PROJECT_DIR/radd-hub/data/jazzmax.db" \
+  "UPDATE titles SET is_published=1;" 2>/dev/null \
+  && echo -e "  ${GREEN}✓ All titles published (is_published=1)${NC}" \
+  || echo -e "  ${YELLOW}⚠ sqlite3 not found — run manually later:${NC}
+     sqlite3 $PROJECT_DIR/radd-hub/data/jazzmax.db 'UPDATE titles SET is_published=1;'"
+
+# Create test user if not exists
+echo -e "${CYAN}[6c/7] Ensuring test account exists (03001234567 / test123)...${NC}"
+python3 - <<'PYEOF'
+import sys, os
+sys.path.insert(0, '/opt/jazzmax/radd-hub')
+sys.path.insert(0, '/opt/jazzmax/_watch_prototype')
+os.environ.setdefault('RADD_HUB_DATA_DIR', '/opt/jazzmax/radd-hub/data')
+from hub import config, db
+config.load_env()
+db.init_db()
+import sqlite3
+from hub.db import get_db
+try:
+    with get_db() as conn:
+        row = conn.execute("SELECT id FROM app_users WHERE phone=?", ("03001234567",)).fetchone()
+        if row:
+            print("  ✓ Test account already exists")
+        else:
+            import hashlib, hmac
+            pw_hash = hashlib.sha256(b"test123").hexdigest()
+            conn.execute("INSERT INTO app_users (phone, password_hash, name) VALUES (?,?,?)",
+                         ("03001234567", pw_hash, "Test User"))
+            conn.commit()
+            print("  ✓ Test account created (03001234567 / test123)")
+except Exception as e:
+    print(f"  ⚠ Could not create test account: {e}")
+    print("    Run setup_new_account.sh on Replit to create it from there")
+PYEOF
+
 # ── Step 7: Android Emulator (optional — checks KVM first) ───
 echo -e "${CYAN}[7/7] Checking Android emulator support...${NC}"
 if [ -e /dev/kvm ]; then
