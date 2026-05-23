@@ -75,7 +75,7 @@ jobs:
           avd-name: jazzmax_test_avd
           ram-size: 2048M
           heap-size: 512M
-          emulator-options: -no-snapshot -no-audio -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot -no-audio -no-boot-anim -camera-back none -gpu swiftshader_indirect
           disable-animations: true
           script: |
             echo "════════════════════════════════════"
