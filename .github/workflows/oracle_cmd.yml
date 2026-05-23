@@ -1,0 +1,105 @@
+name: Oracle Run Command
+
+on:
+  workflow_dispatch:
+    inputs:
+      cmd:
+        description: 'Command to run on Oracle (leave blank for full diagnostics)'
+        required: false
+        default: ''
+      fix_ufw:
+        description: 'Set to true to flush iptables and open all ports'
+        required: false
+        default: 'false'
+
+jobs:
+  run-on-oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Write and fix SSH key
+        run: |
+          printf '%s' "${{ secrets.ORACLE_SSH_KEY }}" > /tmp/ok
+          chmod 600 /tmp/ok
+          python3 - <<'PY'
+          import re
+          with open('/tmp/ok') as f:
+              k = f.read()
+          for begin, end in [
+              ('-----BEGIN OPENSSH PRIVATE KEY-----', '-----END OPENSSH PRIVATE KEY-----'),
+              ('-----BEGIN RSA PRIVATE KEY-----', '-----END RSA PRIVATE KEY-----'),
+          ]:
+              if begin.replace(' ','') in k.replace(' ','').replace('\n',''):
+                  body = k.replace(begin,'').replace(end,'').replace(' ','').replace('\n','')
+                  wrapped = '\n'.join(body[i:i+70] for i in range(0,len(body),70))
+                  k = begin + '\n' + wrapped + '\n' + end + '\n'
+                  break
+          with open('/tmp/ok','w') as f:
+              f.write(k)
+          print('Key ready, lines:', k.count('\n'))
+          PY
+
+      - name: Fix UFW / iptables
+        if: ${{ inputs.fix_ufw == 'true' }}
+        run: |
+          ssh -i /tmp/ok -o StrictHostKeyChecking=no -o ConnectTimeout=30 ubuntu@92.4.95.252 bash <<'REMOTE'
+          echo "=== Flushing iptables INPUT chain ==="
+          sudo iptables -P INPUT ACCEPT
+          sudo iptables -F INPUT
+          sudo iptables -P FORWARD ACCEPT
+          sudo iptables -F FORWARD
+          echo "=== UFW allow all ==="
+          sudo ufw allow 22/tcp
+          sudo ufw allow 80/tcp
+          sudo ufw allow 8000/tcp
+          sudo ufw allow 5000/tcp
+          sudo ufw --force enable
+          sudo ufw status
+          echo "=== Done ==="
+          REMOTE
+
+      - name: Full diagnostics (default)
+        if: ${{ inputs.cmd == '' }}
+        run: |
+          ssh -i /tmp/ok -o StrictHostKeyChecking=no -o ConnectTimeout=30 ubuntu@92.4.95.252 bash <<'REMOTE'
+          echo "=== UPTIME ==="
+          uptime
+          echo "=== UFW STATUS ==="
+          sudo ufw status
+          echo "=== IPTABLES INPUT ==="
+          sudo iptables -L INPUT -n --line-numbers 2>/dev/null | head -20
+          echo "=== SUPERVISOR SERVICES ==="
+          sudo supervisorctl status 2>/dev/null || echo "supervisorctl not found"
+          echo "=== PORT LISTENERS ==="
+          sudo ss -tlnp 2>/dev/null | grep LISTEN || netstat -tlnp 2>/dev/null | grep LISTEN
+          echo "=== API HEALTH ==="
+          curl -s http://localhost:8000/api/catalog/version || echo "Watch API not responding"
+          echo "=== DOWNLOAD QUEUE ==="
+          curl -s -c /tmp/c.txt -X POST \
+            -d "username=admin&password=6LQRmtOM5d1PETSI" \
+            http://localhost:5000/auth/login -L > /dev/null 2>&1
+          curl -s -b /tmp/c.txt http://localhost:5000/stream/api/queue | \
+            python3 -c "
+          import sys,json
+          try:
+            d=json.load(sys.stdin)
+            jobs=d if isinstance(d,list) else d.get('jobs',d.get('queue',[]))
+            print(f'Queue: {len(jobs)} jobs')
+            for j in jobs:
+              print(' ', j.get('status','?'), j.get('title',j.get('movie_clean','?')), str(j.get('progress','')))
+          except: print('Queue parse failed')
+          " 2>/dev/null || echo "Queue check failed"
+          echo "=== DISK ==="
+          df -h /
+          echo "=== DONE ==="
+          REMOTE
+
+      - name: Custom command
+        if: ${{ inputs.cmd != '' }}
+        run: |
+          ssh -i /tmp/ok -o StrictHostKeyChecking=no -o ConnectTimeout=30 ubuntu@92.4.95.252 \
+            '${{ inputs.cmd }}'
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/ok
