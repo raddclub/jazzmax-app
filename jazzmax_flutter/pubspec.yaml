@@ -46,6 +46,10 @@ dependencies:
   # Unique Android device ID
   device_info_plus: ^9.1.2
 
+  # Pin to old Gradle-compatible version (9.x uses new declarative plugin block
+  # that conflicts with our imperative settings.gradle setup)
+  package_info_plus: ^8.1.3
+
   # Network connectivity check
   connectivity_plus: ^6.0.2
 
