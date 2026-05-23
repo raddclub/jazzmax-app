@@ -49,7 +49,7 @@ jobs:
           find apk/ -name "*.apk" | sort
           echo "========================"
 
-          # MUST use x86_64 APK — emulator is x86_64, aosp_atd has no ARM translation.
+          # Prefer x86_64 — emulator is x86_64, aosp_atd has no ARM translation.
           # Installing arm64 on x86_64 without Houdini → INSTALL_FAILED_NO_MATCHING_ABIS.
           APK_PATH=$(find apk/ -name "*x86_64*.apk" | head -1)
           if [ -z "$APK_PATH" ]; then
@@ -67,113 +67,7 @@ jobs:
       - name: Create output directories
         run: mkdir -p screenshots logs
 
-      # ── Write test script to a file ───────────────────────────────────────
-      # The reactivecircus emulator runner executes each line of `script:` as
-      # a separate `sh -c <line>`, so multi-line if/then/fi constructs fail.
-      # Solution: write the full bash script to a file and call it from script:.
-      - name: Write emulator test script
-        run: |
-          APK_PATH="${{ steps.apk.outputs.path }}"
-          cat > test_jazzmax.sh << 'SCRIPT_EOF'
-          #!/usr/bin/env bash
-          set -euo pipefail
-          APK_PATH="$1"
-
-          echo "════════════════════════════════════"
-          echo "  JazzMAX Emulator Test"
-          echo "════════════════════════════════════"
-
-          # Wait for emulator to be ready
-          echo "⏳ Waiting for emulator..."
-          adb wait-for-device
-          adb shell input keyevent 82
-
-          # Install APK
-          echo ""
-          echo "📦 Installing APK: $APK_PATH"
-          adb install -r "$APK_PATH"
-          echo "✅ APK installed"
-
-          # Start logcat capture in background
-          adb logcat -c
-          adb logcat > logs/logcat_full.txt &
-          LOGCAT_PID=$!
-
-          # Launch the app
-          echo ""
-          echo "🚀 Launching JazzMAX..."
-          adb shell am start -n com.jazzmax.app/.MainActivity
-          echo "✅ App launched"
-
-          # Screenshot 1: Splash screen (5s)
-          sleep 5
-          echo "📸 Screenshot 1: Splash screen"
-          adb exec-out screencap -p > screenshots/01_splash.png
-          echo "✅ Splash screenshot saved"
-
-          # Screenshot 2: Home / loading state (20s)
-          sleep 15
-          echo "📸 Screenshot 2: Home screen"
-          adb exec-out screencap -p > screenshots/02_home.png
-          echo "✅ Home screenshot saved"
-
-          # Screenshot 3: After catalog loads (30s)
-          sleep 10
-          echo "📸 Screenshot 3: Catalog loaded"
-          adb exec-out screencap -p > screenshots/03_catalog.png
-          echo "✅ Catalog screenshot saved"
-
-          # Stop logcat
-          kill "$LOGCAT_PID" 2>/dev/null || true
-
-          # ── Crash analysis ────────────────────────────────────────────────
-          echo ""
-          echo "════════════════════════════════════"
-          echo "  Crash Analysis"
-          echo "════════════════════════════════════"
-
-          CRASHED=false
-
-          if grep -qE "FATAL EXCEPTION|fatal error|com\.jazzmax\.app.*died" logs/logcat_full.txt; then
-            echo "❌ CRASH DETECTED in logcat!"
-            grep -A 20 -E "FATAL EXCEPTION|fatal error" logs/logcat_full.txt | head -50 > logs/crash_report.txt || true
-            cat logs/crash_report.txt
-            CRASHED=true
-          else
-            echo "✅ No crashes detected"
-          fi
-
-          if grep -qE "FlutterError|Another exception was thrown|═{10}" logs/logcat_full.txt; then
-            echo "⚠  Flutter errors found:"
-            grep -A 5 -E "FlutterError|Another exception was thrown" logs/logcat_full.txt | head -40 >> logs/crash_report.txt 2>/dev/null || true
-          fi
-
-          # Extract JazzMAX-specific logs
-          grep -E "JazzMAX|flutter|com\.jazzmax" logs/logcat_full.txt > logs/jazzmax_logs.txt 2>/dev/null || true
-
-          echo ""
-          echo "════════════════════════════════════"
-          echo "  Network / API Connectivity"
-          echo "════════════════════════════════════"
-
-          if grep -qE "api/catalog|api/auth|jazzmax" logs/logcat_full.txt; then
-            echo "✅ App made API calls — network is working"
-          else
-            echo "⚠  No API calls detected — app may have crashed before connecting"
-          fi
-
-          # Final status
-          echo ""
-          if [ "$CRASHED" = "true" ]; then
-            echo "❌ TEST RESULT: CRASH DETECTED — check crash_report.txt"
-            exit 1
-          else
-            echo "✅ TEST RESULT: App launched and ran without crashes"
-          fi
-SCRIPT_EOF
-          chmod +x test_jazzmax.sh
-
-      # ── Run emulator and install APK ──────────────────────────────────────
+      # ── System deps + KVM ─────────────────────────────────────────────────
       - name: Install emulator system dependencies
         run: |
           sudo apt-get update -qq
@@ -185,6 +79,11 @@ SCRIPT_EOF
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # ── Run emulator ──────────────────────────────────────────────────────
+      # test_jazzmax.sh is committed in the repo root.
+      # The reactivecircus action runs each `script:` line as a separate
+      # `sh -c <line>`, so multi-line if/then/fi constructs break.
+      # Calling a committed bash script avoids that entirely.
       - name: Run emulator tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -201,7 +100,7 @@ SCRIPT_EOF
           emulator-boot-timeout: 300
           script: bash test_jazzmax.sh "${{ steps.apk.outputs.path }}"
 
-      # ── Upload all results ────────────────────────────────────────────────
+      # ── Upload results ────────────────────────────────────────────────────
       - name: Upload screenshots and logs
         uses: actions/upload-artifact@v4
         if: always()
