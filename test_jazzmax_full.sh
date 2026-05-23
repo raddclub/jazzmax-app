@@ -367,17 +367,30 @@ else
   shot "02_unknown_screen"
 fi
 
-# Tap Register link (TextButton — clickable)
+# Tap Register link.
+# Flutter RichText TextSpan taps are NOT exposed as UIAutomator nodes; we must
+# try several strategies and ultimately fall back to a fixed coordinate that is
+# below the "Sign In" ElevatedButton (~y=1113) where the link normally renders.
 if tap_button "Register"; then
   sleep 2
-  shot "03_register_screen"
-  if has "Create Account"; then
-    pass "Register screen opened"
-  else
-    warn "Register screen may not be showing"
-  fi
+elif tap "account" || tap "Don't have"; then
+  sleep 2
 else
-  fail "Could not tap Register link"
+  echo "  Using coordinate fallback for Register link (~y=1300)"
+  adb shell input tap 700 1300; sleep 2   # right-half of "... Register" text
+fi
+shot "03_register_screen"
+if has "Create Account"; then
+  pass "Register screen opened"
+else
+  # Maybe we tapped the wrong thing — try one more time with a different y
+  adb shell input tap 650 1330; sleep 2
+  shot "03b_register_retry"
+  if has "Create Account"; then
+    pass "Register screen opened (retry)"
+  else
+    fail "Could not reach Register screen"
+  fi
 fi
 
 # Fill phone
