@@ -270,9 +270,18 @@ if wait_for "Sign In" 20; then
   shot "02_login_screen"
 elif wait_for "Next" 10; then
   pass "App loaded — onboarding visible"
-  tap "Next" || true; sleep 1
-  tap "Next" || true; sleep 1
-  tap "Get Started" || tap "Continue" || true; sleep 2
+  # Tap Skip to dismiss all 4 onboarding pages at once → goes directly to login
+  if tap "Skip"; then
+    sleep 3
+    pass "Onboarding dismissed via Skip"
+  else
+    # Fallback: tap through all 4 pages (Next×3 then Get Started)
+    tap "Next" || true; sleep 2
+    tap "Next" || true; sleep 2
+    tap "Next" || true; sleep 2
+    tap "Get Started" || true; sleep 3
+    warn "Used Next×3+GetStarted to dismiss onboarding"
+  fi
   shot "02_after_onboarding"
 else
   warn "Could not confirm screen after launch"
@@ -334,7 +343,10 @@ clear_app
 launch
 sleep 3
 
-# Handle onboarding if it appears
+# Dismiss onboarding first (always shown on fresh install), then login
+if wait_for "Next" 12; then
+  tap "Skip" || true; sleep 3
+fi
 if wait_for "Sign In" 15; then
   pass "Login screen ready"
   shot "06_login_ready"
@@ -560,15 +572,20 @@ if ! has "Movies" && ! has "TV Shows" && ! has "No content"; then
   back; sleep 2
 fi
 
-# Bottom nav: Downloads is index 2 (third icon)
-# On Pixel 2 (1080px wide), 4 icons spaced at: ~135, 405, 675, 945
-adb shell input tap 675 1800; sleep 2
-shot "20_downloads_screen"
-
-if has "Downloads" || has "No downloads" || has "downloaded" || has "quota"; then
-  pass "Downloads screen opened"
+# Bottom nav: tap Downloads label (UIAutomator finds it reliably by text)
+if tap "Downloads"; then
+  sleep 2
+  shot "20_downloads_screen"
+  if has "Downloads" || has "No downloads" || has "downloaded" || has "quota" || has "Storage"; then
+    pass "Downloads screen opened"
+  else
+    warn "Downloads screen opened (unexpected content) — check screenshot 20"
+  fi
 else
-  warn "Downloads screen may not have opened — check screenshot 20"
+  # Fallback to coordinates (y=1850 for bottom of screen with nav bar)
+  adb shell input tap 675 1850; sleep 2
+  shot "20_downloads_screen"
+  warn "Downloads nav: used fallback coordinates"
 fi
 
 back; sleep 2
@@ -579,14 +596,19 @@ back; sleep 2
 
 section "PHASE 8 — Profile Screen"
 
-# Bottom nav: Profile is index 3 (fourth icon)
-adb shell input tap 945 1800; sleep 2
-shot "21_profile_screen"
-
-if has "Profile" || has "Subscription" || has "Device" || has "Logout"; then
-  pass "Profile screen opened"
+# Bottom nav: tap Profile label (UIAutomator finds it by text)
+if tap "Profile"; then
+  sleep 2
+  shot "21_profile_screen"
+  if has "Subscription" || has "Device" || has "Logout" || has "Phone"; then
+    pass "Profile screen opened"
+  else
+    warn "Profile screen opened (unexpected content) — check screenshot 21"
+  fi
 else
-  warn "Profile screen may not have opened — check screenshot 21"
+  adb shell input tap 945 1850; sleep 2
+  shot "21_profile_screen"
+  warn "Profile nav: used fallback coordinates"
 fi
 
 back; sleep 2
@@ -597,9 +619,8 @@ back; sleep 2
 
 section "PHASE 9 — Subscription Plans Screen"
 
-# From home, tap profile icon (top right avatar) then subscription button
-# OR navigate via bottom nav → profile → subscription
-adb shell input tap 945 1800; sleep 2  # profile from bottom nav
+# Navigate via bottom nav Profile → then find subscription link
+tap "Profile" || adb shell input tap 945 1850; sleep 2
 
 if has "Subscription" || has "Basic" || has "Standard" || has "Premium"; then
   pass "Subscription info visible on profile"
@@ -629,6 +650,12 @@ section "PHASE 10 — Guest Mode & 10-Minute Limit"
 clear_app
 launch
 sleep 4
+
+# Dismiss onboarding → login screen
+if wait_for "Next" 12; then
+  tap "Skip" || true; sleep 3
+fi
+wait_for "Sign In" 15 || true
 shot "24_guest_login_screen"
 
 # Tap Continue as Guest
@@ -692,6 +719,10 @@ clear_app
 launch
 sleep 4
 
+# Dismiss onboarding then login
+if wait_for "Next" 12; then
+  tap "Skip" || true; sleep 3
+fi
 if wait_for "Sign In" 15; then
   tap "Phone Number" || true
   adb shell input tap 540 680; sleep 1
