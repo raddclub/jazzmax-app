@@ -54,14 +54,18 @@ else
 fi
 echo -e "  ${GREEN}✓ Project downloaded${NC}"
 
-# ── Step 3: Python dependencies (venv — Ubuntu 24.04 requires it) ────
-echo -e "${CYAN}[3/7] Installing Python packages (virtual environment)...${NC}"
+# ── Step 3: Python dependencies ──────────────────────────────
+echo -e "${CYAN}[3/7] Installing Python packages...${NC}"
 cd "$PROJECT_DIR"
-python3 -m venv venv
-source venv/bin/activate
-pip install flask flask-cors pyjwt werkzeug requests gunicorn --quiet
-deactivate
-echo -e "  ${GREEN}✓ Python packages installed in $PROJECT_DIR/venv${NC}"
+# Ubuntu 24.04 requires --break-system-packages on dedicated servers.
+# Safe to use here since this is a single-purpose JazzMAX server.
+pip3 install flask flask-cors pyjwt werkzeug requests gunicorn \
+  --break-system-packages --quiet 2>/dev/null \
+  || pip3 install flask flask-cors pyjwt werkzeug requests gunicorn --quiet \
+  || { echo "Trying venv fallback...";
+       python3 -m venv venv;
+       venv/bin/pip install flask flask-cors pyjwt werkzeug requests gunicorn --quiet; }
+echo -e "  ${GREEN}✓ Python packages installed${NC}"
 
 # ── Step 4: Environment / secrets ────────────────────────────
 echo -e "${CYAN}[4/7] Setting up environment...${NC}"
@@ -86,7 +90,7 @@ SESS_SECRET=$(grep SESSION_SECRET "$ENV_FILE" | cut -d= -f2)
 # Watch Prototype (main API — port 8000)
 sudo tee /etc/supervisor/conf.d/jazzmax_watch.conf > /dev/null <<CONF
 [program:jazzmax_watch]
-command=/opt/jazzmax/venv/bin/python3 /opt/jazzmax/_watch_prototype/run.py
+command=python3 /opt/jazzmax/_watch_prototype/run.py
 directory=/opt/jazzmax/_watch_prototype
 user=$RUN_USER
 autostart=true
@@ -99,7 +103,7 @@ CONF
 # Radd Hub (admin — port 5000)
 sudo tee /etc/supervisor/conf.d/jazzmax_radd.conf > /dev/null <<CONF
 [program:jazzmax_radd]
-command=/opt/jazzmax/venv/bin/python3 /opt/jazzmax/radd-hub/radd_hub.py run --skip-setup
+command=python3 /opt/jazzmax/radd-hub/radd_hub.py run --skip-setup
 directory=/opt/jazzmax/radd-hub
 user=$RUN_USER
 autostart=true
