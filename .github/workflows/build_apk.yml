@@ -7,6 +7,11 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+# ── CRITICAL: contents:write is required to create GitHub Releases ────────────
+permissions:
+  contents: write
+  actions: read
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -51,20 +56,31 @@ jobs:
         run: flutter analyze --no-fatal-warnings
         continue-on-error: true
 
-      - name: Build debug APK
+      # ── Build split APKs (one per CPU architecture) ───────────────────────
+      # --split-per-abi reduces size from ~120 MB → ~40 MB per APK.
+      # Produces: app-debug-arm64-v8a.apk  (all modern phones)
+      #           app-debug-armeabi-v7a.apk (older 32-bit phones)
+      #           app-debug-x86_64.apk      (emulators / x86 tablets)
+      - name: Build debug APKs (split by ABI)
         working-directory: jazzmax_flutter
-        run: flutter build apk --debug --no-tree-shake-icons
+        run: flutter build apk --debug --split-per-abi --no-tree-shake-icons
 
-      - name: APK size
-        run: du -sh jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk
+      - name: APK sizes
+        run: |
+          echo "=== APK sizes after split-per-abi ==="
+          du -sh jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-*.apk
 
-      - name: Upload debug APK
+      # ── Upload all split APKs as one artifact (for emulator test) ─────────
+      - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
           name: jazzmax-debug-${{ github.run_number }}
-          path: jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk
+          path: jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-*.apk
           retention-days: 14
 
+      # ── Create GitHub Release with arm64-v8a APK ──────────────────────────
+      # arm64-v8a covers every Android phone sold since ~2016 (including all Jazz users)
+      # This is what Rehan should download and install on his phone.
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
@@ -72,17 +88,21 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: "JazzMAX Build #${{ github.run_number }}"
           body: |
-            Auto-build from `${{ github.sha }}`
+            Auto-build from commit `${{ github.sha }}`
 
-            **Install on Android:**
-            1. Download **app-debug.apk** below
-            2. Copy to phone → open → install
-            3. Enable "Install from unknown sources" if prompted
-          files: jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk
+            ## Install on your phone (arm64 — all modern Android phones)
+
+            1. Download **app-debug-arm64-v8a.apk** below ← this is the one you want
+            2. Open the APK on your phone → tap Install
+            3. If prompted: Settings → Allow install from unknown sources → try again
+
+            ---
+            _Also included: armeabi-v7a (old 32-bit phones) · x86_64 (emulators)_
+          files: |
+            jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-arm64-v8a.apk
+            jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-armeabi-v7a.apk
+            jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-x86_64.apk
           prerelease: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
 
       - name: Deploy to Oracle emulator
         if: env.ORACLE_SSH_KEY != ''
@@ -91,7 +111,7 @@ jobs:
         run: |
           printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key
           chmod 600 /tmp/oracle_key
-          APK="jazzmax_flutter/build/app/outputs/flutter-apk/app-debug.apk"
+          APK="jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-arm64-v8a.apk"
           scp -i /tmp/oracle_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
               "$APK" ubuntu@92.4.95.252:/tmp/jazzmax-latest.apk
           ssh -i /tmp/oracle_key -o StrictHostKeyChecking=no -o ConnectTimeout=60 \
