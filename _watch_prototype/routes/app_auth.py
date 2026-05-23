@@ -25,8 +25,8 @@ log = logging.getLogger("hub.app_auth")
 
 bp = Blueprint("app_auth", __name__, url_prefix="/api/auth")
 
-ACCESS_TOKEN_TTL  = 15 * 60          # 15 minutes
-REFRESH_TOKEN_TTL = 30 * 24 * 60 * 60  # 30 days
+ACCESS_TOKEN_TTL  = 15 * 60           # 15 minutes
+REFRESH_TOKEN_TTL = 90 * 24 * 60 * 60  # 90 days (3 months) — user stays logged in
 
 def _jwt_secret() -> str:
     return os.environ.get("SESSION_SECRET") or os.environ.get("FLASK_SECRET_KEY") or "jazzmax-dev-secret"

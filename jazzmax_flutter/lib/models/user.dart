@@ -25,9 +25,21 @@ class AppUser {
     return const AppUser(id: 0, phone: 'guest', isGuest: true);
   }
 
+  /// Used when app starts offline but user has a valid refresh token.
+  /// Phone and plan are restored from locally cached SharedPreferences.
+  factory AppUser.offline({required int id, required String phone, required String plan}) {
+    return AppUser(
+      id: id,
+      phone: phone,
+      isGuest: false,
+      subscription: UserSubscription(
+        plan: plan,
+        isActive: true,
+      ),
+    );
+  }
+
   factory AppUser.fromJson(Map<String, dynamic> json) {
-    // /api/auth/me returns fields at top-level.
-    // /api/auth/login returns fields nested under "user".
     final userData = json['user'] as Map<String, dynamic>? ?? json;
     final subData = json['subscription'] as Map<String, dynamic>?;
 
@@ -36,7 +48,6 @@ class AppUser {
       phone: userData['phone'] as String? ?? '',
       deviceId: userData['device_id'] as String?,
       deviceName: userData['device_name'] as String?,
-      // Python sends bool (true/false) or int (1/0) — handle both
       isActive: _parseBool(userData['is_active'], defaultValue: true),
       createdAt: userData['created_at']?.toString(),
       lastLoginAt: userData['last_login_at']?.toString(),
@@ -72,7 +83,6 @@ class UserSubscription {
 
   factory UserSubscription.fromJson(Map<String, dynamic> json) {
     final expiresAt = json['expires_at']?.toString();
-    // Python sends bool (true/false) — handle both bool and int
     bool active = json['is_active'] == true ||
         (json['is_active'] as int? ?? 0) == 1;
 
@@ -99,4 +109,3 @@ class UserSubscription {
     }
   }
 }
-

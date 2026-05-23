@@ -128,7 +128,7 @@ CREATE TABLE episodes (
 ```
 
 ### Why this is secure
-1. **No JazzDrive links in the local DB** — stream URLs are only generated server-side when the user taps Watch, then expire after 2 hours
+1. **No permanent JazzDrive links in the local DB** — stream URLs are generated server-side when the user taps Watch, then cached in `stream_cache` table for exactly 6 hours. After expiry they are deleted. The local catalog (`titles` and `episodes` tables) contains NO JazzDrive URLs — only metadata.
 2. **Database is AES-256 encrypted** — the encryption key is `HMAC(device_id + auth_token + server_salt)`, unique per device
 3. **Even if someone extracts the .db file** — they get an encrypted blob, useless without the key
 4. **Key never stored on disk** — recomputed from device ID + token on every app launch

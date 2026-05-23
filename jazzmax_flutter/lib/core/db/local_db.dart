@@ -8,7 +8,7 @@ import '../../models/catalog_item.dart';
 /// - Catalog (titles + episodes)
 /// - Watch history / resume positions
 /// - Download metadata (including AES-256 encryption flag)
-/// Stream URLs are NEVER stored here — always fetched live.
+/// - Stream URL cache (JazzDrive links valid 6 hours — reuse for play AND download)
 class LocalDb {
   static Database? _db;
 
@@ -23,7 +23,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -85,6 +85,14 @@ class LocalDb {
         downloaded_at  INTEGER DEFAULT 0
       )
     ''');
+    await db.execute('''
+      CREATE TABLE stream_cache (
+        file_id     TEXT PRIMARY KEY,
+        stream_url  TEXT NOT NULL,
+        cached_at   INTEGER NOT NULL,
+        expires_at  INTEGER NOT NULL
+      )
+    ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
     await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
   }
@@ -115,21 +123,26 @@ class LocalDb {
       ''');
     }
     if (oldV < 4) {
-      // Add AES-256 encryption flag (Phase 5)
       try {
         await db.execute(
             'ALTER TABLE downloads ADD COLUMN is_encrypted INTEGER DEFAULT 0');
-      } catch (_) {
-        // Column may already exist on fresh installs created with version 4
-      }
+      } catch (_) {}
     }
     if (oldV < 5) {
-      // Add file_id to titles so movies can be played directly from local catalog
       try {
         await db.execute('ALTER TABLE titles ADD COLUMN file_id TEXT');
-      } catch (_) {
-        // Column may already exist on fresh installs created with version 5
-      }
+      } catch (_) {}
+    }
+    if (oldV < 6) {
+      // Stream URL cache — JazzDrive links valid 6 hours, reused for play + download
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS stream_cache (
+          file_id     TEXT PRIMARY KEY,
+          stream_url  TEXT NOT NULL,
+          cached_at   INTEGER NOT NULL,
+          expires_at  INTEGER NOT NULL
+        )
+      ''');
     }
   }
 
@@ -348,6 +361,57 @@ class LocalDb {
       }
     }
     await db.delete('downloads', where: 'file_id = ?', whereArgs: [fileId]);
+  }
+
+  // ── Stream URL Cache ──────────────────────────────────────────────────────
+  // JazzDrive links are valid for 6 hours (21600 seconds).
+  // Once generated, the SAME link is reused for both play AND download.
+  // This means zero extra JazzDrive requests within the 6-hour window.
+
+  static const int _streamCacheTtl = 21600; // 6 hours in seconds
+
+  /// Returns cached stream URL if it exists and has not expired.
+  /// Returns null if no cache or link has expired.
+  static Future<String?> getCachedStreamUrl(String fileId) async {
+    final db = await instance;
+    final rows = await db.query(
+      'stream_cache',
+      where: 'file_id = ?',
+      whereArgs: [fileId],
+    );
+    if (rows.isEmpty) return null;
+    final expiresAt = rows.first['expires_at'] as int? ?? 0;
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (nowSec >= expiresAt) {
+      // Expired — delete and return null
+      await db.delete('stream_cache', where: 'file_id = ?', whereArgs: [fileId]);
+      return null;
+    }
+    return rows.first['stream_url'] as String?;
+  }
+
+  /// Cache a JazzDrive stream URL for 6 hours.
+  /// Call this immediately after fetching from server.
+  static Future<void> cacheStreamUrl(String fileId, String url) async {
+    final db = await instance;
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await db.insert(
+      'stream_cache',
+      {
+        'file_id': fileId,
+        'stream_url': url,
+        'cached_at': nowSec,
+        'expires_at': nowSec + _streamCacheTtl,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Clear expired stream cache entries (housekeeping — call on startup).
+  static Future<void> pruneExpiredStreamCache() async {
+    final db = await instance;
+    final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await db.delete('stream_cache', where: 'expires_at < ?', whereArgs: [nowSec]);
   }
 
   // ── Download quota — daily count ──────────────────────────────────────────

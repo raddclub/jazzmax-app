@@ -66,8 +66,18 @@ class Keystore {
     ]);
   }
 
+  /// True if the user has an access token stored (may be expired — interceptor handles refresh).
   static Future<bool> hasTokens() async {
     final token = await getAccessToken();
+    return token != null && token.isNotEmpty;
+  }
+
+  /// True if the user has a refresh token stored.
+  /// The refresh token is the real "stay logged in for months" credential.
+  /// An access token may have expired but if the refresh token is valid,
+  /// the user is still logged in — the API interceptor refreshes automatically.
+  static Future<bool> hasRefreshToken() async {
+    final token = await getRefreshToken();
     return token != null && token.isNotEmpty;
   }
 }

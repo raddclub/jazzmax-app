@@ -434,15 +434,21 @@ Prices can be changed any time in `_watch_prototype/routes/app_subscription.py` 
 
 2. **Episode share URLs** — all episodes in a show share the same `folder_share_url`. You MUST pass `target_filename=filename` to `generate_direct_link()` to get the correct episode file. Without this, you get the wrong video.
 
-3. **Stream links cached 6 hours** — `LINK_CACHE_SECONDS = 21600`. JazzDrive links confirmed valid for at least 6 hours. Do not lower this or you'll hammer JazzDrive.
+3. **Stream links cached ON DEVICE for 6 hours** — Once the app calls `/watch/api/play/<file_id>` and gets a JazzDrive URL, it is saved in the local `stream_cache` SQLite table with a 6-hour expiry. On the next call to `CatalogApi.getStreamUrl()` for the same file within 6 hours, the local cached URL is returned immediately — no server request, no JazzDrive request. The server also caches links server-side (`LINK_CACHE_SECONDS = 21600`). Do not remove either cache layer.
 
-4. **Never store stream URLs in the local app database** — stream URLs expire. The Flutter app must always fetch a fresh URL from `/api/play/<file_id>` before playing.
+4. **Play and Download share the SAME link** — When a user taps Watch, the app calls `CatalogApi.getStreamUrl(fileId)` which may hit the server or use cache. When the user then taps Download for the same file, it calls `CatalogApi.getStreamUrl(fileId)` again — which returns the cached link instantly, making ZERO new requests to the server or JazzDrive. Do NOT add a separate link-generation call in the download flow.
 
-5. **Posters saved as** `title_{id}.jpg` or `show_{file_id}.jpg` in `_watch_prototype/posters/`. Once saved, they are served locally — never fetched from JazzDrive again.
+5. **Catalog is stored LOCALLY — server is NOT needed to browse** — The full movie/show catalog is saved in the app's local SQLite (`local_db.dart` → `titles` and `episodes` tables). Browsing, searching, and filtering all happen 100% locally, zero network requests. Server is only contacted for: registration, login, subscription, and play link generation. Any agent that adds server calls to browse or search is breaking this architecture.
 
-6. **Both Radd Hub and Watch API share ONE database file:** `radd-hub/data/radd_hub.db`. Do not create a second database.
+6. **Login stays active for 3 months** — Refresh token TTL is 90 days on the server (`REFRESH_TOKEN_TTL = 90 * 24 * 60 * 60` in `app_auth.py`). The Flutter app checks for a refresh token on startup — if it exists, the user is considered logged in even if the access token has expired. Network errors on startup do NOT log the user out. Only explicit 401/403 responses from the server clear the session. Do not change `checkAuth()` to log out on network failures.
 
-7. **JWT sub claim must be a string** — PyJWT v2 requires `"sub": str(user_id)`. Parse back with `int(payload["sub"])`. This is already done correctly in `app_auth.py`.
+7. **Catalog sync is background-only and minimal** — On app start, the app loads from local DB immediately (instant). Then it checks `/api/catalog/version` in the background. If the version differs, it fetches only the delta (`/api/catalog/sync?since=<timestamp>`). If there is no internet, the app shows the last synced catalog — no error, no blocking. Do not change catalog loading to require the server.
+
+8. **Posters come from TMDB — never JazzDrive** — Poster and backdrop images use TMDB URLs, cached locally by `cached_network_image`. Saved as `title_{id}.jpg` in `_watch_prototype/posters/`. Never fetch poster/backdrop images from JazzDrive.
+
+9. **Both Radd Hub and Watch API share ONE database file:** `radd-hub/data/radd_hub.db`. Do not create a second database.
+
+10. **JWT sub claim must be a string** — PyJWT v2 requires `"sub": str(user_id)`. Parse back with `int(payload["sub"])`. This is already done correctly in `app_auth.py`.
 
 ---
 

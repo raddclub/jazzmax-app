@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api/auth_api.dart';
@@ -32,6 +33,14 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier() : super(const AuthState());
 
+  /// Check if user is logged in on app startup.
+  ///
+  /// LOGIN PERSISTENCE RULE (do not change):
+  /// - User stays logged in as long as they have a refresh token (valid 90 days)
+  /// - Access tokens expire every 15 min but are refreshed automatically
+  /// - Network errors, server down, timeouts → user stays logged in (offline mode)
+  /// - ONLY log out on explicit 401/403 auth rejection from server
+  /// - This means users can go months without needing to log in again
   Future<void> checkAuth() async {
     final prefs = await SharedPreferences.getInstance();
     final isGuest = prefs.getBool(StorageKeys.isGuest) ?? false;
@@ -47,17 +56,36 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return;
     }
 
-    final hasToken = await Keystore.hasTokens();
-    if (!hasToken) {
+    // Check for refresh token — this is the real "stay logged in" credential.
+    // If refresh token exists, the user logged in before and should stay logged in.
+    final hasRefresh = await Keystore.hasRefreshToken();
+    if (!hasRefresh) {
       state = state.copyWith(status: AuthStatus.unauthenticated);
       return;
     }
+
+    // Try to get fresh user data from server
     try {
       final user = await AuthApi.getMe();
+      // Cache user data locally for offline startup
+      await _cacheUserLocally(user, prefs);
       state = AuthState(status: AuthStatus.authenticated, user: user);
-    } catch (_) {
-      await Keystore.clearAll();
-      state = state.copyWith(status: AuthStatus.unauthenticated);
+    } catch (e) {
+      // Only log out if the server explicitly rejected the credentials (401 or 403).
+      // Any other error (network down, timeout, server error) → stay logged in.
+      final isAuthRejected = e is DioException &&
+          (e.response?.statusCode == 401 || e.response?.statusCode == 403);
+
+      if (isAuthRejected) {
+        await Keystore.clearAll();
+        await _clearCachedUser(prefs);
+        state = state.copyWith(status: AuthStatus.unauthenticated);
+      } else {
+        // Server unreachable — restore from cached user data
+        // User can still browse the local catalog offline
+        final offlineUser = await _restoreCachedUser(prefs);
+        state = AuthState(status: AuthStatus.authenticated, user: offlineUser);
+      }
     }
   }
 
@@ -72,6 +100,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(StorageKeys.isGuest);
     final user = await AuthApi.getMe();
+    await _cacheUserLocally(user, prefs);
     state = AuthState(status: AuthStatus.authenticated, user: user);
   }
 
@@ -96,11 +125,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try { await AuthApi.logout(); } catch (_) {}
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(StorageKeys.isGuest);
+    await _clearCachedUser(prefs);
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
   void refreshUser(AppUser user) {
     state = state.copyWith(user: user);
+  }
+
+  // ── Local user cache (for offline startup) ────────────────────────────────
+
+  Future<void> _cacheUserLocally(AppUser user, SharedPreferences prefs) async {
+    await prefs.setString(StorageKeys.cachedUserPhone, user.phone);
+    await prefs.setInt(StorageKeys.cachedUserId, user.id);
+    await prefs.setString(StorageKeys.cachedUserPlan, user.planName);
+  }
+
+  Future<AppUser> _restoreCachedUser(SharedPreferences prefs) async {
+    final phone = prefs.getString(StorageKeys.cachedUserPhone) ?? '';
+    final id = prefs.getInt(StorageKeys.cachedUserId) ?? 0;
+    final plan = prefs.getString(StorageKeys.cachedUserPlan) ?? 'free';
+    return AppUser.offline(id: id, phone: phone, plan: plan);
+  }
+
+  Future<void> _clearCachedUser(SharedPreferences prefs) async {
+    await prefs.remove(StorageKeys.cachedUserPhone);
+    await prefs.remove(StorageKeys.cachedUserId);
+    await prefs.remove(StorageKeys.cachedUserPlan);
   }
 }
 

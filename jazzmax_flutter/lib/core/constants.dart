@@ -12,11 +12,15 @@ class AppConstants {
   static const String onboardingSeenKey = 'jm_onboarding_seen';
 
   static const Duration accessTokenValidity = Duration(minutes: 15);
-  static const Duration refreshTokenValidity = Duration(days: 30);
+  static const Duration refreshTokenValidity = Duration(days: 90); // 3 months
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'jazzmax_catalog.db';
-  static const int catalogDbVersion = 2;
+  static const int catalogDbVersion = 6;
+
+  // JazzDrive stream links are confirmed valid for 6 hours.
+  // The SAME link is reused for both streaming and downloading within this window.
+  static const int streamCacheTtlSeconds = 21600; // 6 hours
 }
 
 class AppColors {
@@ -53,6 +57,10 @@ class StorageKeys {
   static const String deviceId = 'jm_device_id';
   static const String onboardingSeen = 'jm_onboarding_seen';
   static const String isGuest = 'jm_is_guest';
+  // Cached user data — for offline app startup when server unreachable
+  static const String cachedUserPhone = 'jm_cached_phone';
+  static const String cachedUserId = 'jm_cached_user_id';
+  static const String cachedUserPlan = 'jm_cached_plan';
 }
 
 class ApiPaths {
