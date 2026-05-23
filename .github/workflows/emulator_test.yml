@@ -29,6 +29,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ── Free disk space ───────────────────────────────────────────────────
+      # Pixel 2 AVD needs ~7.4 GB for its userdata partition.
+      # GitHub runners ship with ~20 GB free but pre-installed SDKs eat most of it.
+      # Removing unused large packages recovers ~5–6 GB before the emulator runs.
+      - name: Free disk space
+        run: |
+          echo "=== Disk before cleanup ==="
+          df -h /
+          sudo rm -rf /usr/share/dotnet \
+                      /usr/local/lib/android/sdk/ndk \
+                      /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/chromium \
+                      /usr/share/swift \
+                      /usr/local/share/powershell \
+                      /opt/hostedtoolcache/go \
+                      /opt/hostedtoolcache/PyPy
+          sudo apt-get clean -qq
+          echo "=== Disk after cleanup ==="
+          df -h /
+
       # ── Download the APK ──────────────────────────────────────────────────
       - name: Download latest APK artifact
         uses: dawidd6/action-download-artifact@v3
@@ -84,6 +104,9 @@ jobs:
       # The reactivecircus action runs each `script:` line as a separate
       # `sh -c <line>`, so multi-line if/then/fi constructs break.
       # Calling a committed bash script avoids that entirely.
+      #
+      # -partition-size 4096: cap userdata partition at 4 GB (default Pixel 2
+      # wants 7.4 GB which barely fits on GitHub runners, causing FATAL errors).
       - name: Run emulator tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -95,7 +118,7 @@ jobs:
           force-avd-creation: true
           ram-size: 2048M
           heap-size: 512M
-          emulator-options: -no-snapshot -no-audio -no-boot-anim -no-window -camera-back none -gpu swiftshader_indirect
+          emulator-options: -no-snapshot -no-audio -no-boot-anim -no-window -camera-back none -gpu swiftshader_indirect -partition-size 4096
           disable-animations: true
           emulator-boot-timeout: 300
           script: bash test_jazzmax.sh "${{ steps.apk.outputs.path }}"
