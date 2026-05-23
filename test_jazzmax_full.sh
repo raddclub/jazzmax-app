@@ -368,29 +368,57 @@ else
 fi
 
 # Tap Register link.
-# Flutter RichText TextSpan taps are NOT exposed as UIAutomator nodes; we must
-# try several strategies and ultimately fall back to a fixed coordinate that is
-# below the "Sign In" ElevatedButton (~y=1113) where the link normally renders.
+# Flutter RichText TextSpan taps are NOT exposed as UIAutomator nodes.
+# Layout order on login screen (all y values measured from runs):
+#   Sign In button    → y≈1113
+#   Continue as Guest → y≈1281   (confirmed from run #64/66)
+#   Register RichText → y≈1400+ (below Continue as Guest)
+#
+# Debug: dump all UI text nodes so we can see the real coords in the log
+dump_ui
+echo "  [UI TEXT NODES on login screen]:"
+python3 - <<'PYEOF'
+import xml.etree.ElementTree as ET
+try:
+    for n in ET.parse('/tmp/ui.xml').iter('node'):
+        t = n.get('text','').strip()
+        d = n.get('content-desc','').strip()
+        b = n.get('bounds','')
+        c = n.get('clickable','')
+        label = t or d
+        if label:
+            print(f"  text='{label[:50]}' clickable={c} bounds={b}")
+except Exception as e:
+    print(f"  dump failed: {e}")
+PYEOF
+
+# Try UIAutomator first, then sweep coordinates below Continue as Guest
+REACHED_REGISTER=false
 if tap_button "Register"; then
-  sleep 2
-elif tap "account" || tap "Don't have"; then
-  sleep 2
+  REACHED_REGISTER=true; sleep 2
+elif tap "account" || tap "Don't have" || tap "Register"; then
+  REACHED_REGISTER=true; sleep 2
 else
-  echo "  Using coordinate fallback for Register link (~y=1300)"
-  adb shell input tap 700 1300; sleep 2   # right-half of "... Register" text
+  # Coordinate sweep: y=1380..1480 in steps of 20, x=700 (right of "Register" word)
+  echo "  Sweeping Y coordinates for Register link..."
+  for Y in 1380 1400 1420 1440 1460 1480; do
+    echo "    Trying tap at (700, $Y)"
+    adb shell input tap 700 "$Y"; sleep 2
+    if has "Create Account"; then
+      REACHED_REGISTER=true
+      echo "  Found Register link at y=$Y"
+      break
+    fi
+  done
 fi
+
 shot "03_register_screen"
-if has "Create Account"; then
+if has "Create Account" || [ "$REACHED_REGISTER" = "true" ] && has "Create Account"; then
+  pass "Register screen opened"
+elif has "Create Account"; then
   pass "Register screen opened"
 else
-  # Maybe we tapped the wrong thing — try one more time with a different y
-  adb shell input tap 650 1330; sleep 2
-  shot "03b_register_retry"
-  if has "Create Account"; then
-    pass "Register screen opened (retry)"
-  else
-    fail "Could not reach Register screen"
-  fi
+  fail "Could not reach Register screen — check screenshot 03 and UI text dump above"
 fi
 
 # Fill phone
