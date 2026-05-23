@@ -4,6 +4,9 @@ permissions:
   actions: read
   contents: read
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   workflow_dispatch:
     inputs:
@@ -34,7 +37,7 @@ jobs:
           workflow: build_apk.yml
           workflow_conclusion: success
           name_is_regexp: true
-          name: jazzmax-release-.*
+          name: jazzmax-debug-.*
           path: apk/
           search_artifacts: true
           skip_unpack: false
@@ -69,15 +72,17 @@ jobs:
       - name: Run emulator tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 28
-          arch: x86
-          target: default
+          api-level: 34
+          arch: x86_64
+          target: aosp_atd
           profile: pixel_2
           avd-name: jazzmax_test_avd
+          force-avd-creation: true
           ram-size: 2048M
           heap-size: 512M
-          emulator-options: -no-snapshot -no-audio -no-boot-anim -camera-back none -no-window -gpu swiftshader
+          emulator-options: -no-snapshot -no-audio -no-boot-anim -no-window -camera-back none -gpu swiftshader_indirect
           disable-animations: true
+          emulator-boot-timeout: 300
           script: |
             echo "════════════════════════════════════"
             echo "  JazzMAX Emulator Test"
@@ -137,7 +142,6 @@ jobs:
               echo "❌ CRASH DETECTED in logcat!"
               grep -A 20 "FATAL EXCEPTION\|fatal error" logs/logcat_full.txt | head -50 > logs/crash_report.txt
               cat logs/crash_report.txt
-              # Don't exit 1 yet — still upload screenshots so we can see what happened
               echo "CRASHED=true" >> $GITHUB_ENV
             else
               echo "✅ No crashes detected"

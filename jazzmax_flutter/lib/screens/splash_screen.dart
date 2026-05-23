@@ -104,9 +104,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               const _PulsingDot(),
 
               const SizedBox(height: 24),
-              Text(
+              const Text(
                 AppConstants.tagline,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 13,
                   letterSpacing: 0.2,

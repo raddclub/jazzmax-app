@@ -54,10 +54,8 @@ class JazzMaxApp extends ConsumerWidget {
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         surface: AppColors.surface,
-        background: AppColors.background,
         onPrimary: Colors.white,
         onSurface: AppColors.textPrimary,
-        onBackground: AppColors.textPrimary,
       ),
       scaffoldBackgroundColor: AppColors.background,
       textTheme: GoogleFonts.interTextTheme(base.textTheme),

@@ -43,7 +43,6 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
   @override
   Widget build(BuildContext context) {
     final sub = ref.watch(subscriptionProvider);
-    final user = ref.watch(authProvider).user;
 
     return LoadingOverlay(
       loading: sub.loading,
@@ -114,7 +113,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          _PayStep(
+                          const _PayStep(
                             step: '1',
                             text:
                                 'Send payment via JazzCash or Easypaisa to:',
@@ -127,14 +126,14 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                               color: AppColors.card,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Row(
+                            child: const Row(
                               mainAxisAlignment:
                                   MainAxisAlignment.spaceBetween,
                               children: [
                                 Column(
                                   crossAxisAlignment:
                                       CrossAxisAlignment.start,
-                                  children: const [
+                                  children: [
                                     Text(
                                       '03286839827',
                                       style: TextStyle(
@@ -159,13 +158,13 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                             ),
                           ),
                           const SizedBox(height: 10),
-                          _PayStep(
+                          const _PayStep(
                             step: '2',
                             text:
                                 'Note the Transaction ID (TID) from your payment receipt',
                           ),
                           const SizedBox(height: 10),
-                          _PayStep(
+                          const _PayStep(
                             step: '3',
                             text: 'Enter the TID below — we verify within minutes',
                           ),
@@ -200,7 +199,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                               plan: _selectedPlan!,
                               paymentMethod: _paymentMethod,
                             );
-                        if (ok && mounted) {
+                        if (ok && context.mounted) {
                           showDialog(
                             context: context,
                             builder: (_) => AlertDialog(

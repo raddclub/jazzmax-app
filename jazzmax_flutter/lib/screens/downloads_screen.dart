@@ -65,7 +65,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   Widget _buildEmpty() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -264,12 +264,12 @@ class _QuotaBarState extends State<_QuotaBar> {
           border: Border.all(
               color: AppColors.warning.withOpacity(0.3), width: 1),
         ),
-        child: Row(
+        child: const Row(
           children: [
-            const Icon(Icons.lock_outline_rounded,
+            Icon(Icons.lock_outline_rounded,
                 color: AppColors.warning, size: 22),
-            const SizedBox(width: 12),
-            const Expanded(
+            SizedBox(width: 12),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

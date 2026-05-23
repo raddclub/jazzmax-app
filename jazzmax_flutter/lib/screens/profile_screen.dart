@@ -183,11 +183,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 32),
 
             // ── App version ───────────────────────────────────────────
-            Center(
+            const Center(
               child: Text(
                 'JazzMAX v1.0.0 — Pakistan ka entertainment, data-free',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 11,
                 ),

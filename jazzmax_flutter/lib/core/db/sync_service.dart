@@ -14,7 +14,7 @@ class SyncService {
 
       // Check if sync is needed
       if (localVersion >= serverVersion.version && lastSyncTs > 0) {
-        return SyncResult(
+        return const SyncResult(
           success: true,
           itemsSynced: 0,
           message: 'Already up to date',

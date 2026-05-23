@@ -256,10 +256,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _showResumeSnack() {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Resuming where you left off'),
+      const SnackBar(
+        content: Text('Resuming where you left off'),
         backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 2),
+        duration: Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -826,7 +826,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             child: Container(
               width: 64,
               height: 64,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: Colors.black38,
                 shape: BoxShape.circle,
               ),
