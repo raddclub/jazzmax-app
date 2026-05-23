@@ -17,6 +17,8 @@ ORACLE_IP="92.4.95.252"
 FLASK_PORT=8000
 RADD_PORT=5000
 RUN_USER="ubuntu"
+SDK_DIR="$HOME/android-sdk"
+AVD_NAME="jazzmax_test"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -26,8 +28,8 @@ NC='\033[0m'
 
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
-echo "║        JazzMAX Oracle Server Setup v1.0             ║"
-echo "║   Production API + Optional Android Emulator        ║"
+echo "║        JazzMAX Oracle Server Setup v2.0             ║"
+echo "║   Production API + Always-On Android Emulator       ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
@@ -38,6 +40,7 @@ sudo apt-get install -y \
   python3 python3-pip python3-venv \
   nginx git curl wget unzip \
   supervisor ufw sqlite3 \
+  openjdk-17-jre-headless \
   2>/dev/null | tail -3
 
 # ── Step 2: Clone/update project ─────────────────────────────
@@ -57,8 +60,6 @@ echo -e "  ${GREEN}✓ Project downloaded${NC}"
 # ── Step 3: Python dependencies ──────────────────────────────
 echo -e "${CYAN}[3/7] Installing Python packages...${NC}"
 cd "$PROJECT_DIR"
-# Ubuntu 24.04 requires --break-system-packages on dedicated servers.
-# Safe to use here since this is a single-purpose JazzMAX server.
 pip3 install flask flask-cors pyjwt werkzeug requests gunicorn \
   --break-system-packages --quiet 2>/dev/null \
   || pip3 install flask flask-cors pyjwt werkzeug requests gunicorn --quiet \
@@ -84,7 +85,6 @@ fi
 # ── Step 5: Supervisor services ───────────────────────────────
 echo -e "${CYAN}[5/7] Setting up services (Watch Prototype + Radd Hub)...${NC}"
 
-# Load env vars for supervisor
 SESS_SECRET=$(grep SESSION_SECRET "$ENV_FILE" | cut -d= -f2)
 
 # Watch Prototype (main API — port 8000)
@@ -174,8 +174,8 @@ sudo ufw allow 80/tcp 2>/dev/null || true
 sudo ufw allow 8000/tcp 2>/dev/null || true
 sudo ufw --force enable 2>/dev/null || true
 
-# ── Step 6b: Publish all titles in DB ────────────────────────
-echo -e "${CYAN}[6b/7] Publishing all titles in database...${NC}"
+# ── Step 6c: Publish all titles in DB ────────────────────────
+echo -e "${CYAN}[6c/7] Publishing all titles in database...${NC}"
 sqlite3 "$PROJECT_DIR/radd-hub/data/jazzmax.db" \
   "UPDATE titles SET is_published=1;" 2>/dev/null \
   && echo -e "  ${GREEN}✓ All titles published (is_published=1)${NC}" \
@@ -183,7 +183,7 @@ sqlite3 "$PROJECT_DIR/radd-hub/data/jazzmax.db" \
      sqlite3 $PROJECT_DIR/radd-hub/data/jazzmax.db 'UPDATE titles SET is_published=1;'"
 
 # Create test user if not exists
-echo -e "${CYAN}[6c/7] Ensuring test account exists (03001234567 / test123)...${NC}"
+echo -e "${CYAN}[6d/7] Ensuring test account exists (03001234567 / test123)...${NC}"
 python3 - <<'PYEOF'
 import sys, os
 sys.path.insert(0, '/opt/jazzmax/radd-hub')
@@ -211,71 +211,107 @@ except Exception as e:
     print("    Run setup_new_account.sh on Replit to create it from there")
 PYEOF
 
-# ── Step 7: Android Emulator (optional — checks KVM first) ───
-echo -e "${CYAN}[7/7] Checking Android emulator support...${NC}"
+# ── Step 7: Android Emulator Setup ───────────────────────────
+echo -e "${CYAN}[7/7] Setting up Android emulator...${NC}"
+
+# Install scripts directory
+mkdir -p "$PROJECT_DIR/scripts"
+cp "$PROJECT_DIR/oracle_emulator_test.sh" "$PROJECT_DIR/scripts/emulator_test.sh" 2>/dev/null \
+  || echo "  (emulator_test.sh will be pulled from GitHub on next git pull)"
+chmod +x "$PROJECT_DIR/scripts/emulator_test.sh" 2>/dev/null || true
+
+KVM_AVAILABLE=false
 if [ -e /dev/kvm ]; then
-  echo -e "  ${GREEN}✓ KVM is available — Android emulator CAN run on this server!${NC}"
-  echo ""
-  echo -e "  ${YELLOW}To install the Android emulator, run:${NC}"
-  echo "    bash $PROJECT_DIR/oracle_android_emulator.sh"
-  echo ""
-  # Create the emulator setup as a separate script
-  cat > "$PROJECT_DIR/oracle_android_emulator.sh" <<'EMULATOR'
-#!/bin/bash
-# Android ARM64 Emulator Setup for Oracle aarch64 server
-# Run AFTER oracle_setup.sh completes
-
-set -e
-SDK_DIR="$HOME/android-sdk"
-AVD_NAME="jazzmax_test"
-
-echo "[1/5] Downloading Android command-line tools..."
-mkdir -p "$SDK_DIR/cmdline-tools"
-cd /tmp
-wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O cmdline-tools.zip
-unzip -q cmdline-tools.zip -d "$SDK_DIR/cmdline-tools/"
-mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
-rm cmdline-tools.zip
-
-export ANDROID_HOME="$SDK_DIR"
-export PATH="$PATH:$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$SDK_DIR/emulator"
-
-echo "[2/5] Accepting licenses..."
-yes | sdkmanager --licenses > /dev/null 2>&1 || true
-
-echo "[3/5] Installing emulator + ARM64 system image..."
-sdkmanager "platform-tools" "emulator" "platforms;android-29" "system-images;android-29;google_apis;arm64-v8a"
-
-echo "[4/5] Creating AVD..."
-echo "no" | avdmanager create avd \
-  --name "$AVD_NAME" \
-  --package "system-images;android-29;google_apis;arm64-v8a" \
-  --device "pixel_4" \
-  --force
-
-echo "[5/5] Test launch (headless — will print 'emulator started' then exit)..."
-$SDK_DIR/emulator/emulator -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim -quit-after-boot 120 &
-EMULATOR_PID=$!
-sleep 10
-if kill -0 $EMULATOR_PID 2>/dev/null; then
-  echo "✓ Emulator process is running (PID $EMULATOR_PID)"
-  kill $EMULATOR_PID
-else
-  echo "✗ Emulator exited early — check KVM permissions: sudo usermod -aG kvm $USER"
+  KVM_AVAILABLE=true
 fi
 
+if $KVM_AVAILABLE; then
+  echo -e "  ${GREEN}✓ KVM is AVAILABLE — hardware-accelerated emulator (fast!)${NC}"
+else
+  echo -e "  ${YELLOW}⚠ KVM not available — emulator will use software rendering (slow)${NC}"
+  echo ""
+  echo -e "  ${YELLOW}To enable KVM (5 min — makes emulator 10x faster):${NC}"
+  echo "  1. Go to: console.cloud.oracle.com"
+  echo "  2. Compute → Instances → jazzmax-server → More Actions → Edit"
+  echo "  3. Enable 'Nested Virtualization' → Save"
+  echo "  4. Re-run this script"
+  echo ""
+fi
+
+# Install Android SDK + create emulator regardless of KVM status
+if [ ! -f "$SDK_DIR/emulator/emulator" ]; then
+  echo -e "  → Installing Android SDK (this takes ~5 min, ~1.5 GB)..."
+  mkdir -p "$SDK_DIR/cmdline-tools"
+  cd /tmp
+
+  # ARM64 command-line tools
+  wget -q "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -O cmdline-tools.zip
+  unzip -q cmdline-tools.zip -d "$SDK_DIR/cmdline-tools/"
+  mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
+  rm -f cmdline-tools.zip
+
+  export ANDROID_HOME="$SDK_DIR"
+  export PATH="$PATH:$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$SDK_DIR/emulator"
+
+  echo "  → Accepting licenses..."
+  yes | sdkmanager --licenses > /dev/null 2>&1 || true
+
+  echo "  → Installing platform-tools + emulator + ARM64 system image..."
+  sdkmanager "platform-tools" "emulator" \
+    "platforms;android-29" \
+    "system-images;android-29;google_apis;arm64-v8a"
+
+  echo "  → Creating emulator AVD '$AVD_NAME'..."
+  echo "no" | avdmanager create avd \
+    --name "$AVD_NAME" \
+    --package "system-images;android-29;google_apis;arm64-v8a" \
+    --device "pixel_4" \
+    --force
+
+  echo -e "  ${GREEN}✓ Android emulator installed${NC}"
+
+  # Add SDK to PATH permanently
+  echo "" >> "$HOME/.bashrc"
+  echo "# Android SDK" >> "$HOME/.bashrc"
+  echo "export ANDROID_HOME=$SDK_DIR" >> "$HOME/.bashrc"
+  echo "export PATH=\$PATH:$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$SDK_DIR/emulator" >> "$HOME/.bashrc"
+else
+  echo -e "  ${GREEN}✓ Android emulator already installed${NC}"
+fi
+
+# Set up always-on emulator as a Supervisor service
+echo "  → Setting up always-on emulator service (auto-starts on boot)..."
+EMULATOR_CMD="$SDK_DIR/emulator/emulator"
+EMULATOR_EXTRA_FLAGS=""
+if $KVM_AVAILABLE; then
+  EMULATOR_EXTRA_FLAGS="-accel kvm"
+fi
+
+sudo tee /etc/supervisor/conf.d/jazzmax_emulator.conf > /dev/null <<CONF
+[program:jazzmax_emulator]
+command=$EMULATOR_CMD -avd $AVD_NAME -no-window -no-audio -no-boot-anim -memory 2048 -cores 2 $EMULATOR_EXTRA_FLAGS
+user=$RUN_USER
+autostart=false
+autorestart=unexpected
+startsecs=30
+startretries=2
+stderr_logfile=/var/log/jazzmax_emulator.err.log
+stdout_logfile=/var/log/jazzmax_emulator.out.log
+environment=ANDROID_HOME="$SDK_DIR",HOME="/home/$RUN_USER"
+CONF
+
+# Note: autostart=false — emulator is started manually or by GitHub Actions.
+# To start manually: sudo supervisorctl start jazzmax_emulator
+# To check status: sudo supervisorctl status jazzmax_emulator
+
+sudo supervisorctl reread 2>/dev/null || true
+sudo supervisorctl update 2>/dev/null || true
+
+echo -e "  ${GREEN}✓ Emulator service registered (supervisor: jazzmax_emulator)${NC}"
 echo ""
-echo "══════════════════════════════════════════"
-echo " Android emulator setup complete!"
-echo " Start with: emulator -avd jazzmax_test -no-window -no-audio"
-echo " Screenshot: adb exec-out screencap -p > screen.png"
-echo "══════════════════════════════════════════"
-EMULATOR
-  chmod +x "$PROJECT_DIR/oracle_android_emulator.sh"
-else
-  echo -e "  ${YELLOW}⚠ KVM not available — Android emulator will be slow (software mode)${NC}"
-  echo "  Check Oracle console: Instance → Edit → enable 'Nested Virtualization'"
-fi
+echo "  To start the emulator: sudo supervisorctl start jazzmax_emulator"
+echo "  To check status:       sudo supervisorctl status"
+echo "  To run a test:         bash $PROJECT_DIR/scripts/emulator_test.sh /tmp/jazzmax.apk"
 
 # ── Step 7b: Let's Encrypt SSL (optional — requires domain name) ──────────
 echo ""
@@ -292,6 +328,23 @@ echo "    -out /etc/ssl/certs/jazzmax.crt -days 365 -nodes \\"
 echo "    -subj '/CN=92.4.95.252/O=JazzMAX/C=PK'"
 echo ""
 
+# ── GitHub Actions: ORACLE_SSH_KEY setup reminder ────────────────────────
+echo -e "${CYAN}[7c] GitHub Actions + Emulator integration${NC}"
+echo "  GitHub Actions will automatically install APK on this emulator after every build."
+echo "  To enable: add your Oracle SSH private key to GitHub Secrets:"
+echo ""
+echo "  1. Cat your private key:  cat ~/.ssh/id_rsa  (or your Oracle key)"
+echo "  2. Go to: github.com/raddclub/jazzmax-app → Settings → Secrets → Actions"
+echo "  3. Add secret: Name = ORACLE_SSH_KEY, Value = (paste full private key)"
+echo ""
+echo "  After that, every APK build will:"
+echo "    ✓ Copy APK to this server"
+echo "    ✓ Start the emulator (if not running)"
+echo "    ✓ Install the APK"
+echo "    ✓ Take screenshots"
+echo "    ✓ Upload screenshots to GitHub Actions as artifacts"
+echo ""
+
 # ── Done ──────────────────────────────────────────────────────
 echo ""
 echo "╔══════════════════════════════════════════════════════╗"
@@ -301,9 +354,13 @@ echo "║  Production API:  http://92.4.95.252/api/           ║"
 echo "║  Watch + Test:    http://92.4.95.252/watch/test     ║"
 echo "║  Health check:    http://92.4.95.252/health         ║"
 echo "╠══════════════════════════════════════════════════════╣"
-echo "║  JazzMAX APKs now connect to this server            ║"
-echo "║  URL never changes — no more jazzmax_config.json    ║"
-echo "║  updates when switching Replit accounts!            ║"
+echo "║  Android emulator: sudo supervisorctl start         ║"
+echo "║                    jazzmax_emulator                 ║"
+if $KVM_AVAILABLE; then
+echo "║  KVM status:  ✅ ENABLED (fast hardware emulation)  ║"
+else
+echo "║  KVM status:  ⚠ NOT enabled (enable in Oracle)     ║"
+fi
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 echo "Verify it works: curl http://92.4.95.252/health"
