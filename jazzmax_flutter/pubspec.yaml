@@ -33,7 +33,7 @@ dependencies:
   # pointycastle is a transitive dependency of encrypt — no direct import needed
 
   # Background download that survives app kill
-  workmanager: ^0.5.7
+  workmanager: ^0.7.0
 
   # Video player (handles MKV, EAC3, multiple audio tracks)
   media_kit: ^1.1.10
