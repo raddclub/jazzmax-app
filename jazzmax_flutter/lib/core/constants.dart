@@ -5,9 +5,9 @@ class AppConstants {
   static const String tagline = 'Pakistan ka entertainment, data-free';
 
   /// Runtime-mutable: updated by RemoteConfig.fetch() on every app start.
+  /// Fallback = Oracle production server (permanent IP — never changes).
   /// To switch servers, edit jazzmax_config.json in GitHub — no APK rebuild needed.
-  static String apiBaseUrl =
-      'https://535153e4-1e39-4bf6-99e3-b7b2eaf56b37-00-tefx8bxqmce8.sisko.replit.dev';
+  static String apiBaseUrl = 'http://92.4.95.252';
 
   static const String onboardingSeenKey = 'jm_onboarding_seen';
 
