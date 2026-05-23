@@ -50,7 +50,8 @@ class CatalogItem {
           ? json['genres'] as String
           : json['genres']?.toString(),
       posterUrl: json['poster'] as String? ?? json['poster_url'] as String?,
-      isFree: (json['is_free'] as int? ?? 0) == 1,
+      // Server returns Python bool (true/false) or int (1/0) — handle both
+      isFree: json['is_free'] == true || json['is_free'] == 1,
       dbVersion: json['db_version'] as int? ?? 0,
       episodes: episodesRaw.cast<Map<String, dynamic>>(),
       fileId: json['file_id']?.toString(),

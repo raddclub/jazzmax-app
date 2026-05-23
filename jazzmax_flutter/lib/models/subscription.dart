@@ -25,7 +25,8 @@ class SubscriptionPlan {
       priceMonthly: json['price'] as int? ?? json['price_monthly'] as int? ?? 0,
       description: json['description'] as String? ?? '',
       downloadsPerDay: json['downloads_per_day'] as int? ?? 0,
-      hdAccess: (json['hd_access'] as int? ?? 0) == 1,
+      // Server may return bool or int — handle both
+      hdAccess: json['hd_access'] == true || json['hd_access'] == 1,
       features: featuresRaw.cast<String>(),
     );
   }
@@ -53,7 +54,8 @@ class SubscriptionStatus {
     final sub = json['subscription'] as Map<String, dynamic>? ?? json;
     return SubscriptionStatus(
       plan: sub['plan'] as String? ?? 'free',
-      isActive: (sub['is_active'] as int? ?? 0) == 1,
+      // Server returns Python bool (true/false) — handle both bool and int
+      isActive: sub['is_active'] == true || sub['is_active'] == 1,
       expiresAt: sub['expires_at'] as String?,
       downloadsUsedToday: sub['downloads_used_today'] as int? ?? 0,
       downloadsLimit: sub['downloads_limit'] as int? ?? 1,

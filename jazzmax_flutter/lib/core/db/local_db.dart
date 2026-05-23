@@ -23,7 +23,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -41,7 +41,8 @@ class LocalDb {
         genres      TEXT,
         poster_url  TEXT,
         is_free     INTEGER DEFAULT 0,
-        db_version  INTEGER DEFAULT 0
+        db_version  INTEGER DEFAULT 0,
+        file_id     TEXT
       )
     ''');
     await db.execute('''
@@ -122,6 +123,14 @@ class LocalDb {
         // Column may already exist on fresh installs created with version 4
       }
     }
+    if (oldV < 5) {
+      // Add file_id to titles so movies can be played directly from local catalog
+      try {
+        await db.execute('ALTER TABLE titles ADD COLUMN file_id TEXT');
+      } catch (_) {
+        // Column may already exist on fresh installs created with version 5
+      }
+    }
   }
 
   // ── Titles ────────────────────────────────────────────────────────────────
@@ -165,6 +174,7 @@ class LocalDb {
         'poster_url': item.posterUrl,
         'is_free': item.isFree ? 1 : 0,
         'db_version': item.dbVersion,
+        'file_id': item.fileId,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -369,6 +379,7 @@ class LocalDb {
       posterUrl: row['poster_url'] as String?,
       isFree: (row['is_free'] as int? ?? 0) == 1,
       dbVersion: row['db_version'] as int? ?? 0,
+      fileId: row['file_id'] as String?,
     );
   }
 }
