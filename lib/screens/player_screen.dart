@@ -7,9 +7,11 @@ import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/api/catalog_api.dart';
 import '../core/constants.dart';
 import '../core/db/local_db.dart';
+import '../core/security/download_cipher.dart';
 
 /// Full-screen video player — Phase 4
 /// Features: custom gesture controls, double-tap seek, swipe brightness/volume,
@@ -18,12 +20,18 @@ class PlayerScreen extends StatefulWidget {
   final String fileId;
   final String title;
   final String? localPath;
+  final List<Map<String, dynamic>>? episodes;
+  final int? currentEpisodeIndex;
+  final int? titleId;
 
   const PlayerScreen({
     super.key,
     required this.fileId,
     required this.title,
     this.localPath,
+    this.episodes,
+    this.currentEpisodeIndex,
+    this.titleId,
   });
 
   @override
@@ -68,31 +76,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _positionTimer;
   Timer? _indicatorTimer;
 
+  // ── Phase 5: Enhanced player features ─────────────────────────────────────
+  bool _buffering = false;
+  bool _showSkipIntro = false;
+  bool _showSkipCredits = false;
+  bool _showNextEpOverlay = false;
+  int _nextEpCountdown = 5;
+  Timer? _nextEpTimer;
+  bool _ratingShown = false;
+  String? _tmpDecryptPath;
+  static const _pipCh    = MethodChannel('com.jazzmax.app/pip');
+  static const _secureCh = MethodChannel('com.jazzmax.app/secure');
+
   @override
   void initState() {
     super.initState();
-    _player = Player();
-    _controller = VideoController(_player);
+    _enableSecure();
+    _player = Player(
+      configuration: const PlayerConfiguration(bufferSize: 32 * 1024 * 1024),
+    );
+    _controller = VideoController(
+      _player,
+      configuration: const VideoControllerConfiguration(
+        enableHardwareAcceleration: true,
+      ),
+    );
 
-    // Go fullscreen landscape
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    // Keep screen on during playback
     WakelockPlus.enable();
 
     _initBrightnessVolume();
+    _initPlayerListeners();
     _checkGuestMode();
     _loadAndPlay();
     _resetControlsTimer();
-
-    // Save position every 5 seconds
-    _positionTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _savePosition();
-    });
   }
 
   // ── Guest mode limit ──────────────────────────────────────────────────────
@@ -203,14 +225,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadAndPlay() async {
+  Future<void> _loadAndPlay([String? overrideSource]) async {
     setState(() { _loading = true; _error = null; });
     try {
-      final savedMs = await LocalDb.getSavedPosition(widget.fileId);
-      final url = await CatalogApi.getStreamUrl(widget.fileId);
-      await _player.open(Media(url));
+      final savedMs = widget.localPath == null && overrideSource == null
+          ? await LocalDb.getSavedPosition(widget.fileId)
+          : 0;
 
-      // Seek to saved position if more than 5 seconds in
+      String mediaSource;
+      if (overrideSource != null) {
+        mediaSource = overrideSource;
+      } else if (widget.localPath != null) {
+        if (DownloadCipher.isProtected(widget.localPath!)) {
+          _tmpDecryptPath = await DownloadCipher.decryptForPlayback(widget.localPath!);
+          mediaSource = 'file://$_tmpDecryptPath';
+        } else {
+          mediaSource = 'file://${widget.localPath}';
+        }
+      } else {
+        mediaSource = await CatalogApi.getStreamUrl(widget.fileId);
+      }
+
+      await _player.open(Media(mediaSource));
+
       if (savedMs > 5000) {
         await Future.delayed(const Duration(milliseconds: 600));
         if (mounted) {
@@ -510,15 +547,150 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // ── Dispose ───────────────────────────────────────────────────────────────
 
+  // ── Security ──────────────────────────────────────────────────────────────
+
+  void _enableSecure() async {
+    try { await _secureCh.invokeMethod('enable'); } catch (_) {}
+  }
+
+  void _disableSecure() async {
+    try { await _secureCh.invokeMethod('disable'); } catch (_) {}
+  }
+
+  Future<void> _enterPiP() async {
+    try { await _pipCh.invokeMethod('enter'); } catch (_) {}
+  }
+
+  // ── Player listeners ──────────────────────────────────────────────────────
+
+  void _initPlayerListeners() {
+    // Buffering dot
+    _player.stream.buffering.listen((b) {
+      if (mounted && !_loading) setState(() => _buffering = b);
+    });
+
+    // Skip intro / credits (based on playhead position)
+    _player.stream.position.listen((pos) {
+      if (!mounted) return;
+      final dur = _player.state.duration;
+      final posMs = pos.inMilliseconds;
+      final durMs = dur.inMilliseconds;
+      final skipIntro = durMs > 180000 && posMs >= 30000 && posMs <= 90000;
+      final skipCredits = durMs > 60000 && posMs > (durMs * 0.85).round() && posMs < durMs;
+      if (skipIntro != _showSkipIntro || skipCredits != _showSkipCredits) {
+        setState(() { _showSkipIntro = skipIntro; _showSkipCredits = skipCredits; });
+      }
+    });
+
+    // End of video → next episode or rating
+    _player.stream.completed.listen((done) {
+      if (done && mounted) _onPlaybackCompleted();
+    });
+
+    // Auto-save position every 10 seconds
+    _positionTimer = Timer.periodic(const Duration(seconds: 10), (_) => _savePosition());
+  }
+
+  // ── End-of-video handling ─────────────────────────────────────────────────
+
+  void _onPlaybackCompleted() {
+    _savePosition();
+    if (widget.episodes != null &&
+        widget.currentEpisodeIndex != null &&
+        widget.currentEpisodeIndex! + 1 < widget.episodes!.length) {
+      _startNextEpCountdown();
+    } else {
+      _maybeShowRating();
+    }
+  }
+
+  void _startNextEpCountdown() {
+    setState(() { _showNextEpOverlay = true; _nextEpCountdown = 5; });
+    _nextEpTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() {
+        _nextEpCountdown--;
+        if (_nextEpCountdown <= 0) { t.cancel(); _playNextEpisode(); }
+      });
+    });
+  }
+
+  void _cancelNextEp() {
+    _nextEpTimer?.cancel();
+    setState(() { _showNextEpOverlay = false; _nextEpCountdown = 5; });
+    _maybeShowRating();
+  }
+
+  void _playNextEpisode() {
+    if (!mounted) return;
+    _nextEpTimer?.cancel();
+    final nextIdx = widget.currentEpisodeIndex! + 1;
+    final nextEp  = widget.episodes![nextIdx];
+    final fileId  = nextEp['file_id']?.toString() ?? '';
+    final label   = nextEp['label'] as String? ?? 'Episode ${nextIdx + 1}';
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+      builder: (_) => PlayerScreen(
+        fileId: fileId, title: label,
+        episodes: widget.episodes,
+        currentEpisodeIndex: nextIdx,
+        titleId: widget.titleId,
+      ),
+    ));
+  }
+
+  void _maybeShowRating() {
+    if (_ratingShown || widget.titleId == null) return;
+    setState(() => _ratingShown = true);
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (_) => _RatingSheet(
+          onRated: (r) => LocalDb.saveRating(widget.titleId!, r),
+        ),
+      );
+    });
+  }
+
+  // ── Local file picker (MX Player style) ───────────────────────────────────
+
+  Future<void> _pickLocalFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.video, allowMultiple: false,
+      );
+      if (result != null && result.files.single.path != null) {
+        final path = result.files.single.path!;
+        _loadAndPlay('file://$path');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open file: $e'),
+              backgroundColor: AppColors.surface),
+        );
+      }
+    }
+  }
+
+  // ── Dispose ───────────────────────────────────────────────────────────────
+
   @override
   void dispose() {
+    _disableSecure();
     _controlsTimer?.cancel();
     _positionTimer?.cancel();
     _indicatorTimer?.cancel();
     _guestLimitTimer?.cancel();
+    _nextEpTimer?.cancel();
     _savePosition();
     _player.dispose();
     WakelockPlus.disable();
+    DownloadCipher.cleanTempFile(_tmpDecryptPath);
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
@@ -650,7 +822,103 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
             ),
+
+          // 10. Buffering ring (subtle, shown while streaming pauses)
+          if (_buffering && !_loading)
+            const Center(
+              child: SizedBox(
+                width: 40, height: 40,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white54),
+                ),
+              ),
+            ),
+
+          // 11. Skip Intro (30s – 90s mark, videos > 3 min)
+          if (_showSkipIntro && !_loading && _error == null && !_locked)
+            Positioned(
+              bottom: 80, right: 16,
+              child: _SkipButton(
+                label: 'Skip Intro',
+                onTap: () => _player.seek(
+                    _player.state.position + const Duration(seconds: 90)),
+              ),
+            ),
+
+          // 12. Skip Credits (last 15% of video)
+          if (_showSkipCredits && !_showSkipIntro && !_loading && _error == null && !_locked)
+            Positioned(
+              bottom: 80, right: 16,
+              child: _SkipButton(
+                label: 'Skip Credits',
+                onTap: () => _player.seek(
+                    _player.state.duration - const Duration(seconds: 5)),
+              ),
+            ),
+
+          // 13. Next Episode overlay
+          if (_showNextEpOverlay) _buildNextEpOverlay(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildNextEpOverlay() {
+    final nextIdx = (widget.currentEpisodeIndex ?? 0) + 1;
+    final nextEp  = widget.episodes?[nextIdx];
+    final epLabel = nextEp?['label'] as String? ?? 'Episode ${nextIdx + 1}';
+    return Positioned.fill(
+      child: Container(
+        color: Colors.black87,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text('Up Next',
+                style: TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500)),
+            const SizedBox(height: 8),
+            Text(epLabel,
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 28),
+            SizedBox(
+              width: 68, height: 68,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: _nextEpCountdown / 5,
+                    strokeWidth: 3,
+                    backgroundColor: Colors.white24,
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  ),
+                  Text('$_nextEpCountdown',
+                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: _cancelNextEp,
+                  child: const Text('Cancel', style: TextStyle(color: Colors.white60, fontSize: 14)),
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: () { _nextEpTimer?.cancel(); _playNextEpisode(); },
+                  icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                  label: const Text('Play Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    minimumSize: const Size(130, 44),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -739,6 +1007,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            // Open local file (MX Player style)
+            IconButton(
+              icon: const Icon(Icons.folder_open_rounded,
+                  color: Colors.white, size: 20),
+              tooltip: 'Open local video',
+              onPressed: _pickLocalFile,
+            ),
             // Subtitles
             IconButton(
               icon: const Icon(Icons.subtitles_outlined,
@@ -779,6 +1054,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               child: Text(_fitLabel,
                   style: const TextStyle(fontSize: 12)),
+            ),
+            // PiP
+            IconButton(
+              icon: const Icon(Icons.picture_in_picture_rounded,
+                  color: Colors.white, size: 20),
+              tooltip: 'Picture in Picture',
+              onPressed: _enterPiP,
             ),
             // Screen lock
             IconButton(
@@ -993,6 +1275,111 @@ class _SeekFlash extends StatelessWidget {
     );
   }
 }
+
+// ── Skip Intro / Credits button ───────────────────────────────────────────────
+
+class _SkipButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _SkipButton({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: Colors.white30),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 6),
+            const Icon(Icons.fast_forward_rounded, color: Colors.white, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Rating sheet ──────────────────────────────────────────────────────────────
+
+class _RatingSheet extends StatefulWidget {
+  final ValueChanged<int> onRated;
+  const _RatingSheet({required this.onRated});
+
+  @override
+  State<_RatingSheet> createState() => _RatingSheetState();
+}
+
+class _RatingSheetState extends State<_RatingSheet> {
+  int _selected = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('Rate this title',
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text('How did you like it?',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          const SizedBox(height: 20),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(5, (i) {
+              final filled = i < _selected;
+              return GestureDetector(
+                onTap: () => setState(() => _selected = i + 1),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  child: Icon(
+                    filled ? Icons.star_rounded : Icons.star_outline_rounded,
+                    color: filled ? Colors.amber : AppColors.textMuted,
+                    size: 44,
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Skip',
+                      style: TextStyle(color: AppColors.textMuted)),
+                ),
+              ),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _selected > 0
+                      ? () { widget.onRated(_selected); Navigator.pop(context); }
+                      : null,
+                  child: const Text('Submit'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Vertical bar ──────────────────────────────────────────────────────────────
 
 class _VerticalBar extends StatelessWidget {
   final double value;
