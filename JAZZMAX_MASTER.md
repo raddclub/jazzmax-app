@@ -800,6 +800,85 @@ Next account should: [what to do first]
 3. When changing Replit accounts: just update `jazzmax_config.json` in GitHub — NO APK rebuild needed
 4. URL change process: edit `jazzmax_config.json` → change `api_base_url` → push to GitHub → done
 
+---
+
+### Session 3 — May 23, 2026
+**Account:** Muhammad Rehan (switching to new account — reached token limit)
+
+**What was built this session:**
+
+#### 1. Oracle Production Server — FULLY RUNNING at `92.4.95.252`
+- `oracle_setup.sh` — one-command setup script for Oracle Ubuntu 24.04 aarch64
+- Nginx (port 80) → proxies to Flask (port 8000) and Radd Hub (port 5000)
+- Supervisor keeps both services auto-restarting
+- UFW + iptables-persistent configured (ports 22, 80, 8000 open)
+- Oracle Cloud Security List: port 80 ingress rule added (Security List: "Replit-said")
+- Health check working externally: `curl http://92.4.95.252/health` → `JazzMAX Oracle OK`
+- Login API working: `POST http://92.4.95.252/api/auth/login` ✅
+- Database HAS all 14 movies + 4 shows — but NOT yet published for app (see FIRST TASK below)
+
+#### 2. Oracle Server Credentials & Details
+- **IP:** `92.4.95.252` (permanent — never changes)
+- **SSH user:** `ubuntu`  
+- **SESSION_SECRET on Oracle:** `f0e69b8946173acfcfb5e66135bed3a74b28dce4beaf5e13443ae9b9fbe306b3`
+- **DB path on Oracle:** `/opt/jazzmax/radd-hub/data/jazzmax.db`
+- **Project dir on Oracle:** `/opt/jazzmax/`
+- **Logs:** `tail -f /var/log/jazzmax_watch.err.log` and `/var/log/jazzmax_radd.err.log`
+
+#### 3. Flutter App Updated for Oracle
+- `jazzmax_config.json` on GitHub → `http://92.4.95.252` (APKs fetch this on launch)
+- `jazzmax_flutter/lib/core/constants.dart` → fallback URL = `http://92.4.95.252`
+- `jazzmax_flutter/android/app/src/main/res/xml/network_security_config.xml` → created (allows HTTP to 92.4.95.252)
+- `jazzmax_flutter/android/app/src/main/AndroidManifest.xml` → references network_security_config
+
+#### 4. Automation Tools Built
+- `setup_new_account.sh` v2 — one-line Replit setup command (auto URL + publish + test account)
+- `.github/workflows/emulator_test.yml` — Android emulator test on GitHub Actions
+- JAZZMAX_MASTER.md quick-start section completely rewritten (2 steps instead of 5)
+
+#### 5. Android Emulator on Oracle
+- KVM is NOT currently available on Oracle instance (shows: `⚠ KVM not available`)
+- To enable: Oracle Console → Compute → Instances → Edit → Enable "Nested Virtualization" → then re-run `oracle_setup.sh` (the script will auto-install Android emulator when KVM is present)
+
+---
+
+## ⚡ FIRST TASK FOR NEXT ACCOUNT — DO THIS BEFORE ANYTHING ELSE
+
+**The Oracle server DB has all movies but they are NOT published for the app yet.**
+The setup script didn't include this step. Run this in Termius on the Oracle server:
+
+```bash
+sqlite3 /opt/jazzmax/radd-hub/data/jazzmax.db "UPDATE titles SET is_published=1; SELECT COUNT(*) || ' titles published' FROM titles WHERE is_published=1;"
+```
+
+Expected output: `14 titles published`
+
+Then verify the app catalog API works:
+```bash
+curl -s http://92.4.95.252/api/catalog/sync | python3 -c "
+import json,sys; d=json.load(sys.stdin)
+print(len(d.get('movies',[])), 'movies,', len(d.get('shows',[])), 'shows')
+"
+```
+Expected: `14 movies, 4 shows`
+
+**ALSO** — add `oracle_setup.sh` title-publishing step so it's automatic for future setups.
+Find the `[7/7]` section in `oracle_setup.sh` and add before it:
+```bash
+echo "[6b] Publishing all titles in DB..."
+sqlite3 "$PROJECT_DIR/radd-hub/data/jazzmax.db" "UPDATE titles SET is_published=1;" 2>/dev/null || true
+echo "  ✓ Titles published"
+```
+Then push oracle_setup.sh to GitHub.
+
+---
+
+**After fixing titles, continue Section 14 checklist — next unchecked items are:**
+1. Phase 4: Subtitle selector in video player
+2. Phase 5: Push notifications
+3. Phase 6: Android emulator test (KVM needs enabling in Oracle Console first)
+4. Phase 7: Free HTTPS/SSL on Oracle server via Let's Encrypt (certbot)
+
 ### Session 1 — May 22, 2026
 **Account:** Muhammad Rehan (main account)  
 **Built:**
