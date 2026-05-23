@@ -17,6 +17,9 @@ dependencies:
   # HTTP client
   dio: ^5.4.0
 
+  # Plain HTTP (used by WorkManager background isolate — Dio unavailable there)
+  http: ^1.2.0
+
   # Secure token storage (Android Keystore backed)
   flutter_secure_storage: ^9.0.0
 
@@ -24,6 +27,13 @@ dependencies:
   sqflite: ^2.3.2
   path_provider: ^2.1.2
   path: ^1.9.0
+
+  # AES-256 encryption for downloaded files
+  encrypt: ^5.0.3
+  # pointycastle is a transitive dependency of encrypt — no direct import needed
+
+  # Background download that survives app kill
+  workmanager: ^0.5.7
 
   # Video player (handles MKV, EAC3, multiple audio tracks)
   media_kit: ^1.1.10
