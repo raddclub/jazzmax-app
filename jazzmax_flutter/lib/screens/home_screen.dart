@@ -127,7 +127,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
             const SizedBox(height: 8),
 
-            // ── Sync status strip ─────────────────────────────────────────
+            // ── Status strip ─────────────────────────────────────────────
             if (catalog.status == CatalogStatus.syncing)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 6),
@@ -151,6 +151,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                   ],
+                ),
+              ),
+
+            // ── Sync error banner (visible, not hidden) ───────────────────
+            if (catalog.error != null && catalog.status != CatalogStatus.syncing)
+              GestureDetector(
+                onTap: () => ref.read(catalogProvider.notifier).syncFromServer(),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: AppColors.error.withOpacity(0.15),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.wifi_off, color: AppColors.error, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Cannot reach server — tap to retry',
+                              style: TextStyle(
+                                color: AppColors.error,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              AppConstants.apiBaseUrl,
+                              style: const TextStyle(
+                                color: AppColors.textMuted,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.refresh, color: AppColors.error, size: 16),
+                    ],
+                  ),
                 ),
               ),
 
@@ -226,30 +266,64 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     if (catalog.isEmpty) {
+      // Show what went wrong — not a vague "no content" message
+      final errorMsg = catalog.error;
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.movie_outlined,
-                color: AppColors.textMuted, size: 48),
-            const SizedBox(height: 12),
-            const Text(
-              'No content yet',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 16),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Content is being added — check back soon',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-            ),
-            const SizedBox(height: 20),
-            TextButton.icon(
-              onPressed: () =>
-                  ref.read(catalogProvider.notifier).syncFromServer(),
-              icon: const Icon(Icons.refresh, color: AppColors.primary),
-              label: const Text('Refresh'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                errorMsg != null ? Icons.wifi_off : Icons.movie_outlined,
+                color: errorMsg != null ? AppColors.error : AppColors.textMuted,
+                size: 48,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                errorMsg != null ? 'Server unreachable' : 'No content yet',
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 6),
+              if (errorMsg != null) ...[
+                Text(
+                  'Server: ${AppConstants.apiBaseUrl}',
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  errorMsg,
+                  style: const TextStyle(
+                    color: AppColors.error,
+                    fontSize: 11,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ] else
+                const Text(
+                  'Content is being added — check back soon',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              const SizedBox(height: 20),
+              TextButton.icon(
+                onPressed: () =>
+                    ref.read(catalogProvider.notifier).syncFromServer(),
+                icon: const Icon(Icons.refresh, color: AppColors.primary),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
         ),
       );
     }
