@@ -7,7 +7,7 @@ import '../../models/catalog_item.dart';
 /// Shared local SQLite database for:
 /// - Catalog (titles + episodes)
 /// - Watch history / resume positions
-/// - Download metadata
+/// - Download metadata (including AES-256 encryption flag)
 /// Stream URLs are NEVER stored here — always fetched live.
 class LocalDb {
   static Database? _db;
@@ -23,7 +23,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -73,14 +73,15 @@ class LocalDb {
     ''');
     await db.execute('''
       CREATE TABLE downloads (
-        file_id       TEXT PRIMARY KEY,
-        title_text    TEXT,
-        poster_url    TEXT,
-        local_path    TEXT,
-        status        TEXT DEFAULT 'pending',
-        progress      REAL DEFAULT 0.0,
-        file_size     INTEGER DEFAULT 0,
-        downloaded_at INTEGER DEFAULT 0
+        file_id        TEXT PRIMARY KEY,
+        title_text     TEXT,
+        poster_url     TEXT,
+        local_path     TEXT,
+        status         TEXT DEFAULT 'pending',
+        progress       REAL DEFAULT 0.0,
+        file_size      INTEGER DEFAULT 0,
+        is_encrypted   INTEGER DEFAULT 0,
+        downloaded_at  INTEGER DEFAULT 0
       )
     ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
@@ -111,6 +112,15 @@ class LocalDb {
           downloaded_at INTEGER DEFAULT 0
         )
       ''');
+    }
+    if (oldV < 4) {
+      // Add AES-256 encryption flag (Phase 5)
+      try {
+        await db.execute(
+            'ALTER TABLE downloads ADD COLUMN is_encrypted INTEGER DEFAULT 0');
+      } catch (_) {
+        // Column may already exist on fresh installs created with version 4
+      }
     }
   }
 
@@ -268,6 +278,7 @@ class LocalDb {
         'local_path': localPath,
         'status': 'downloading',
         'progress': 0.0,
+        'is_encrypted': 0,
         'downloaded_at': DateTime.now().millisecondsSinceEpoch,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
@@ -296,18 +307,52 @@ class LocalDb {
     );
   }
 
+  /// Called after encryption completes — updates path + marks encrypted.
+  static Future<void> finalizeDownload(
+      String fileId, String encryptedPath, int fileSize) async {
+    final db = await instance;
+    await db.update(
+      'downloads',
+      {
+        'status': 'completed',
+        'progress': 1.0,
+        'file_size': fileSize,
+        'local_path': encryptedPath,
+        'is_encrypted': 1,
+      },
+      where: 'file_id = ?',
+      whereArgs: [fileId],
+    );
+  }
+
   static Future<void> deleteDownload(String fileId) async {
     final db = await instance;
-    // Delete local file too
     final rows = await db.query('downloads',
         where: 'file_id = ?', whereArgs: [fileId]);
     if (rows.isNotEmpty) {
       final path = rows.first['local_path'] as String?;
       if (path != null) {
-        try { await File(path).delete(); } catch (_) {}
+        try {
+          await File(path).delete();
+        } catch (_) {}
       }
     }
     await db.delete('downloads', where: 'file_id = ?', whereArgs: [fileId]);
+  }
+
+  // ── Download quota — daily count ──────────────────────────────────────────
+
+  /// Count downloads that completed today (since midnight local time).
+  static Future<int> getTodayDownloadCount() async {
+    final db = await instance;
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day)
+        .millisecondsSinceEpoch;
+    final result = await db.rawQuery(
+      "SELECT COUNT(*) as c FROM downloads WHERE status='completed' AND downloaded_at >= ?",
+      [midnight],
+    );
+    return (result.first['c'] as int?) ?? 0;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
