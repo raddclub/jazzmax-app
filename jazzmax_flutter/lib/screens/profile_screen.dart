@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import '../core/constants.dart';
 import '../core/security/device_id.dart';
 import '../providers/auth_provider.dart';
@@ -15,16 +16,29 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loggingOut = false;
   String? _deviceName;
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _loadDeviceInfo();
+    _loadVersion();
   }
 
   Future<void> _loadDeviceInfo() async {
     final name = await DeviceIdentifier.getDeviceName();
     if (mounted) setState(() => _deviceName = name);
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => _appVersion = 'v${info.version} (build ${info.buildNumber})');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _appVersion = 'v1.1.0');
+    }
   }
 
   Future<void> _logout() async {
@@ -182,12 +196,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 32),
 
-            // ── App version ───────────────────────────────────────────
-            const Center(
+            // ── App info — real version from package, server URL ──────
+            _Section(
+              title: 'App Info',
+              children: [
+                _InfoRow(label: 'Version', value: _appVersion.isEmpty ? '...' : _appVersion),
+                _InfoRow(label: 'Server', value: AppConstants.apiBaseUrl),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            Center(
               child: Text(
-                'JazzMAX v1.0.0 — Pakistan ka entertainment, data-free',
+                'JazzMAX — Pakistan ka entertainment, data-free',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: AppColors.textMuted,
                   fontSize: 11,
                 ),
@@ -256,11 +279,17 @@ class _InfoRow extends StatelessWidget {
         children: [
           Text(label,
               style: const TextStyle(color: AppColors.textMuted, fontSize: 14)),
-          Text(value,
+          Flexible(
+            child: Text(
+              value,
               style: const TextStyle(
                   color: AppColors.textPrimary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500)),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500),
+              textAlign: TextAlign.end,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
