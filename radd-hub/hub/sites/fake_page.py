@@ -157,9 +157,9 @@ class FakePage:
     def evaluate(self, js_expr: str, *args):
         """Emulate page.evaluate(js, args) for common scraper patterns.
 
-        Handles the sigWords-style link-scanning pattern used by PikaHD and
-        similar plugins: a JS arrow function that calls
-        document.querySelectorAll('a[href]') and filters links by keyword lists.
+        Handles the sigWords-style link-scanning pattern used by site plugins:
+        a JS arrow function that calls document.querySelectorAll('a[href]')
+        and filters links by keyword lists.
         """
         if not self._soup:
             return [] if ("querySelectorAll" in str(js_expr) or args) else None
