@@ -57,7 +57,7 @@ jobs:
           workflow: build_apk.yml
           workflow_conclusion: success
           name_is_regexp: true
-          name: jazzmax-debug-.*
+          name: jazzmax-v.*
           path: apk/
           search_artifacts: true
           skip_unpack: false
