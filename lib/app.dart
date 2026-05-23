@@ -9,6 +9,7 @@ import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/player_screen.dart';
 import 'screens/detail_screen.dart';
+import 'screens/search_screen.dart';
 import 'screens/subscription_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/downloads_screen.dart';
@@ -27,34 +28,43 @@ class JazzMaxApp extends ConsumerWidget {
       theme: _buildTheme(),
       initialRoute: AppRoutes.splash,
       routes: {
-        AppRoutes.splash: (_) => const SplashScreen(),
-        AppRoutes.onboarding: (_) => const OnboardingScreen(),
-        AppRoutes.login: (_) => const LoginScreen(),
-        AppRoutes.register: (_) => const RegisterScreen(),
-        AppRoutes.home: (_) => const HomeScreen(),
-        AppRoutes.subscription: (_) => const SubscriptionScreen(),
-        AppRoutes.profile: (_) => const ProfileScreen(),
-        AppRoutes.downloads: (_) => const DownloadsScreen(),
-        AppRoutes.watchlist: (_) => const WatchlistScreen(),
-        AppRoutes.history: (_) => const HistoryScreen(),
+        AppRoutes.splash:        (_) => const SplashScreen(),
+        AppRoutes.onboarding:    (_) => const OnboardingScreen(),
+        AppRoutes.login:         (_) => const LoginScreen(),
+        AppRoutes.register:      (_) => const RegisterScreen(),
+        AppRoutes.home:          (_) => const HomeScreen(),
+        AppRoutes.subscription:  (_) => const SubscriptionScreen(),
+        AppRoutes.profile:       (_) => const ProfileScreen(),
+        AppRoutes.downloads:     (_) => const DownloadsScreen(),
+        AppRoutes.watchlist:     (_) => const WatchlistScreen(),
+        AppRoutes.history:       (_) => const HistoryScreen(),
+        AppRoutes.search:        (_) => const SearchScreen(),
       },
       onGenerateRoute: (settings) {
+        // ── Player ────────────────────────────────────────────────────────
         if (settings.name == AppRoutes.player) {
           final args = settings.arguments as Map<String, dynamic>;
           return MaterialPageRoute(
             builder: (_) => PlayerScreen(
-              fileId: args['file_id'] as String,
-              title: args['title'] as String,
-              localPath: args['local_path'] as String?,
+              fileId:               args['file_id'] as String,
+              title:                args['title'] as String,
+              localPath:            args['local_path'] as String?,
+              episodes:             (args['episodes'] as List?)
+                                        ?.cast<Map<String, dynamic>>(),
+              currentEpisodeIndex:  args['episode_index'] as int?,
+              titleId:              args['title_id'] as int?,
             ),
           );
         }
+
+        // ── Detail ────────────────────────────────────────────────────────
         if (settings.name == AppRoutes.detail) {
           final item = settings.arguments as CatalogItem;
           return MaterialPageRoute(
             builder: (_) => DetailScreen(item: item),
           );
         }
+
         return null;
       },
     );
@@ -87,8 +97,7 @@ class JazzMaxApp extends ConsumerWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -103,8 +112,7 @@ class JazzMaxApp extends ConsumerWidget {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: Colors.redAccent, width: 1),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1),
         ),
         labelStyle: const TextStyle(color: AppColors.textMuted),
         hintStyle: const TextStyle(color: AppColors.textMuted),
@@ -114,10 +122,8 @@ class JazzMaxApp extends ConsumerWidget {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.inter(
-              fontSize: 16, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
