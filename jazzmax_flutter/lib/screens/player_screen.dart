@@ -12,6 +12,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import '../core/api/catalog_api.dart';
 import '../core/constants.dart';
 import '../core/db/local_db.dart';
+import '../core/security/encryption_service.dart';
 
 /// Full-screen video player — Phase 4
 /// Features: custom gesture controls, double-tap seek, swipe brightness/volume,
@@ -64,6 +65,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Guest mode
   bool _isGuest = false;
   Timer? _guestLimitTimer;
+
+  // Temp file path created by decrypting an encrypted local download.
+  // Deleted in dispose() to avoid filling device storage.
+  String? _tempDecryptedPath;
 
   // Timers
   Timer? _controlsTimer;
@@ -209,8 +214,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       final savedMs = await LocalDb.getSavedPosition(widget.fileId);
-      final url = await CatalogApi.getStreamUrl(widget.fileId);
-      await _player.open(Media(url));
+      String playUrl;
+
+      if (widget.localPath != null) {
+        // ── Offline playback from encrypted local file ─────────────────────
+        final localFile = File(widget.localPath!);
+        if (!await localFile.exists()) {
+          throw Exception('Downloaded file not found. Please re-download.');
+        }
+
+        if (widget.localPath!.endsWith('.enc')) {
+          // Decrypt to a temporary file, then play from it
+          _tempDecryptedPath =
+              await EncryptionService.decryptToTemp(widget.localPath!);
+          playUrl = _tempDecryptedPath!;
+        } else {
+          // Older download — plaintext file (no encryption)
+          playUrl = widget.localPath!;
+        }
+      } else {
+        // ── Online streaming ───────────────────────────────────────────────
+        playUrl = await CatalogApi.getStreamUrl(widget.fileId);
+      }
+
+      await _player.open(Media(playUrl));
 
       // Seek to saved position if more than 5 seconds in
       if (savedMs > 5000) {
@@ -524,6 +551,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     try { ScreenBrightness().resetScreenBrightness(); } catch (_) {}
     try { VolumeController().showSystemUI = true; } catch (_) {}
+    // Delete temp decrypted file created for encrypted local playback
+    if (_tempDecryptedPath != null) {
+      try { File(_tempDecryptedPath!).delete(); } catch (_) {}
+    }
     super.dispose();
   }
 
