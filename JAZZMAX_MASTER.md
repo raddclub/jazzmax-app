@@ -8,37 +8,62 @@
 
 ---
 
-## ⚡ QUICK START FOR NEW REPLIT ACCOUNT
-> If you just unzipped this project on a new account, do these 4 things first:
-> 1. `pip install flask flask-cors pyjwt werkzeug requests` (in Shell)
-> 2. Create Workflow: **Radd Hub** → `cd radd-hub && python3 radd_hub.py run --skip-setup`
-> 3. Create Workflow: **Watch Prototype** → `cd _watch_prototype && PORT=8000 python run.py`
-> 4. Add Replit Secret: `SESSION_SECRET` → ask Muhammad Rehan for the value
-> 5. Read section 14 (Task Checklist) → find first unchecked `[ ]` → build that
+## ⚡ NEW REPLIT ACCOUNT — COMPLETE SETUP (2 steps only)
 
-## ⚡ END OF SESSION — PUSH TO GITHUB (primary method)
-> **Every account must run this before finishing:**
+### Step 1 — Add 2 Replit Secrets (manual, 1 minute)
+> Replit sidebar → 🔒 Secrets → + Add Secret
+>
+> | Secret Name | Value |
+> |---|---|
+> | `GITHUB_TOKEN` | `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` |
+> | `SESSION_SECRET` | ask Muhammad Rehan for this value |
+
+### Step 2 — Run ONE command in Shell (does everything automatically)
+> ```bash
+> curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
+>   "https://raw.githubusercontent.com/raddclub/jazzmax-app/main/setup_new_account.sh" \
+>   | bash
+> ```
+> **This single command:**
+> - Downloads full project from GitHub
+> - Installs all Python packages
+> - Updates `jazzmax_config.json` with this account's URL (so installed APKs auto-connect)
+> - Publishes all movie titles in the database
+> - Creates test account (03001234567 / test123)
+> - Shows what to do next
+>
+> After it finishes: **refresh your browser (F5)** — workflows appear automatically.
+> Then tell the Agent: `"I am Muhammad Rehan. Read JAZZMAX_MASTER.md Section 14, find first unchecked [ ] item, build it."`
+
+## ⚡ TEST WITHOUT APK — API Test Panel
+> After setup, verify everything works BEFORE installing APK:
+> ```
+> Open in browser: https://[your-replit-domain]/watch/test
+> ```
+> Tests: login, register, catalog (14 movies), subscription, play links, search.
+> If it works here → it works in the app. Only install APK for video + downloads testing.
+
+## ⚡ AUTOMATED ANDROID EMULATOR TEST (no phone needed)
+> After APK builds on GitHub Actions, trigger an emulator test:
+> 1. Go to: **github.com/raddclub/jazzmax-app → Actions → Test JazzMAX on Android Emulator**
+> 2. Click **"Run workflow"**
+> 3. Wait ~15 minutes
+> 4. Download artifact **emulator-test-N** → contains screenshots + crash logs
+>
+> Screenshots: splash screen, home screen, catalog loaded.
+> If no crash = safe to install on real phone.
+
+## ⚡ END OF SESSION — PUSH TO GITHUB
+> **Run before finishing every session:**
 > ```bash
 > bash push_to_github.sh
 > ```
-> This commits + pushes everything to: **github.com/raddclub/jazzmax-app** (private repo)
-> Requires `GITHUB_TOKEN` in Replit Secrets (add once per account, stays forever).
->
-> **Backup method** (if GitHub push fails):
-> ```bash
-> bash create_zip.sh
-> ```
-> Then download the zip from Files panel → upload to next account.
+> Commits + pushes everything to **github.com/raddclub/jazzmax-app** (private repo).
 
-## ⚡ START OF SESSION — CLONE FROM GITHUB (new account)
-> On the new Replit account, open Shell and run:
-> ```bash
-> git clone https://$GITHUB_TOKEN@github.com/raddclub/jazzmax-app.git /home/runner/workspace
-> cd /home/runner/workspace
-> pip install flask flask-cors pyjwt werkzeug requests
-> ```
-> Then add these Replit Secrets: `GITHUB_TOKEN`, `SESSION_SECRET`
-> Then create 2 workflows (see below), then read Task Checklist → build next unchecked item.
+## ⚡ IMPORTANT: jazzmax_config.json controls the API URL
+> Every time you move to a new Replit account, `setup_new_account.sh` automatically updates this file.
+> All installed APKs fetch this file from GitHub at every launch — they auto-switch to the new server.
+> **You do NOT need to rebuild the APK when switching accounts.**
 
 ---
 
@@ -456,7 +481,7 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] `android/app/build.gradle` configured for com.jazzmax.app
 - [x] `.github/workflows/build_apk.yml` — GitHub Actions APK build pipeline
 - [x] Push to GitHub repo: `raddclub/jazzmax-app` ← pushed via GitHub API (May 22 2026)
-- [ ] Verify GitHub Actions builds APK successfully (check Actions tab on GitHub)
+- [x] Verify GitHub Actions builds APK successfully (check Actions tab on GitHub)
 
 ### Phase 2 — Flutter App: Core Structure
 - [x] `lib/main.dart` — app entry point
