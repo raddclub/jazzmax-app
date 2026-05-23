@@ -26,6 +26,8 @@ class AppUser {
   }
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
+    // /api/auth/me returns fields at top-level.
+    // /api/auth/login returns fields nested under "user".
     final userData = json['user'] as Map<String, dynamic>? ?? json;
     final subData = json['subscription'] as Map<String, dynamic>?;
 
@@ -34,11 +36,19 @@ class AppUser {
       phone: userData['phone'] as String? ?? '',
       deviceId: userData['device_id'] as String?,
       deviceName: userData['device_name'] as String?,
-      isActive: (userData['is_active'] as int? ?? 1) == 1,
-      createdAt: userData['created_at'] as String?,
-      lastLoginAt: userData['last_login_at'] as String?,
+      // Python sends bool (true/false) or int (1/0) — handle both
+      isActive: _parseBool(userData['is_active'], defaultValue: true),
+      createdAt: userData['created_at']?.toString(),
+      lastLoginAt: userData['last_login_at']?.toString(),
       subscription: subData != null ? UserSubscription.fromJson(subData) : null,
     );
+  }
+
+  static bool _parseBool(dynamic v, {bool defaultValue = false}) {
+    if (v == null) return defaultValue;
+    if (v is bool) return v;
+    if (v is int) return v == 1;
+    return defaultValue;
   }
 
   bool get hasActiveSubscription {
@@ -50,7 +60,7 @@ class AppUser {
 }
 
 class UserSubscription {
-  final String plan; // 'free', 'basic', 'standard', 'premium'
+  final String plan;
   final String? expiresAt;
   final bool isActive;
 
@@ -61,10 +71,11 @@ class UserSubscription {
   });
 
   factory UserSubscription.fromJson(Map<String, dynamic> json) {
-    final expiresAt = json['expires_at'] as String?;
-    bool active = (json['is_active'] as int? ?? 0) == 1;
+    final expiresAt = json['expires_at']?.toString();
+    // Python sends bool (true/false) — handle both bool and int
+    bool active = json['is_active'] == true ||
+        (json['is_active'] as int? ?? 0) == 1;
 
-    // Also check expiry date
     if (active && expiresAt != null) {
       try {
         final expiry = DateTime.parse(expiresAt);
@@ -88,3 +99,4 @@ class UserSubscription {
     }
   }
 }
+
