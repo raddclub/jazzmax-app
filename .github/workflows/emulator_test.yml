@@ -45,13 +45,23 @@ jobs:
       - name: Locate APK file
         id: apk
         run: |
-          APK_PATH=$(find apk/ -name "*.apk" | head -1)
+          echo "=== APKs in artifact ==="
+          find apk/ -name "*.apk" | sort
+          echo "========================"
+
+          # MUST use x86_64 APK — emulator is x86_64, aosp_atd has no ARM translation.
+          # Installing arm64 on x86_64 without Houdini → INSTALL_FAILED_NO_MATCHING_ABIS.
+          APK_PATH=$(find apk/ -name "*x86_64*.apk" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "⚠  No x86_64 APK found — falling back to any APK"
+            APK_PATH=$(find apk/ -name "*.apk" | head -1)
+          fi
           if [ -z "$APK_PATH" ]; then
             echo "❌ No APK found in artifact"
             exit 1
           fi
           echo "path=$APK_PATH" >> $GITHUB_OUTPUT
-          echo "✅ APK found: $APK_PATH ($(du -sh $APK_PATH | cut -f1))"
+          echo "✅ Selected: $APK_PATH ($(du -sh $APK_PATH | cut -f1))"
 
       # ── Create output directories ─────────────────────────────────────────
       - name: Create output directories

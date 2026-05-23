@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:workmanager/workmanager.dart';
 import 'app.dart';
-import 'core/remote_config.dart';
 import 'core/download/background_download_worker.dart';
 
 void main() async {
@@ -26,9 +25,8 @@ void main() async {
     isInDebugMode: false,
   );
 
-  // Fetch server URL from GitHub config — no APK rebuild needed when server changes.
-  // Falls back to hardcoded AppConstants.apiBaseUrl if network/parse fails.
-  await RemoteConfig.fetch();
+  // RemoteConfig is fetched non-blocking in splash_screen.dart.
+  // Do NOT await it here — that blocks runApp() and leaves a blank screen.
 
   runApp(
     const ProviderScope(

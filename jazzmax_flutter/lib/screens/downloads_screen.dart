@@ -71,14 +71,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
         children: [
           Icon(Icons.download_outlined,
               color: AppColors.textMuted, size: 64),
-          const SizedBox(height: 16),
-          const Text(
+          SizedBox(height: 16),
+          Text(
             'No downloads yet',
             style: TextStyle(
                 color: AppColors.textPrimary, fontSize: 16),
           ),
-          const SizedBox(height: 8),
-          const Text(
+          SizedBox(height: 8),
+          Text(
             'Download movies to watch without streaming',
             style:
                 TextStyle(color: AppColors.textMuted, fontSize: 13),
