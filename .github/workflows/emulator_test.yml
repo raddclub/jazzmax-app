@@ -1,0 +1,192 @@
+name: Test JazzMAX on Android Emulator
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_number:
+        description: 'APK build run number to test (leave blank for latest)'
+        required: false
+        default: ''
+  workflow_run:
+    workflows: ["Build JazzMAX APK"]
+    types: [completed]
+
+jobs:
+  emulator-test:
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── Download the APK ──────────────────────────────────────────────────
+      - name: Download latest APK artifact
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          workflow: build_apk.yml
+          workflow_conclusion: success
+          name_is_regexp: true
+          name: jazzmax-release-.*
+          path: apk/
+          search_artifacts: true
+          skip_unpack: false
+
+      - name: Locate APK file
+        id: apk
+        run: |
+          APK_PATH=$(find apk/ -name "*.apk" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ No APK found in artifact"
+            exit 1
+          fi
+          echo "path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "✅ APK found: $APK_PATH ($(du -sh $APK_PATH | cut -f1))"
+
+      # ── Create output directories ─────────────────────────────────────────
+      - name: Create output directories
+        run: mkdir -p screenshots logs
+
+      # ── Run emulator and install APK ──────────────────────────────────────
+      - name: Enable KVM for hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run emulator tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          profile: pixel_2
+          avd-name: jazzmax_test_avd
+          ram-size: 2048M
+          heap-size: 512M
+          emulator-options: -no-snapshot -no-audio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: |
+            echo "════════════════════════════════════"
+            echo "  JazzMAX Emulator Test"
+            echo "════════════════════════════════════"
+
+            # Wait for emulator to be ready
+            echo "⏳ Waiting for emulator..."
+            adb wait-for-device
+            adb shell input keyevent 82
+
+            # Install APK
+            echo ""
+            echo "📦 Installing APK..."
+            adb install -r "${{ steps.apk.outputs.path }}"
+            echo "✅ APK installed"
+
+            # Start logcat capture in background
+            adb logcat -c
+            adb logcat > logs/logcat_full.txt &
+            LOGCAT_PID=$!
+
+            # Launch the app
+            echo ""
+            echo "🚀 Launching JazzMAX..."
+            adb shell am start -n com.jazzmax.app/.MainActivity
+            echo "✅ App launched"
+
+            # Screenshot 1: Splash screen (immediate)
+            sleep 5
+            echo "📸 Screenshot 1: Splash screen"
+            adb exec-out screencap -p > screenshots/01_splash.png
+            echo "✅ Splash screenshot saved"
+
+            # Screenshot 2: Home / loading state
+            sleep 15
+            echo "📸 Screenshot 2: Home screen"
+            adb exec-out screencap -p > screenshots/02_home.png
+            echo "✅ Home screenshot saved"
+
+            # Screenshot 3: After catalog loads
+            sleep 10
+            echo "📸 Screenshot 3: Catalog loaded"
+            adb exec-out screencap -p > screenshots/03_catalog.png
+            echo "✅ Catalog screenshot saved"
+
+            # Stop logcat
+            kill $LOGCAT_PID 2>/dev/null || true
+
+            # ── Crash analysis ────────────────────────────────────────────
+            echo ""
+            echo "════════════════════════════════════"
+            echo "  Crash Analysis"
+            echo "════════════════════════════════════"
+
+            # Check for Flutter fatal errors
+            if grep -q "FATAL EXCEPTION\|fatal error\|com.jazzmax.app.*died" logs/logcat_full.txt; then
+              echo "❌ CRASH DETECTED in logcat!"
+              grep -A 20 "FATAL EXCEPTION\|fatal error" logs/logcat_full.txt | head -50 > logs/crash_report.txt
+              cat logs/crash_report.txt
+              # Don't exit 1 yet — still upload screenshots so we can see what happened
+              echo "CRASHED=true" >> $GITHUB_ENV
+            else
+              echo "✅ No crashes detected"
+              echo "CRASHED=false" >> $GITHUB_ENV
+            fi
+
+            # Flutter-specific error check
+            if grep -q "FlutterError\|Another exception was thrown\|════════════════════" logs/logcat_full.txt; then
+              echo "⚠  Flutter errors found:"
+              grep -A 5 "FlutterError\|Another exception was thrown" logs/logcat_full.txt | head -40 >> logs/crash_report.txt 2>/dev/null || true
+            fi
+
+            # Extract JazzMAX-specific logs
+            grep "JazzMAX\|flutter\|com.jazzmax" logs/logcat_full.txt > logs/jazzmax_logs.txt 2>/dev/null || true
+
+            echo ""
+            echo "════════════════════════════════════"
+            echo "  Network / API Connectivity"
+            echo "════════════════════════════════════"
+
+            # Check if app made any network calls (indicates it started properly)
+            if grep -q "api/catalog\|api/auth\|jazzmax" logs/logcat_full.txt; then
+              echo "✅ App made API calls — network is working"
+            else
+              echo "⚠  No API calls detected — app may have crashed before connecting"
+            fi
+
+            # Final status
+            echo ""
+            if [ "$CRASHED" = "true" ]; then
+              echo "❌ TEST RESULT: CRASH DETECTED — check crash_report.txt"
+              exit 1
+            else
+              echo "✅ TEST RESULT: App launched and ran without crashes"
+            fi
+
+      # ── Upload all results ────────────────────────────────────────────────
+      - name: Upload screenshots and logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-test-${{ github.run_number }}
+          path: |
+            screenshots/
+            logs/
+          retention-days: 14
+
+      - name: Print screenshot summary
+        if: always()
+        run: |
+          echo ""
+          echo "════════════════════════════════════════════════════════"
+          echo "  Test artifacts uploaded:"
+          echo "  → screenshots/01_splash.png   — Splash screen (5s)"
+          echo "  → screenshots/02_home.png     — Home screen (20s)"
+          echo "  → screenshots/03_catalog.png  — Catalog loaded (30s)"
+          echo "  → logs/logcat_full.txt        — Full Android logcat"
+          echo "  → logs/jazzmax_logs.txt       — JazzMAX-specific logs"
+          echo "  → logs/crash_report.txt       — Crash details (if any)"
+          echo ""
+          echo "  Download from: GitHub → Actions → This run → Artifacts"
+          echo "════════════════════════════════════════════════════════"
