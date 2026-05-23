@@ -58,7 +58,7 @@ jobs:
       - name: Install emulator system dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libpulse0 libgl1 libvulkan1
+          sudo apt-get install -y libpulse0 libgl1
 
       - name: Enable KVM for hardware acceleration
         run: |
@@ -69,13 +69,14 @@ jobs:
       - name: Run emulator tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 29
-          arch: x86_64
+          api-level: 28
+          arch: x86
+          target: default
           profile: pixel_2
           avd-name: jazzmax_test_avd
           ram-size: 2048M
           heap-size: 512M
-          emulator-options: -no-snapshot -no-audio -no-boot-anim -camera-back none -gpu swiftshader_indirect
+          emulator-options: -no-snapshot -no-audio -no-boot-anim -camera-back none -no-window -gpu swiftshader
           disable-animations: true
           script: |
             echo "════════════════════════════════════"
