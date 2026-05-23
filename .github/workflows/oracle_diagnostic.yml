@@ -1,0 +1,123 @@
+name: Oracle Server Diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  diagnose:
+    name: Diagnose Oracle Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: SSH into Oracle and dump everything
+        env:
+          ORACLE_SSH_KEY: ${{ secrets.ORACLE_SSH_KEY }}
+        run: |
+          printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key
+          chmod 600 /tmp/oracle_key
+
+          ssh -i /tmp/oracle_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              ubuntu@92.4.95.252 'bash -s' << 'REMOTE'
+
+          echo "════════════════════════════════════════"
+          echo "  ORACLE SERVER DIAGNOSTIC"
+          echo "  $(date)"
+          echo "════════════════════════════════════════"
+
+          echo ""
+          echo "── OS & Resources ──────────────────────"
+          uname -a
+          free -h
+          df -h /
+          uptime
+
+          echo ""
+          echo "── Running Processes (JazzMAX) ─────────"
+          ps aux | grep -E "python|gunicorn|nginx|flask|radd|watch" | grep -v grep || echo "(none found)"
+
+          echo ""
+          echo "── Nginx Status ────────────────────────"
+          sudo systemctl status nginx --no-pager -l 2>/dev/null | head -20 || echo "nginx not found"
+
+          echo ""
+          echo "── Port Listeners ──────────────────────"
+          sudo ss -tlnp 2>/dev/null | grep -E "LISTEN" || netstat -tlnp 2>/dev/null | grep LISTEN
+
+          echo ""
+          echo "── JazzMAX Project Directory ───────────"
+          ls -la /opt/jazzmax/ 2>/dev/null || ls -la ~/jazzmax* 2>/dev/null || echo "(not in /opt/jazzmax)"
+          find /opt /home/ubuntu ~/jazzmax-app -maxdepth 3 -name "*.py" 2>/dev/null | head -30 || true
+
+          echo ""
+          echo "── Git Status (latest commit) ──────────"
+          for d in /opt/jazzmax /home/ubuntu/jazzmax-app ~/jazzmax-app; do
+            if [ -d "$d/.git" ]; then
+              echo "Repo at $d:"
+              git -C "$d" log --oneline -5
+              git -C "$d" status --short
+            fi
+          done
+
+          echo ""
+          echo "── Database ────────────────────────────"
+          find / -name "radd_hub.db" -o -name "*.db" 2>/dev/null | grep -v proc | head -10
+          DB=$(find / -name "radd_hub.db" 2>/dev/null | grep -v proc | head -1)
+          if [ -n "$DB" ]; then
+            echo "DB path: $DB"
+            echo "DB size: $(du -sh $DB | cut -f1)"
+            sqlite3 "$DB" "SELECT count(*) || ' titles' FROM titles; SELECT count(*) || ' files' FROM files; SELECT count(*) || ' users' FROM users;" 2>/dev/null || echo "(sqlite3 not available)"
+          fi
+
+          echo ""
+          echo "── Nginx Config ────────────────────────"
+          cat /etc/nginx/sites-enabled/* 2>/dev/null || cat /etc/nginx/nginx.conf 2>/dev/null | head -60
+
+          echo ""
+          echo "── Systemd Services (JazzMAX) ──────────"
+          systemctl list-units --type=service --state=running 2>/dev/null | grep -i jazz || echo "(no jazzmax systemd services)"
+          ls /etc/systemd/system/jazz* /etc/systemd/system/radd* /etc/systemd/system/watch* 2>/dev/null || echo "(no jazzmax service files)"
+
+          echo ""
+          echo "── Recent Logs ─────────────────────────"
+          sudo journalctl -u jazzmax* -n 30 --no-pager 2>/dev/null || echo "(no jazzmax journal)"
+          sudo journalctl -u radd* -n 30 --no-pager 2>/dev/null || echo "(no radd journal)"
+
+          echo ""
+          echo "── Watch Prototype routes ──────────────"
+          find / -name "watch.py" -path "*/routes/*" 2>/dev/null | head -3 | while read f; do
+            echo "=== $f ==="; head -50 "$f"
+          done
+
+          echo ""
+          echo "── jazzmax_config.json ─────────────────"
+          find / -name "jazzmax_config.json" 2>/dev/null | grep -v proc | while read f; do
+            echo "$f: $(cat $f)"
+          done
+
+          echo ""
+          echo "── Emulator test script ────────────────"
+          ls /opt/jazzmax/scripts/ 2>/dev/null || echo "(scripts dir not found)"
+
+          echo "════════════════════════════════════════"
+          echo "  DIAGNOSTIC COMPLETE"
+          echo "════════════════════════════════════════"
+REMOTE
+
+          rm -f /tmp/oracle_key
+
+      - name: Upload diagnostic output
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: oracle-diagnostic
+          path: /dev/null
+          retention-days: 1
