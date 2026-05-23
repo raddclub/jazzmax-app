@@ -1,5 +1,9 @@
 name: Test JazzMAX on Android Emulator
 
+permissions:
+  actions: read
+  contents: read
+
 on:
   workflow_dispatch:
     inputs:
