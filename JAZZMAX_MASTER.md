@@ -529,9 +529,9 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] Download progress tracking (0.0 → 1.0, updates UI live)
 - [x] Delete downloaded file (removes local file + DB record)
 - [x] Offline playback from local file (passes local_path to player)
-- [ ] AES-256 encryption of downloaded files ← future
-- [ ] Download limit per subscription tier ← future
-- [ ] Background download survives app kill ← future
+- [x] AES-256 encryption of downloaded files ← DONE (EncryptionService.dart — CBC, 4MB chunks, key in Keystore)
+- [x] Download limit per subscription tier ← DONE (DownloadQuotaService: free=0, basic=5, standard=15, premium=∞)
+- [x] Background download survives app kill ← DONE (WorkManager — reschedules on kill, encrypts on next app open)
 
 ### Phase 6 — Polish & Release
 - [x] Splash screen with fade animation + pulsing dot
@@ -804,6 +804,49 @@ Next account should: [what to do first]
 4. URL change process: edit `jazzmax_config.json` → change `api_base_url` → push to GitHub → done
 
 ---
+
+### Session 5 — May 23, 2026
+**Account:** Muhammad Rehan (new account — continuing Phase 5)
+**Built:**
+- ✅ Phase 5: AES-256 encryption of downloaded files
+  - `jazzmax_flutter/lib/core/security/encryption_service.dart` — AES-256-CBC, 4MB chunks, unique IV per chunk
+  - Key stored in Android Keystore via flutter_secure_storage — never leaves device
+  - File format: magic "JMXE" + original_size + IV-per-chunk + encrypted data
+  - `download_service.dart` — encrypts file after download (progress: 0→0.9 download, 0.9→1.0 encrypt)
+  - `local_db.dart` v4 — added `is_encrypted` column + `getTodayDownloadCount()` method
+  - `player_screen.dart` — fixed localPath playback: decrypts `.enc` files to temp before playing, cleans up temp on dispose
+- ✅ Phase 5: Download limit per subscription tier
+  - `lib/core/download/download_quota_service.dart` — free=0, basic=5/day, standard=15/day, premium=unlimited
+  - Checks against local daily download count (`getTodayDownloadCount()`)
+  - `downloads_provider.dart` — checks quota before starting download, shows friendly error
+- ✅ Phase 5: Background download survives app kill
+  - `pubspec.yaml` — added `workmanager: ^0.5.7` + `http: ^1.2.0` + `encrypt: ^5.0.3`
+  - `lib/core/download/background_download_worker.dart` — WorkManager task: fetches fresh URL, downloads, marks DB
+  - `main.dart` — initializes WorkManager with `backgroundDownloadDispatcher`
+  - `AndroidManifest.xml` — added WorkManager service + boot receiver
+  - `downloads_provider.dart` — schedules WorkManager backup on every download start, cancels on success
+  - On app open: auto-encrypts any files downloaded in background (is_encrypted=0 → encrypt → update DB)
+- ✅ Oracle emulator setup upgraded
+  - `oracle_setup.sh` v2.0 — installs Android SDK + ARM64 emulator automatically (with or without KVM)
+  - Emulator registered as Supervisor service (`jazzmax_emulator`) — survives reboots
+  - `oracle_emulator_test.sh` — test script: starts emulator, installs APK, screenshots, logcat
+  - `.github/workflows/build_apk.yml` — full GitHub Actions pipeline:
+    - Builds debug + release APK on every push to main
+    - Creates GitHub Release automatically
+    - If ORACLE_SSH_KEY secret is set: SSHes to Oracle, installs APK, takes screenshots, uploads artifacts
+**Checkboxes updated:** Yes — Phase 5 all 3 items [x], Phase 6 unchanged
+**Next account should:**
+1. Add to GitHub Secrets (`github.com/raddclub/jazzmax-app → Settings → Secrets`):
+   - `ORACLE_SSH_KEY` = contents of your Oracle private key (`cat ~/.ssh/id_rsa`)
+   - (Optional) `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` for signed release APK
+2. SSH into Oracle server and run: `bash <(curl -fsSL -H "Authorization: token ghp_..." .../oracle_setup.sh)`
+   - This installs Android SDK + registers emulator as always-on service
+3. Start emulator manually: `sudo supervisorctl start jazzmax_emulator`
+4. Check KVM: if not enabled, enable Nested Virtualization in Oracle Console
+5. Continue Section 14 — next unchecked items:
+   - Phase 6: Test on real Android phone
+   - Phase 6: Upload signed APK to GitHub Releases
+   - Phase 7: Let's Encrypt SSL (needs domain or can use self-signed)
 
 ### Session 4 — May 23, 2026
 **Account:** Muhammad Rehan (new account — continuing from Session 3)
