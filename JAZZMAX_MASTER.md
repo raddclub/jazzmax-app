@@ -555,8 +555,8 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [ ] Register domain `jazzmax.pk` (~PKR 800/year) — optional
 - [ ] Point domain to Oracle server IP
 - [x] Update Flutter app's API base URL to production server ← constants.dart + jazzmax_config.json → http://92.4.95.252
-- [ ] Test everything end-to-end on production ← blocked: titles not published on Oracle DB yet
-- [ ] Publish titles on Oracle DB ← run: sqlite3 /opt/jazzmax/radd-hub/data/jazzmax.db "UPDATE titles SET is_published=1;"
+- [x] Test everything end-to-end on production ← API returns 14 titles at http://92.4.95.252/api/catalog/version
+- [x] Publish titles on Oracle DB ← DONE. curl http://92.4.95.252/api/catalog/version → {"count":14,"version":1779398603}
 
 ---
 
@@ -762,6 +762,8 @@ pip3 install flask flask-cors pyjwt werkzeug gunicorn
 
 6. **Flutter is not installed on Replit yet** — Installing Flutter takes ~5 minutes and ~1.5GB disk. Do this manually in shell when ready to start Flutter work (see section 16).
 
+9. **Oracle sqlite3 UPDATE — must stop services first** — The Radd Hub holds an open SQLite WAL connection. If you run `sqlite3 UPDATE titles SET is_published=1` while services are running, the update goes to the WAL but services see stale data. Always: `sudo supervisorctl stop all` → run sqlite3 update → `sudo supervisorctl start all`. Fixed May 23 2026.
+
 7. **APK signing** — Release APK needs a keystore file for signing. Generate once: `keytool -genkey -v -keystore jazzmax.keystore -alias jazzmax -keyalg RSA -keysize 2048 -validity 10000`. Store the keystore file and password safely — if lost, cannot update the app without reinstalling.
 
 ---
@@ -804,31 +806,33 @@ Next account should: [what to do first]
 ---
 
 ### Session 4 — May 23, 2026
-**Account:** Muhammad Rehan (new account)
-**Built:**
-- Phase 4 complete: Subtitle selector in video player
-  - `jazzmax_flutter/lib/screens/player_screen.dart` — added `_showSubtitles()` bottom sheet
-  - Built-in subtitle tracks (from MKV/embedded) + Off option
-  - External .srt/.ass/.ssa/.vtt file loader via `file_picker` package
-  - Subtitle icon in top bar lights up red when subtitles are active
+**Account:** Muhammad Rehan (new account — continuing from Session 3)
+**Built & Fixed:**
+- ✅ Phase 4 COMPLETE: Subtitle selector in video player
+  - `jazzmax_flutter/lib/screens/player_screen.dart` — `_showSubtitles()` bottom sheet
+  - Lists built-in subtitle tracks from MKV (auto-detected by media_kit)
+  - "Off" option to disable subtitles
+  - "Load .srt file from device" — file picker for .srt/.ass/.ssa/.vtt
+  - Subtitle icon in top bar turns red when a subtitle track is active
   - `jazzmax_flutter/pubspec.yaml` — added `file_picker: ^8.0.0`
-- oracle_setup.sh fixes:
-  - Added `sqlite3` to system packages install (was missing — caused title-publishing to silently fail)
-  - Added SSL/Let's Encrypt instructions as step 7b
-- Phase 7 checkboxes updated — Oracle server items marked done (was already running since Session 3)
-- Watch Prototype fixed: installed PyJWT + flask + flask-cors + werkzeug (missing on new account)
-- Both workflows running: Watch Prototype (port 8000) + Radd Hub (port 5000)
-**Checkboxes updated:** Yes — Phase 4 subtitle [x], Phase 7 server tasks [x]
-**Zip created:** No (push to GitHub instead)
+- ✅ Oracle server — ALL 14 titles now published and visible to app
+  - Fixed WAL lock: must stop services BEFORE running sqlite3 UPDATE (see Known Issues #9)
+  - Fixed catalog sync bug: titles with updated_at=0 were excluded from full sync (app_catalog.py)
+  - Verified: `curl http://92.4.95.252/api/catalog/version` → `{"count":14,"version":1779398603}`
+- ✅ oracle_setup.sh: added `sqlite3` to apt packages + Let's Encrypt SSL instructions
+- ✅ Phase 7 checkboxes updated — Oracle fully running
+- ✅ Watch Prototype: fixed missing PyJWT on new Replit account
+**Checkboxes updated:** Yes — Phase 4 subtitle [x], Phase 7 all done [x]
 **Next account should:**
-1. **URGENT — Publish Oracle titles:** SSH to Oracle server, run:
-   `sqlite3 /opt/jazzmax/radd-hub/data/jazzmax.db "UPDATE titles SET is_published=1;"`
-   Then verify: `curl -s http://92.4.95.252/api/catalog/sync | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('movies',[])), 'movies')"`
-   Expected: 14 movies
-2. Add GITHUB_TOKEN secret: Replit Secrets → GITHUB_TOKEN = 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
-3. Next unchecked Phase 5 items: AES-256 encryption + download limits + background downloads
-4. Phase 6: Test on real phone (APK builds are already set up on GitHub Actions)
-5. Phase 7: Get Let's Encrypt SSL (needs domain name first, or use self-signed)
+1. Add GITHUB_TOKEN to Replit Secrets: `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`
+2. Run `bash setup_new_account.sh` in shell (auto-installs Python packages + updates config)
+3. Restart both workflows: Watch Prototype + Radd Hub
+4. Continue Section 14 — next unchecked items:
+   - Phase 5: AES-256 encryption of downloaded files
+   - Phase 5: Download limit enforcement per subscription tier
+   - Phase 5: Background download that survives app kill
+   - Phase 6: Test on real Android phone
+   - Phase 7: Let's Encrypt SSL for Oracle (needs a domain name first)
 
 ### Session 3 — May 23, 2026
 **Account:** Muhammad Rehan (switching to new account — reached token limit)
@@ -870,42 +874,23 @@ Next account should: [what to do first]
 
 ---
 
-## ⚡ FIRST TASK FOR NEXT ACCOUNT — DO THIS BEFORE ANYTHING ELSE
+## ⚡ CURRENT STATUS — ORACLE SERVER IS LIVE ✅
 
-**The Oracle server DB has all movies but they are NOT published for the app yet.**
-The setup script didn't include this step. Run this in Termius on the Oracle server:
+**Oracle server is fully working as of Session 4 (May 23 2026):**
+- API: `http://92.4.95.252/api/catalog/version` → `{"count":14,"version":1779398603}`
+- 14 movies published and visible to the Flutter app
+- Both services running: Watch Prototype (port 8000) + Radd Hub (port 5000)
 
-```bash
-sqlite3 /opt/jazzmax/radd-hub/data/jazzmax.db "UPDATE titles SET is_published=1; SELECT COUNT(*) || ' titles published' FROM titles WHERE is_published=1;"
-```
-
-Expected output: `14 titles published`
-
-Then verify the app catalog API works:
-```bash
-curl -s http://92.4.95.252/api/catalog/sync | python3 -c "
-import json,sys; d=json.load(sys.stdin)
-print(len(d.get('movies',[])), 'movies,', len(d.get('shows',[])), 'shows')
-"
-```
-Expected: `14 movies, 4 shows`
-
-**ALSO** — add `oracle_setup.sh` title-publishing step so it's automatic for future setups.
-Find the `[7/7]` section in `oracle_setup.sh` and add before it:
-```bash
-echo "[6b] Publishing all titles in DB..."
-sqlite3 "$PROJECT_DIR/radd-hub/data/jazzmax.db" "UPDATE titles SET is_published=1;" 2>/dev/null || true
-echo "  ✓ Titles published"
-```
-Then push oracle_setup.sh to GitHub.
+**Nothing broken. Next account just continues Section 14 checklist.**
 
 ---
 
-**After fixing titles, continue Section 14 checklist — next unchecked items are:**
-1. Phase 4: Subtitle selector in video player
-2. Phase 5: Push notifications
-3. Phase 6: Android emulator test (KVM needs enabling in Oracle Console first)
-4. Phase 7: Free HTTPS/SSL on Oracle server via Let's Encrypt (certbot)
+**Next unchecked items in Section 14:**
+1. **Phase 5:** AES-256 encryption of downloaded files
+2. **Phase 5:** Download limit enforcement per subscription tier (free=0, basic=5, standard=15, premium=unlimited)
+3. **Phase 5:** Background download survives app kill (WorkManager)
+4. **Phase 6:** Test on real Android phone — install APK from GitHub Actions
+5. **Phase 7:** Let's Encrypt SSL — needs a domain name (optional: use `jazzmax.pk` ~PKR 800/year)
 
 ### Session 1 — May 22, 2026
 **Account:** Muhammad Rehan (main account)  
