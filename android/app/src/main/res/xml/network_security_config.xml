@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- JazzMAX streaming server — HTTPS enforced -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">pike.replit.dev</domain>
+        <domain includeSubdomains="true">replit.dev</domain>
+        <domain includeSubdomains="true">replit.app</domain>
+        <domain includeSubdomains="true">jazzdrive.com.pk</domain>
+        <domain includeSubdomains="true">cloud.jazzdrive.com.pk</domain>
+    </domain-config>
+    <!-- Default: block all cleartext, trust only system CAs -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system"/>
+        </trust-anchors>
+    </base-config>
+</network-security-config>
