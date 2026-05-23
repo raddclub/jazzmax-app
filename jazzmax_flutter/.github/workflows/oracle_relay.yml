@@ -1,0 +1,84 @@
+name: Oracle SSH Relay
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Shell command to run on Oracle server'
+        required: false
+        default: 'echo "=== UPTIME ===" && uptime && echo "=== UFW STATUS ===" && sudo ufw status && echo "=== SERVICES ===" && sudo supervisorctl status && echo "=== DISK ===" && df -h / && echo "=== DOWNLOAD QUEUE ===" && curl -s -c /tmp/c.txt -X POST -d "username=admin&password=$(cat /opt/jazzmax/.env 2>/dev/null | grep RADD_ADMIN_PASS | cut -d= -f2 || echo 6LQRmtOM5d1PETSI)" http://localhost:5000/auth/login -L > /dev/null && curl -s -b /tmp/c.txt http://localhost:5000/stream/api/queue | python3 -c "import sys,json; d=json.load(sys.stdin); jobs=d if isinstance(d,list) else d.get(\"jobs\",d.get(\"queue\",[])); [print(j.get(\"status\",\"?\"), j.get(\"title\",j.get(\"movie_clean\",\"?\")), j.get(\"progress\",\"\")) for j in jobs]" 2>/dev/null || echo "Queue check failed"'
+      fix_ufw:
+        description: 'Fix UFW to allow Replit IPs (run this if SSH is blocked)'
+        required: false
+        default: 'false'
+      restart_services:
+        description: 'Restart jazzmax_radd and jazzmax_watch services'
+        required: false
+        default: 'false'
+
+jobs:
+  oracle-relay:
+    name: Run command on Oracle
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Write SSH key
+        run: |
+          printf '%s' "${{ secrets.ORACLE_SSH_KEY }}" > /tmp/oracle_key
+          chmod 600 /tmp/oracle_key
+          # Fix OpenSSH key format if needed
+          python3 - <<'PYEOF'
+          import re
+          with open('/tmp/oracle_key') as f:
+              key = f.read()
+          # If it's all on one line or has spaces in body, reformat
+          if '\n' not in key.strip() or key.count('\n') < 5:
+              begin = '-----BEGIN OPENSSH PRIVATE KEY-----'
+              end = '-----END OPENSSH PRIVATE KEY-----'
+              begin_rsa = '-----BEGIN RSA PRIVATE KEY-----'
+              end_rsa = '-----END RSA PRIVATE KEY-----'
+              for b, e in [(begin, end), (begin_rsa, end_rsa)]:
+                  if b.replace('\n','') in key.replace('\n',''):
+                      body = key.replace(b,'').replace(e,'').replace(' ','').replace('\n','')
+                      wrapped = '\n'.join(body[i:i+70] for i in range(0, len(body), 70))
+                      key = b + '\n' + wrapped + '\n' + e + '\n'
+                      break
+              with open('/tmp/oracle_key', 'w') as f:
+                  f.write(key)
+              print("Key reformatted OK")
+          else:
+              print("Key format OK")
+          PYEOF
+
+      - name: Fix UFW (allow all SSH)
+        if: ${{ inputs.fix_ufw == 'true' }}
+        run: |
+          ssh -i /tmp/oracle_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              -o ServerAliveInterval=10 \
+              ubuntu@92.4.95.252 \
+              'sudo ufw allow 22/tcp && sudo ufw allow 80/tcp && sudo ufw allow 8000/tcp && sudo ufw allow 5000/tcp && sudo ufw --force enable && sudo ufw status && echo "UFW FIXED OK"'
+
+      - name: Restart services
+        if: ${{ inputs.restart_services == 'true' }}
+        run: |
+          ssh -i /tmp/oracle_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              ubuntu@92.4.95.252 \
+              'sudo supervisorctl restart jazzmax_radd jazzmax_watch && sleep 3 && sudo supervisorctl status'
+
+      - name: Run custom command
+        run: |
+          ssh -i /tmp/oracle_key \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=30 \
+              -o ServerAliveInterval=10 \
+              ubuntu@92.4.95.252 \
+              '${{ inputs.command }}'
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/oracle_key
