@@ -51,6 +51,19 @@ jobs:
         working-directory: jazzmax_flutter
         run: flutter pub get
 
+      # ── Extract version from pubspec so it appears in APK names + release ──
+      - name: Extract app version
+        id: ver
+        run: |
+          VERSION=$(grep '^version:' jazzmax_flutter/pubspec.yaml | awk '{print $2}')
+          SEMVER=$(echo "$VERSION" | cut -d'+' -f1)
+          BUILD=$(echo "$VERSION" | cut -d'+' -f2)
+          echo "version=$VERSION"   >> $GITHUB_OUTPUT
+          echo "semver=$SEMVER"     >> $GITHUB_OUTPUT
+          echo "build=$BUILD"       >> $GITHUB_OUTPUT
+          echo "label=v${SEMVER}-build${{ github.run_number }}" >> $GITHUB_OUTPUT
+          echo "App version: $VERSION  →  label: v${SEMVER}-build${{ github.run_number }}"
+
       - name: Flutter analyze
         working-directory: jazzmax_flutter
         run: flutter analyze --no-fatal-warnings
@@ -104,45 +117,79 @@ jobs:
             [ -n "$f" ] && [ -f "$f" ] && du -sh "$f" || true
           done
 
-      # ── Upload all split APKs as one artifact (for emulator test) ─────────
+      # ── Rename APKs to include version + run number (so you can tell builds apart) ──
+      - name: Rename APKs with version label
+        id: renamed
+        run: |
+          LABEL="${{ steps.ver.outputs.label }}"
+          OUT_DIR="jazzmax_flutter/build/versioned"
+          mkdir -p "$OUT_DIR"
+
+          rename_apk() {
+            local src="$1" suffix="$2"
+            if [ -n "$src" ] && [ -f "$src" ]; then
+              local dest="$OUT_DIR/jazzmax-${LABEL}-${suffix}.apk"
+              cp "$src" "$dest"
+              echo "$dest"
+            fi
+          }
+
+          ARM64_NEW=$(rename_apk "${{ steps.apks.outputs.arm64 }}"  "arm64")
+          ARMV7_NEW=$(rename_apk "${{ steps.apks.outputs.armv7 }}"  "arm32")
+          X86_NEW=$(rename_apk   "${{ steps.apks.outputs.x86_64 }}" "x86_64")
+
+          echo "arm64=$ARM64_NEW"   >> $GITHUB_OUTPUT
+          echo "armv7=$ARMV7_NEW"   >> $GITHUB_OUTPUT
+          echo "x86_64=$X86_NEW"    >> $GITHUB_OUTPUT
+
+          echo "=== Versioned APKs ==="
+          ls -lh "$OUT_DIR/"
+
+      # ── Upload versioned APKs as artifact ─────────────────────────────────
       - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
-          name: jazzmax-debug-${{ github.run_number }}
-          # Broad glob covers both flutter-apk/ and apk/debug/ output dirs.
-          # At least one APK is guaranteed because Locate step would have failed.
-          path: |
-            jazzmax_flutter/build/**/app-debug*.apk
-            jazzmax_flutter/build/**/*debug*.apk
+          name: jazzmax-${{ steps.ver.outputs.label }}-run${{ github.run_number }}
+          path: jazzmax_flutter/build/versioned/
           if-no-files-found: error
           retention-days: 14
 
       # ── Create GitHub Release ─────────────────────────────────────────────
-      # arm64-v8a covers every Android phone sold since ~2016 (including Jazz users).
-      # This is what Rehan should download and install on his phone.
+      # arm64 covers every Android phone sold since ~2016 (including Jazz users).
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: build-${{ github.run_number }}
-          name: "JazzMAX Build #${{ github.run_number }}"
+          tag_name: ${{ steps.ver.outputs.label }}
+          name: "JazzMAX ${{ steps.ver.outputs.label }}"
           body: |
-            Auto-build from commit `${{ github.sha }}`
+            **Version:** `${{ steps.ver.outputs.semver }}` · **Build:** #${{ github.run_number }}
+            **Commit:** `${{ github.sha }}`
 
-            ## Install on your phone (arm64 — all modern Android phones)
+            ## What changed in this build
+            - Fixed: app now points to Oracle server (`http://92.4.95.252`) — content will load
+            - Fixed: hardcoded fallback URL was a dead Replit dev domain — corrected to Oracle IP
+            - Added: version number visible on Splash screen and Profile → App Info
+            - Added: Profile screen shows which server the app is connecting to
+            - Added: Home screen shows real error message (not "No content yet") when server is unreachable
+            - Changed: APK filenames now include version + build number so you can confirm which build you have
 
-            1. Download **app-arm64-v8a-debug.apk** below ← this is the one you want
-            2. Open the APK on your phone → tap Install
-            3. If prompted: Settings → Allow install from unknown sources → try again
+            ## Install on your phone
+
+            1. Download **`jazzmax-${{ steps.ver.outputs.label }}-arm64.apk`** below ← this is the one you want
+            2. Transfer to your Android phone
+            3. Open the APK → tap Install
+            4. If prompted: Settings → Allow install from unknown sources → try again
+            5. Open the app → Profile tab → App Info — confirms version `${{ steps.ver.outputs.semver }}`
 
             ---
-            _Also included: armeabi-v7a (old 32-bit phones) · x86_64 (emulators)_
+            _Also included: arm32 (old 32-bit phones) · x86_64 (emulators)_
           files: |
-            ${{ steps.apks.outputs.arm64 }}
-            ${{ steps.apks.outputs.armv7 }}
-            ${{ steps.apks.outputs.x86_64 }}
-          prerelease: true
+            ${{ steps.renamed.outputs.arm64 }}
+            ${{ steps.renamed.outputs.armv7 }}
+            ${{ steps.renamed.outputs.x86_64 }}
+          prerelease: false
           fail_on_unmatched_files: false
 
       - name: Deploy to Oracle emulator
@@ -152,7 +199,7 @@ jobs:
         run: |
           printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key
           chmod 600 /tmp/oracle_key
-          APK="${{ steps.apks.outputs.arm64 }}"
+          APK="${{ steps.renamed.outputs.arm64 }}"
           scp -i /tmp/oracle_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
               "$APK" ubuntu@92.4.95.252:/tmp/jazzmax-latest.apk
           ssh -i /tmp/oracle_key -o StrictHostKeyChecking=no -o ConnectTimeout=60 \
