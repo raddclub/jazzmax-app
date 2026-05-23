@@ -51,6 +51,9 @@ dependencies:
   # First-run onboarding flag
   shared_preferences: ^2.2.2
 
+  # External subtitle / file picker (.srt files)
+  file_picker: ^8.0.0
+
   # Fonts
   google_fonts: ^6.1.0
 
