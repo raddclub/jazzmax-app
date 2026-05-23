@@ -84,17 +84,17 @@ def jd_stats():
     if keepalive_dead:
         token_ok = False
 
-    # logged_in: token is genuinely fresh AND keepalive confirms the session is alive
-    logged_in = bool(vk and jsid and token_ok)
-    # needs_otp: no silent recovery path, OR refresh is confirmed broken
+    # logged_in: JSESSIONID present and token genuinely fresh (validation_key optional)
+    logged_in = bool(jsid and token_ok)
+    # needs_otp: session fully dead and no silent recovery path
     needs_otp = bool(
-        vk and jsid
+        jsid
         and not token_ok
         and (not has_rt and not has_at or refresh_broken)
     )
 
     storage = {}
-    if token_ok and vk and jsid:
+    if token_ok and jsid:
         storage = uploader.get_storage_info(vk, jsid)
 
     remaining_m = max(0, int((exp - _time.time()) / 60)) if exp else 0
@@ -465,6 +465,54 @@ def api_logout():
             c.execute("UPDATE accounts SET validation_key='', jsessionid='', "
                       "token_expires_at=0 WHERE id=?", (acct["id"],))
         return jsonify({"ok": True, "message": "Logged out"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@bp.route("/api/jazzdrive/tokens", methods=["POST"])
+@auth.login_required
+def api_paste_tokens():
+    """Directly save validation_key + JSESSIONID cookies pasted from browser.
+
+    Used when the server IP is blocked by JazzDrive for silent session init —
+    the user logs in at cloud.jazzdrive.com.pk in their browser, copies the
+    two session cookies from DevTools, and pastes them here.
+
+    Body: {validation_key: str, jsessionid: str, msisdn?: str}
+    """
+    import time as _time
+    data = request.get_json(force=True, silent=True) or {}
+    vk  = (data.get("validation_key") or "").strip()
+    jid = (data.get("jsessionid") or "").strip()
+    msisdn_raw = data.get("msisdn") or ""
+
+    if not vk or not jid:
+        return jsonify({"ok": False, "error": "validation_key and jsessionid are required"}), 400
+
+    # Find the active flix account; fall back to the provided msisdn
+    acct = uploader.get_active_account()
+    if not acct and msisdn_raw:
+        msisdn = db.normalize_msisdn(msisdn_raw)
+        with db.conn() as c:
+            row = c.execute(
+                "SELECT id FROM accounts WHERE msisdn=? LIMIT 1", (msisdn,)
+            ).fetchone()
+        acct = dict(row) if row else None
+
+    if not acct:
+        return jsonify({"ok": False, "error": "No JazzDrive account found — send OTP first"}), 404
+
+    aid = acct["id"]
+    exp = int(_time.time()) + 86400 * 30  # treat as valid for 30 days
+
+    try:
+        with db.conn() as c:
+            c.execute(
+                "UPDATE accounts SET validation_key=?, jsessionid=?, "
+                "token_expires_at=?, is_active=1 WHERE id=?",
+                (vk, jid, exp, aid),
+            )
+        return jsonify({"ok": True, "message": "Tokens saved — session active", "account_id": aid})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
