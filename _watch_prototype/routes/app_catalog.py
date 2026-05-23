@@ -60,6 +60,10 @@ def sync():
     except (ValueError, TypeError):
         since = 0
 
+    # When since=0 (full sync), use -1 so rows with updated_at=0 are included.
+    # updated_at=0 means "never updated" and must appear in a full sync.
+    since_param = since if since > 0 else -1
+
     with db.conn() as c:
         title_rows = c.execute(
             """
@@ -72,7 +76,7 @@ def sync():
               AND (t.updated_at IS NULL OR t.updated_at > ?)
             ORDER BY t.updated_at DESC
             """,
-            (since,)
+            (since_param,)
         ).fetchall()
 
     titles = []
