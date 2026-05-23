@@ -99,15 +99,25 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # ── Run emulator ──────────────────────────────────────────────────────
-      # test_jazzmax.sh is committed in the repo root.
-      # The reactivecircus action runs each `script:` line as a separate
-      # `sh -c <line>`, so multi-line if/then/fi constructs break.
-      # Calling a committed bash script avoids that entirely.
+      # ── Run COMPREHENSIVE emulator tests ──────────────────────────────────
+      # test_jazzmax_full.sh covers all user flows in one run:
+      #   Phase 1:  API smoke tests (register, login, catalog, plans, guest token)
+      #   Phase 2:  Register flow (in-app UI)
+      #   Phase 3:  Login flow (in-app UI)
+      #   Phase 4:  Home screen browse + search
+      #   Phase 5:  Play movie (tap card → detail sheet → Watch Now → player)
+      #   Phase 6:  TV show episode navigation (ep1 vs ep2 logcat diff)
+      #   Phase 7:  Downloads screen
+      #   Phase 8:  Profile screen
+      #   Phase 9:  Subscription plans screen
+      #   Phase 10: Guest mode + 10-min limit (logcat verified)
+      #   Phase 11: Search with multiple queries
+      #   Phase 12: Crash + log analysis
       #
-      # -partition-size 4096: cap userdata partition at 4 GB (default Pixel 2
-      # wants 7.4 GB which barely fits on GitHub runners, causing FATAL errors).
-      - name: Run emulator tests
+      # timeout-minutes 35: comprehensive test takes ~25 min
+      #   (5 min emulator boot + ~20 min of all test phases)
+      - name: Run comprehensive emulator tests
+        timeout-minutes: 35
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -121,9 +131,9 @@ jobs:
           emulator-options: -no-snapshot -no-audio -no-boot-anim -no-window -camera-back none -gpu swiftshader_indirect -partition-size 4096
           disable-animations: true
           emulator-boot-timeout: 300
-          script: bash test_jazzmax.sh "${{ steps.apk.outputs.path }}"
+          script: bash test_jazzmax_full.sh "${{ steps.apk.outputs.path }}"
 
-      # ── Upload results ────────────────────────────────────────────────────
+      # ── Upload ALL results ────────────────────────────────────────────────
       - name: Upload screenshots and logs
         uses: actions/upload-artifact@v4
         if: always()
@@ -134,18 +144,17 @@ jobs:
             logs/
           retention-days: 14
 
-      - name: Print screenshot summary
+      - name: Print test summary
         if: always()
         run: |
           echo ""
           echo "════════════════════════════════════════════════════════"
-          echo "  Test artifacts uploaded:"
-          echo "  → screenshots/01_splash.png   — Splash screen (5s)"
-          echo "  → screenshots/02_home.png     — Home screen (20s)"
-          echo "  → screenshots/03_catalog.png  — Catalog loaded (30s)"
-          echo "  → logs/logcat_full.txt        — Full Android logcat"
-          echo "  → logs/jazzmax_logs.txt       — JazzMAX-specific logs"
-          echo "  → logs/crash_report.txt       — Crash details (if any)"
+          echo "  Comprehensive test artifacts:"
+          echo "  SCREENSHOTS (28+ total):"
+          ls screenshots/*.png 2>/dev/null | while read f; do echo "  → $f"; done || echo "  (none)"
           echo ""
-          echo "  Download from: GitHub → Actions → This run → Artifacts"
+          echo "  LOGS:"
+          ls logs/*.txt 2>/dev/null | while read f; do echo "  → $f ($(wc -l < $f) lines)"; done || echo "  (none)"
+          echo ""
+          echo "  Download: GitHub → Actions → This run → Artifacts"
           echo "════════════════════════════════════════════════════════"
