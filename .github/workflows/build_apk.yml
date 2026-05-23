@@ -58,28 +58,67 @@ jobs:
 
       # ── Build split APKs (one per CPU architecture) ───────────────────────
       # --split-per-abi reduces size from ~120 MB → ~40 MB per APK.
-      # Produces: app-debug-arm64-v8a.apk  (all modern phones)
+      # Produces: app-debug-arm64-v8a.apk  (all modern phones — what Rehan installs)
       #           app-debug-armeabi-v7a.apk (older 32-bit phones)
       #           app-debug-x86_64.apk      (emulators / x86 tablets)
       - name: Build debug APKs (split by ABI)
         working-directory: jazzmax_flutter
         run: flutter build apk --debug --split-per-abi --no-tree-shake-icons
 
-      - name: APK sizes
+      # ── Discover APK paths (Flutter output dir varies) ────────────────────
+      # Captures the actual paths so later steps are not path-sensitive.
+      - name: Locate built APKs
+        id: apks
         run: |
-          echo "=== APK sizes after split-per-abi ==="
-          du -sh jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-*.apk
+          echo "=== All APKs in build output ==="
+          find jazzmax_flutter/build -name "*.apk" | sort
+
+          # Prefer flutter-apk/ output dir (flutter build copies here)
+          # Fallback: standard Gradle apk/debug/ output
+          ARM64=$(find jazzmax_flutter/build -name "*arm64*debug*.apk" -o -name "*debug*arm64*.apk" -o -name "app-debug-arm64-v8a.apk" 2>/dev/null | head -1)
+          ARMV7=$(find jazzmax_flutter/build -name "*armeabi*debug*.apk" -o -name "*debug*armeabi*.apk" -o -name "app-debug-armeabi-v7a.apk" 2>/dev/null | head -1)
+          X86_64=$(find jazzmax_flutter/build -name "*x86_64*debug*.apk" -o -name "*debug*x86_64*.apk" -o -name "app-debug-x86_64.apk" 2>/dev/null | head -1)
+
+          # Fallback: single unsplit debug APK (if split-per-abi wasn't used)
+          if [ -z "$ARM64" ]; then
+            ARM64=$(find jazzmax_flutter/build -name "app-debug.apk" 2>/dev/null | head -1)
+          fi
+
+          echo "arm64=$ARM64" >> $GITHUB_OUTPUT
+          echo "armv7=$ARMV7" >> $GITHUB_OUTPUT
+          echo "x86_64=$X86_64" >> $GITHUB_OUTPUT
+
+          echo ""
+          echo "arm64  → $ARM64"
+          echo "armv7  → $ARMV7"
+          echo "x86_64 → $X86_64"
+
+          if [ -z "$ARM64" ]; then
+            echo "❌ ERROR: No debug APK found at all"
+            exit 1
+          fi
+
+          echo ""
+          echo "=== APK sizes ==="
+          for f in "$ARM64" "$ARMV7" "$X86_64"; do
+            [ -n "$f" ] && [ -f "$f" ] && du -sh "$f" || true
+          done
 
       # ── Upload all split APKs as one artifact (for emulator test) ─────────
       - name: Upload debug APKs
         uses: actions/upload-artifact@v4
         with:
           name: jazzmax-debug-${{ github.run_number }}
-          path: jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-*.apk
+          # Broad glob covers both flutter-apk/ and apk/debug/ output dirs.
+          # At least one APK is guaranteed because Locate step would have failed.
+          path: |
+            jazzmax_flutter/build/**/app-debug*.apk
+            jazzmax_flutter/build/**/*debug*.apk
+          if-no-files-found: error
           retention-days: 14
 
-      # ── Create GitHub Release with arm64-v8a APK ──────────────────────────
-      # arm64-v8a covers every Android phone sold since ~2016 (including all Jazz users)
+      # ── Create GitHub Release ─────────────────────────────────────────────
+      # arm64-v8a covers every Android phone sold since ~2016 (including Jazz users).
       # This is what Rehan should download and install on his phone.
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -99,10 +138,11 @@ jobs:
             ---
             _Also included: armeabi-v7a (old 32-bit phones) · x86_64 (emulators)_
           files: |
-            jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-arm64-v8a.apk
-            jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-armeabi-v7a.apk
-            jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-x86_64.apk
+            ${{ steps.apks.outputs.arm64 }}
+            ${{ steps.apks.outputs.armv7 }}
+            ${{ steps.apks.outputs.x86_64 }}
           prerelease: true
+          fail_on_unmatched_files: false
 
       - name: Deploy to Oracle emulator
         if: env.ORACLE_SSH_KEY != ''
@@ -111,7 +151,7 @@ jobs:
         run: |
           printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key
           chmod 600 /tmp/oracle_key
-          APK="jazzmax_flutter/build/app/outputs/flutter-apk/app-debug-arm64-v8a.apk"
+          APK="${{ steps.apks.outputs.arm64 }}"
           scp -i /tmp/oracle_key -o StrictHostKeyChecking=no -o ConnectTimeout=30 \
               "$APK" ubuntu@92.4.95.252:/tmp/jazzmax-latest.apk
           ssh -i /tmp/oracle_key -o StrictHostKeyChecking=no -o ConnectTimeout=60 \
