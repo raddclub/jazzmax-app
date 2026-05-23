@@ -24,7 +24,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -104,6 +104,13 @@ class LocalDb {
         added_at    INTEGER DEFAULT 0
       )
     ''');
+    await db.execute('''
+      CREATE TABLE ratings (
+        title_id INTEGER PRIMARY KEY,
+        rating   INTEGER NOT NULL,
+        rated_at INTEGER DEFAULT 0
+      )
+    ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
     await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
   }
@@ -139,18 +146,9 @@ class LocalDb {
       } catch (_) {}
     }
     if (oldV < 5) {
-      // Add extra columns to watch_positions for richer history display
-      try {
-        await db.execute('ALTER TABLE watch_positions ADD COLUMN title_id INTEGER');
-      } catch (_) {}
-      try {
-        await db.execute('ALTER TABLE watch_positions ADD COLUMN title_text TEXT');
-      } catch (_) {}
-      try {
-        await db.execute('ALTER TABLE watch_positions ADD COLUMN poster_url TEXT');
-      } catch (_) {}
-
-      // Create watchlist table
+      try { await db.execute('ALTER TABLE watch_positions ADD COLUMN title_id INTEGER'); } catch (_) {}
+      try { await db.execute('ALTER TABLE watch_positions ADD COLUMN title_text TEXT'); } catch (_) {}
+      try { await db.execute('ALTER TABLE watch_positions ADD COLUMN poster_url TEXT'); } catch (_) {}
       await db.execute('''
         CREATE TABLE IF NOT EXISTS watchlist (
           id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,6 +163,15 @@ class LocalDb {
           is_free     INTEGER DEFAULT 0,
           file_id     TEXT,
           added_at    INTEGER DEFAULT 0
+        )
+      ''');
+    }
+    if (oldV < 6) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS ratings (
+          title_id INTEGER PRIMARY KEY,
+          rating   INTEGER NOT NULL,
+          rated_at INTEGER DEFAULT 0
         )
       ''');
     }
@@ -469,6 +476,76 @@ class LocalDb {
       }
     }
     await db.delete('downloads', where: 'file_id = ?', whereArgs: [fileId]);
+  }
+
+  // ── Ratings ───────────────────────────────────────────────────────────────
+
+  static Future<void> saveRating(int titleId, int rating) async {
+    final db = await instance;
+    await db.insert(
+      'ratings',
+      {
+        'title_id': titleId,
+        'rating': rating,
+        'rated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<int?> getRating(int titleId) async {
+    final db = await instance;
+    final rows = await db.query('ratings', where: 'title_id = ?', whereArgs: [titleId]);
+    if (rows.isEmpty) return null;
+    return rows.first['rating'] as int?;
+  }
+
+  // ── New Releases ──────────────────────────────────────────────────────────
+
+  static Future<List<CatalogItem>> getNewReleases({int limit = 15}) async {
+    final db = await instance;
+    final rows = await db.query('titles', orderBy: 'id DESC', limit: limit);
+    return rows.map(_rowToItem).toList();
+  }
+
+  // ── Search with filters ───────────────────────────────────────────────────
+
+  static Future<List<CatalogItem>> searchFiltered({
+    String? query,
+    String? mediaType,
+    String? genre,
+    bool freeOnly = false,
+    int limit = 60,
+  }) async {
+    final db = await instance;
+    final conditions = <String>[];
+    final args = <dynamic>[];
+
+    if (query != null && query.isNotEmpty) {
+      conditions.add('title LIKE ?');
+      args.add('%$query%');
+    }
+    if (mediaType != null) {
+      conditions.add('media_type = ?');
+      args.add(mediaType);
+    }
+    if (genre != null) {
+      conditions.add('genres LIKE ?');
+      args.add('%"$genre"%');
+    }
+    if (freeOnly) {
+      conditions.add('is_free = 1');
+    }
+
+    final where = conditions.isEmpty ? null : conditions.join(' AND ');
+    final rows = await db.query(
+      'titles',
+      where: where,
+      whereArgs: args.isEmpty ? null : args,
+      orderBy: 'rating DESC, title ASC',
+      limit: limit,
+    );
+    return rows.map(_rowToItem).toList();
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
