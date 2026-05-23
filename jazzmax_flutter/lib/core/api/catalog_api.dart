@@ -20,7 +20,8 @@ class CatalogApi {
   static Future<List<CatalogItem>> syncFull() async {
     final response = await _client.get(ApiPaths.catalogSync);
     final data = response.data as Map<String, dynamic>;
-    final items = data['items'] as List<dynamic>? ?? [];
+    // Server returns {"titles": [...], "episodes": [...], "version": ..., "count": ...}
+    final items = data['titles'] as List<dynamic>? ?? [];
     return items
         .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -34,7 +35,8 @@ class CatalogApi {
       params: {'since': sinceTimestamp.toString()},
     );
     final data = response.data as Map<String, dynamic>;
-    final items = data['items'] as List<dynamic>? ?? [];
+    // Server returns {"titles": [...], "episodes": [...], "version": ..., "count": ...}
+    final items = data['titles'] as List<dynamic>? ?? [];
     return items
         .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -59,3 +61,4 @@ class CatalogVersion {
   final int count;
   const CatalogVersion({required this.version, required this.count});
 }
+
