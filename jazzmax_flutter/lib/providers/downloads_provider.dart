@@ -165,7 +165,7 @@ class DownloadsNotifier extends StateNotifier<DownloadsState> {
   Future<String> _getUserPlan() async {
     try {
       final status = await SubscriptionApi.getStatus();
-      return (status['plan'] as String? ?? 'free').toLowerCase();
+      return status.plan.toLowerCase();
     } catch (_) {
       return 'free';
     }
