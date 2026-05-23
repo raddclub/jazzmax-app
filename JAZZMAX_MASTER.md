@@ -515,7 +515,7 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [x] Swipe left half = screen brightness (screen_brightness package)
 - [x] Swipe right half = player volume (volume_controller package)
 - [x] Audio track selector (bottom sheet, for multi-language MKV files)
-- [ ] Subtitle selector (built-in + external .srt) ← next phase
+- [x] Subtitle selector (built-in + external .srt) ← file_picker added, SubtitleTrack.no/uri/built-in
 - [x] Aspect ratio toggle (Fit / Cover / Fill cycle)
 - [x] Screen lock button (tap-to-unlock overlay)
 - [x] Resume position (save every 5s to local_db, restore on open)
@@ -545,17 +545,18 @@ Use this to track progress across all Replit accounts. When something is done, c
 - [ ] Share APK link with first users
 
 ### Phase 7 — Production Server
-- [ ] Create Oracle Cloud free tier account (cloud.oracle.com)
-- [ ] Spin up Ubuntu 22.04 ARM instance (4 OCPU, 24GB RAM — free forever)
-- [ ] Install Python, pip, Nginx, Supervisor
-- [ ] Clone project to Oracle server
-- [ ] Set up Gunicorn for Flask apps (port 8000 and 5000)
-- [ ] Configure Nginx reverse proxy
-- [ ] Get free SSL certificate with Let's Encrypt (certbot)
+- [x] Create Oracle Cloud free tier account (cloud.oracle.com) ← done Session 3
+- [x] Spin up Ubuntu 22.04 ARM instance (4 OCPU, 24GB RAM — free forever) ← 92.4.95.252
+- [x] Install Python, pip, Nginx, Supervisor ← oracle_setup.sh handles this
+- [x] Clone project to Oracle server ← oracle_setup.sh handles this
+- [x] Set up Gunicorn for Flask apps (port 8000 and 5000) ← Supervisor + plain Python (no Gunicorn needed yet)
+- [x] Configure Nginx reverse proxy ← running at 92.4.95.252
+- [ ] Get free SSL certificate with Let's Encrypt (certbot) ← next task
 - [ ] Register domain `jazzmax.pk` (~PKR 800/year) — optional
 - [ ] Point domain to Oracle server IP
-- [ ] Update Flutter app's API base URL to production server
-- [ ] Test everything end-to-end on production
+- [x] Update Flutter app's API base URL to production server ← constants.dart + jazzmax_config.json → http://92.4.95.252
+- [ ] Test everything end-to-end on production ← blocked: titles not published on Oracle DB yet
+- [ ] Publish titles on Oracle DB ← run: sqlite3 /opt/jazzmax/radd-hub/data/jazzmax.db "UPDATE titles SET is_published=1;"
 
 ---
 
@@ -801,6 +802,33 @@ Next account should: [what to do first]
 4. URL change process: edit `jazzmax_config.json` → change `api_base_url` → push to GitHub → done
 
 ---
+
+### Session 4 — May 23, 2026
+**Account:** Muhammad Rehan (new account)
+**Built:**
+- Phase 4 complete: Subtitle selector in video player
+  - `jazzmax_flutter/lib/screens/player_screen.dart` — added `_showSubtitles()` bottom sheet
+  - Built-in subtitle tracks (from MKV/embedded) + Off option
+  - External .srt/.ass/.ssa/.vtt file loader via `file_picker` package
+  - Subtitle icon in top bar lights up red when subtitles are active
+  - `jazzmax_flutter/pubspec.yaml` — added `file_picker: ^8.0.0`
+- oracle_setup.sh fixes:
+  - Added `sqlite3` to system packages install (was missing — caused title-publishing to silently fail)
+  - Added SSL/Let's Encrypt instructions as step 7b
+- Phase 7 checkboxes updated — Oracle server items marked done (was already running since Session 3)
+- Watch Prototype fixed: installed PyJWT + flask + flask-cors + werkzeug (missing on new account)
+- Both workflows running: Watch Prototype (port 8000) + Radd Hub (port 5000)
+**Checkboxes updated:** Yes — Phase 4 subtitle [x], Phase 7 server tasks [x]
+**Zip created:** No (push to GitHub instead)
+**Next account should:**
+1. **URGENT — Publish Oracle titles:** SSH to Oracle server, run:
+   `sqlite3 /opt/jazzmax/radd-hub/data/jazzmax.db "UPDATE titles SET is_published=1;"`
+   Then verify: `curl -s http://92.4.95.252/api/catalog/sync | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('movies',[])), 'movies')"`
+   Expected: 14 movies
+2. Add GITHUB_TOKEN secret: Replit Secrets → GITHUB_TOKEN = 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
+3. Next unchecked Phase 5 items: AES-256 encryption + download limits + background downloads
+4. Phase 6: Test on real phone (APK builds are already set up on GitHub Actions)
+5. Phase 7: Get Let's Encrypt SSL (needs domain name first, or use self-signed)
 
 ### Session 3 — May 23, 2026
 **Account:** Muhammad Rehan (switching to new account — reached token limit)
