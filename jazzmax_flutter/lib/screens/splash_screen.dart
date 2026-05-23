@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../core/remote_config.dart';
@@ -16,6 +17,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
+  String _version = '';
 
   @override
   void initState() {
@@ -25,7 +27,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _fadeAnim =
         CurvedAnimation(parent: _controller, curve: Curves.easeIn);
     _controller.forward();
+    _loadVersion();
     _start();
+  }
+
+  Future<void> _loadVersion() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) {
+        setState(() => _version = 'v${info.version} (build ${info.buildNumber})');
+      }
+    } catch (_) {
+      if (mounted) setState(() => _version = 'v1.1.0');
+    }
   }
 
   Future<void> _start() async {
@@ -74,57 +88,78 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       backgroundColor: AppColors.background,
       body: FadeTransition(
         opacity: _fadeAnim,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -2,
+        child: Stack(
+          children: [
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Logo
+                  RichText(
+                    text: const TextSpan(
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -2,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: 'Jazz',
+                          style: TextStyle(color: AppColors.textPrimary),
+                        ),
+                        TextSpan(
+                          text: 'MAX',
+                          style: TextStyle(color: AppColors.primary),
+                        ),
+                      ],
+                    ),
                   ),
-                  children: [
-                    TextSpan(
-                      text: 'Jazz',
-                      style: TextStyle(color: AppColors.textPrimary),
+
+                  // Red pulsing dot
+                  const SizedBox(height: 6),
+                  const _PulsingDot(),
+
+                  const SizedBox(height: 24),
+                  const Text(
+                    AppConstants.tagline,
+                    style: TextStyle(
+                      color: AppColors.textMuted,
+                      fontSize: 13,
+                      letterSpacing: 0.2,
                     ),
-                    TextSpan(
-                      text: 'MAX',
-                      style: TextStyle(color: AppColors.primary),
+                  ),
+
+                  const SizedBox(height: 64),
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<Color>(AppColors.primary),
                     ),
-                  ],
+                  ),
+                ],
+              ),
+            ),
+
+            // Version stamp — bottom center, always visible in screenshots
+            Positioned(
+              bottom: 24,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Text(
+                  _version.isEmpty ? '' : _version,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 12,
+                    letterSpacing: 0.3,
+                  ),
                 ),
               ),
-
-              // Red pulsing dot
-              const SizedBox(height: 6),
-              const _PulsingDot(),
-
-              const SizedBox(height: 24),
-              const Text(
-                AppConstants.tagline,
-                style: TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                  letterSpacing: 0.2,
-                ),
-              ),
-
-              const SizedBox(height: 64),
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
