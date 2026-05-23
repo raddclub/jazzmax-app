@@ -95,11 +95,15 @@ class LoginResult {
   });
 
   factory LoginResult.fromJson(Map<String, dynamic> json) {
+    // Server sends: {"ok": true, "access_token": "...", "refresh_token": "...",
+    //                "user": {"id": 1, "phone": "...", "plan": "free"}}
+    final user = json['user'] as Map<String, dynamic>? ?? {};
     return LoginResult(
       accessToken: json['access_token'] as String,
       refreshToken: json['refresh_token'] as String,
-      userId: json['user_id'] as int,
-      phone: json['phone'] as String? ?? '',
+      userId: user['id'] as int? ?? 0,
+      phone: user['phone'] as String? ?? '',
     );
   }
 }
+
