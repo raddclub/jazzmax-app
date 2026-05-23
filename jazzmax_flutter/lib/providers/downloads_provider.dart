@@ -13,12 +13,14 @@ class DownloadsState {
   final bool loading;
   final Map<String, double> activeProgress; // fileId → progress
   final String? quotaError;
+  final QuotaResult? quotaInfo; // today's usage for the quota bar
 
   const DownloadsState({
     this.downloads = const [],
     this.loading = false,
     this.activeProgress = const {},
     this.quotaError,
+    this.quotaInfo,
   });
 
   DownloadsState copyWith({
@@ -27,12 +29,14 @@ class DownloadsState {
     Map<String, double>? activeProgress,
     String? quotaError,
     bool clearQuotaError = false,
+    QuotaResult? quotaInfo,
   }) {
     return DownloadsState(
       downloads: downloads ?? this.downloads,
       loading: loading ?? this.loading,
       activeProgress: activeProgress ?? this.activeProgress,
       quotaError: clearQuotaError ? null : (quotaError ?? this.quotaError),
+      quotaInfo: quotaInfo ?? this.quotaInfo,
     );
   }
 
@@ -42,6 +46,17 @@ class DownloadsState {
 
 class DownloadsNotifier extends StateNotifier<DownloadsState> {
   DownloadsNotifier() : super(const DownloadsState());
+
+  /// Refresh today's quota info for the quota bar widget.
+  Future<void> loadQuota() async {
+    try {
+      final plan = await _getUserPlan();
+      final quota = await DownloadQuotaService.checkQuota(plan);
+      state = state.copyWith(quotaInfo: quota);
+    } catch (_) {
+      // Non-fatal — bar just won't show
+    }
+  }
 
   Future<void> loadDownloads() async {
     state = state.copyWith(loading: true);
@@ -62,6 +77,8 @@ class DownloadsNotifier extends StateNotifier<DownloadsState> {
 
     final refreshed = await LocalDb.getDownloads();
     state = state.copyWith(downloads: refreshed, loading: false);
+    // Refresh quota bar after loading (counts may have changed)
+    await loadQuota();
   }
 
   /// Encrypt a plaintext file left by the background worker.
@@ -120,6 +137,7 @@ class DownloadsNotifier extends StateNotifier<DownloadsState> {
       );
       // Foreground download succeeded — cancel the WorkManager backup
       await BackgroundDownloadWorker.cancel(fileId);
+      await loadQuota(); // refresh quota bar count immediately after success
       return DownloadResult.success();
     } catch (e) {
       // WorkManager task stays scheduled to retry in background
