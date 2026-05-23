@@ -37,7 +37,7 @@ sudo apt-get update -qq
 sudo apt-get install -y \
   python3 python3-pip python3-venv \
   nginx git curl wget unzip \
-  supervisor ufw \
+  supervisor ufw sqlite3 \
   2>/dev/null | tail -3
 
 # ── Step 2: Clone/update project ─────────────────────────────
@@ -276,6 +276,21 @@ else
   echo -e "  ${YELLOW}⚠ KVM not available — Android emulator will be slow (software mode)${NC}"
   echo "  Check Oracle console: Instance → Edit → enable 'Nested Virtualization'"
 fi
+
+# ── Step 7b: Let's Encrypt SSL (optional — requires domain name) ──────────
+echo ""
+echo -e "${CYAN}[7b] Optional: Let's Encrypt SSL setup${NC}"
+echo "  To enable HTTPS, run these commands manually after pointing your domain:"
+echo ""
+echo "  sudo apt-get install -y certbot python3-certbot-nginx"
+echo "  sudo certbot --nginx -d yourdomain.com --non-interactive --agree-tos -m admin@yourdomain.com"
+echo "  sudo systemctl enable certbot.timer"
+echo ""
+echo "  Or for IP-only HTTPS (self-signed, shows browser warning):"
+echo "  openssl req -x509 -newkey rsa:4096 -keyout /etc/ssl/private/jazzmax.key \\"
+echo "    -out /etc/ssl/certs/jazzmax.crt -days 365 -nodes \\"
+echo "    -subj '/CN=92.4.95.252/O=JazzMAX/C=PK'"
+echo ""
 
 # ── Done ──────────────────────────────────────────────────────
 echo ""
