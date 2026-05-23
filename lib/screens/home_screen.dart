@@ -23,6 +23,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _searching = false;
   List<Map<String, dynamic>> _continueWatching = [];
   List<CatalogItem> _freeItems = [];
+  List<CatalogItem> _newReleases = [];
   bool _loadingExtras = false;
 
   @override
@@ -37,13 +38,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Future<void> _loadExtras() async {
     if (_loadingExtras) return;
     setState(() => _loadingExtras = true);
-    final continueW = await LocalDb.getContinueWatching();
-    final freeItems = await LocalDb.getFreeItems();
+    final results = await Future.wait([
+      LocalDb.getContinueWatching(),
+      LocalDb.getFreeItems(),
+      LocalDb.getNewReleases(),
+    ]);
     if (mounted) {
       setState(() {
-        _continueWatching = continueW;
-        _freeItems = freeItems;
-        _loadingExtras = false;
+        _continueWatching = results[0] as List<Map<String, dynamic>>;
+        _freeItems        = results[1] as List<CatalogItem>;
+        _newReleases      = results[2] as List<CatalogItem>;
+        _loadingExtras    = false;
       });
     }
   }
@@ -138,27 +143,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
 
-            // ── Search Bar ────────────────────────────────────────────────
+            // ── Search Bar → navigates to SearchScreen with filters ──────
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: TextField(
-                controller: _searchCtrl,
-                style: const TextStyle(color: AppColors.textPrimary),
-                onChanged: _onSearch,
-                decoration: InputDecoration(
-                  hintText: 'Search movies, shows...',
-                  prefixIcon:
-                      const Icon(Icons.search, color: AppColors.textMuted),
-                  suffixIcon: _searchCtrl.text.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear,
-                              color: AppColors.textMuted, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            _onSearch('');
-                          },
-                        )
-                      : null,
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pushNamed(AppRoutes.search),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.search, color: AppColors.textMuted, size: 20),
+                      SizedBox(width: 12),
+                      Text(
+                        'Search movies, shows, genres...',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -341,6 +346,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               badge: 'FREE',
             ),
             _HorizontalRow(items: _freeItems),
+          ],
+
+          // ── New Releases ───────────────────────────────────────────────
+          if (_newReleases.isNotEmpty) ...[
+            _SectionHeader(
+              title: 'New Releases',
+              icon: Icons.new_releases_rounded,
+              badge: 'NEW',
+            ),
+            _HorizontalRow(items: _newReleases),
           ],
 
           // ── Movies ────────────────────────────────────────────────────
