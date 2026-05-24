@@ -11,6 +11,7 @@ import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+import '../services/cast_service.dart';
 import '../core/constants.dart';
 import '../core/security/keystore.dart';
 import '../core/db/local_db.dart';
@@ -80,6 +81,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // Zoom & pan
   double _scale = 1.0;
+  bool _castConnected = false;
 
   // Skip intro
   bool _skipIntroVisible = false;
@@ -320,6 +322,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       await _pipChannel.invokeMethod('enterPiP');
       setState(() => _inPiP = true);
     } catch (_) {}
+  }
+
+  Future<void> _enterCast() async {
+    final devices = await CastService.discoverDevices();
+    final connected = await CastService.isConnected();
+    if (!mounted) return;
+    if (connected) {
+      // Already casting — show disconnect option
+      final stop = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1A2E),
+          title: const Text('Casting Active', style: TextStyle(color: Colors.white)),
+          content: const Text('Stop casting to this device?',
+              style: TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false),
+                child: const Text('Keep Casting')),
+            TextButton(onPressed: () => Navigator.pop(context, true),
+                child: const Text('Stop', style: TextStyle(color: Colors.redAccent))),
+          ],
+        ),
+      );
+      if (stop == true) {
+        await CastService.stop();
+        await CastService.disconnect();
+        if (mounted) setState(() => _castConnected = false);
+      }
+      return;
+    }
+    // No device found via discovery — open system Cast dialog
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    final url  = args?['stream_url'] as String? ?? args?['local_path'] as String? ?? '';
+    final title = args?['title'] as String? ?? _title;
+    final ok = await CastService.castVideo(
+      url: url,
+      title: title,
+      positionMs: _position.inMilliseconds,
+    );
+    if (mounted) setState(() => _castConnected = ok);
   }
 
   // ── Seek Thumbnail ────────────────────────────────────────────────────────
@@ -803,6 +845,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   setState(() => _showAudioMenu = !_showAudioMenu),
               onNextEpisode: _hasNextEp ? _playNextEpisode : null,
               onPiP: _enterPiP,
+              onCast: _enterCast,
+              castConnected: _castConnected,
               onSleep: () => setState(() => _showSleepMenu = !_showSleepMenu),
               onResetZoom: _scale > 1.02
                   ? () => setState(() => _scale = 1.0)
@@ -924,7 +968,8 @@ class _ControlsOverlay extends StatelessWidget {
   final VoidCallback onBack, onPlayPause, onSeekBack, onSeekForward;
   final VoidCallback onLock, onCycleFit, onSpeed;
   final VoidCallback onSubtitleFile, onSubtitleTracks, onAudioTracks;
-  final VoidCallback onPiP, onSleep;
+  final VoidCallback onPiP, onSleep, onCast;
+  final bool castConnected;
   final VoidCallback? onNextEpisode, onResetZoom;
   final ValueChanged<double> onSeekTo, onSliderStart, onSliderChange, onSliderEnd;
   final String Function(Duration) fmtDur;
@@ -940,6 +985,7 @@ class _ControlsOverlay extends StatelessWidget {
     required this.onSeekForward, required this.onLock, required this.onCycleFit,
     required this.onSpeed, required this.onSubtitleFile, required this.onSubtitleTracks,
     required this.onAudioTracks, required this.onPiP, required this.onSleep,
+    required this.onCast, required this.castConnected,
     this.onNextEpisode, this.onResetZoom,
     required this.onSeekTo, required this.onSliderStart,
     required this.onSliderChange, required this.onSliderEnd,
@@ -998,6 +1044,16 @@ class _ControlsOverlay extends StatelessWidget {
                     color: Colors.white, size: 22),
                 tooltip: 'Picture in Picture',
                 onPressed: onPiP,
+              ),
+              // Chromecast button
+              IconButton(
+                icon: Icon(
+                  castConnected ? Icons.cast_connected_rounded : Icons.cast_rounded,
+                  color: castConnected ? const Color(0xFF4FC3F7) : Colors.white,
+                  size: 22,
+                ),
+                tooltip: castConnected ? 'Stop Casting' : 'Cast to TV',
+                onPressed: onCast,
               ),
               IconButton(icon: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 22),
                   tooltip: 'Subtitles', onPressed: onSubtitleTracks),
