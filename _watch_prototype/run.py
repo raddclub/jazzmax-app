@@ -28,6 +28,8 @@ from routes.app_catalog import bp as app_catalog_bp
 from routes.app_subscription import bp as app_subscription_bp
 from routes.app_history import bp as app_history_bp
 from routes.app_search import bp as app_search_bp
+from routes.jazzdrive_db import jazzdrive_db_bp
+from routes.poster_proxy import poster_proxy_bp
 
 # Read PORT before load_env() — radd-hub .env may override it otherwise
 _port = int(os.environ.get("PORT", 6000))
@@ -49,6 +51,8 @@ app.register_blueprint(app_catalog_bp)
 app.register_blueprint(app_subscription_bp)
 app.register_blueprint(app_history_bp)
 app.register_blueprint(app_search_bp)
+app.register_blueprint(jazzdrive_db_bp)
+app.register_blueprint(poster_proxy_bp)
 
 @app.route("/")
 def root():
