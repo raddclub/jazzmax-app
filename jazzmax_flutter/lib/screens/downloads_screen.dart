@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shimmer/shimmer.dart';
 import '../core/constants.dart';
 import '../providers/downloads_provider.dart';
+import '../services/thumb_service.dart';
 
 enum _SortMode { name, size, date }
 enum _FilterMode { all, completed, downloading, failed }
@@ -328,6 +330,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           },
           onLongPress: () => setState(() { _selecting = true; _selected.add(id); }),
           onDelete: () => _deleteOne(id, _title(d)),
+          localPath: _path(d),
         ).animate(delay: (i * 30).ms).fadeIn(duration: 250.ms);
       },
     );
@@ -362,6 +365,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
           },
           onLongPress: () => setState(() { _selecting = true; _selected.add(id); }),
           onDelete: () => _deleteOne(id, _title(d)),
+          localPath: _path(d),
         ).animate(delay: (i * 30).ms).fadeIn(duration: 250.ms)
             .slideX(begin: 0.1, end: 0, duration: 250.ms, curve: AppCurves.standard);
       },
@@ -409,61 +413,75 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 }
 
 // ── Download Card (Grid) ──────────────────────────────────────────────────────
-class _DownloadCard extends StatelessWidget {
-  final String title, sizeStr, statusStr;
+class _DownloadCard extends StatefulWidget {
+  final String title, sizeStr, statusStr, localPath;
   final double progress;
   final bool isActive, isComplete, isSelected, isSelecting;
   final VoidCallback onTap, onLongPress, onDelete;
   const _DownloadCard({required this.title, required this.sizeStr,
       required this.statusStr, required this.progress, required this.isActive,
       required this.isComplete, required this.isSelected, required this.isSelecting,
-      required this.onTap, required this.onLongPress, required this.onDelete});
-
+      required this.onTap, required this.onLongPress, required this.onDelete,
+      this.localPath = ''});
+  @override State<_DownloadCard> createState() => _DownloadCardState();
+}
+class _DownloadCardState extends State<_DownloadCard> {
+  Uint8List? _thumb;
+  @override void initState() {
+    super.initState();
+    if (widget.localPath.isNotEmpty && widget.isComplete) _loadThumb();
+  }
+  Future<void> _loadThumb() async {
+    final t = await ThumbService.getThumbnail(widget.localPath, timeMs: 3000, maxWidth: 240);
+    if (mounted) setState(() => _thumb = t);
+  }
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap, onLongPress: onLongPress,
+      onTap: widget.onTap, onLongPress: widget.onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
+          color: widget.isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.glassBorder,
-              width: isSelected ? 1.5 : 0.5)),
+              color: widget.isSelected ? AppColors.primary : AppColors.glassBorder,
+              width: widget.isSelected ? 1.5 : 0.5)),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Thumbnail area
           Expanded(child: Stack(fit: StackFit.expand, children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.sm - 1)),
-              child: Container(color: AppColors.card,
-                  child: const Center(child: Icon(Icons.movie_outlined,
-                      color: AppColors.textMuted, size: 36)))),
+              child: _thumb != null
+                ? Image.memory(_thumb!, fit: BoxFit.cover)
+                : Container(color: AppColors.card,
+                    child: const Center(child: Icon(Icons.movie_outlined,
+                        color: AppColors.textMuted, size: 36)))),
             // Play overlay
-            if (isComplete && !isSelecting)
+            if (widget.isComplete && !widget.isSelecting)
               Center(child: Container(
                 width: 40, height: 40,
                 decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black54,
                     border: Border.all(color: Colors.white30)),
                 child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24))),
-            // Download progress bar
-            if (isActive || (!isComplete && statusStr != 'failed'))
+            // Download widget.progress bar
+            if (widget.isActive || (!widget.isComplete && widget.statusStr != 'failed'))
               Positioned(bottom: 0, left: 0, right: 0,
-                child: LinearProgressIndicator(value: progress,
+                child: LinearProgressIndicator(value: widget.progress,
                     backgroundColor: Colors.black38,
                     valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                     minHeight: 3)),
             // Selection checkbox
-            if (isSelecting)
+            if (widget.isSelecting)
               Positioned(top: 6, right: 6, child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 width: 22, height: 22,
                 decoration: BoxDecoration(shape: BoxShape.circle,
-                    color: isSelected ? AppColors.primary : Colors.black38,
-                    border: Border.all(color: isSelected ? AppColors.primary : Colors.white38, width: 1.5)),
-                child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 14) : null)),
+                    color: widget.isSelected ? AppColors.primary : Colors.black38,
+                    border: Border.all(color: widget.isSelected ? AppColors.primary : Colors.white38, width: 1.5)),
+                child: widget.isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 14) : null)),
             // Failed badge
-            if (statusStr == 'failed')
+            if (widget.statusStr == 'failed')
               Positioned(top: 6, left: 6, child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                 decoration: BoxDecoration(color: AppColors.error,
@@ -475,21 +493,21 @@ class _DownloadCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+              Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 11,
                       fontWeight: FontWeight.w600, height: 1.3)),
               const SizedBox(height: 4),
               Row(children: [
-                Text(sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                Text(widget.sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
                 const Spacer(),
-                if (!isSelecting)
-                  GestureDetector(onTap: onDelete,
+                if (!widget.isSelecting)
+                  GestureDetector(widget.onTap: widget.onDelete,
                       child: const Icon(Icons.delete_outline_rounded,
                           size: 16, color: AppColors.textMuted)),
               ]),
-              if (isActive) ...[
+              if (widget.isActive) ...[
                 const SizedBox(height: 4),
-                Text('${(progress * 100).toStringAsFixed(0)}%',
+                Text('${(widget.progress * 100).toStringAsFixed(0)}%',
                     style: const TextStyle(color: AppColors.primary,
                         fontSize: 10, fontWeight: FontWeight.w700)),
               ],
@@ -502,58 +520,74 @@ class _DownloadCard extends StatelessWidget {
 }
 
 // ── Download List Tile ────────────────────────────────────────────────────────
-class _DownloadListTile extends StatelessWidget {
+class _DownloadListTile extends StatefulWidget {
   final String title, sizeStr, statusStr;
+  final String localPath;
   final double progress;
   final bool isActive, isComplete, isSelected, isSelecting;
   final VoidCallback onTap, onLongPress, onDelete;
   const _DownloadListTile({required this.title, required this.sizeStr,
       required this.statusStr, required this.progress, required this.isActive,
       required this.isComplete, required this.isSelected, required this.isSelecting,
-      required this.onTap, required this.onLongPress, required this.onDelete});
-
+      required this.onTap, required this.onLongPress, required this.onDelete,
+      this.localPath = ''});
+  @override State<_DownloadListTile> createState() => _DownloadListTileState();
+}
+class _DownloadListTileState extends State<_DownloadListTile> {
+  Uint8List? _thumb;
+  @override void initState() {
+    super.initState();
+    if (widget.localPath.isNotEmpty && widget.isComplete) _loadThumb();
+  }
+  Future<void> _loadThumb() async {
+    final t = await ThumbService.getThumbnail(widget.localPath, timeMs: 3000, maxWidth: 120);
+    if (mounted) setState(() => _thumb = t);
+  }
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap, onLongPress: onLongPress,
+      onTap: widget.onTap, onLongPress: widget.onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.08) : AppColors.surface,
+          color: widget.isSelected ? AppColors.primary.withOpacity(0.08) : AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(
-              color: isSelected ? AppColors.primary : AppColors.glassBorder,
-              width: isSelected ? 1.5 : 0.5)),
+              color: widget.isSelected ? AppColors.primary : AppColors.glassBorder,
+              width: widget.isSelected ? 1.5 : 0.5)),
         child: Row(children: [
           // Thumbnail
           Container(width: 64, height: 48,
             decoration: BoxDecoration(color: AppColors.card,
                 borderRadius: BorderRadius.circular(AppRadius.xs)),
+            clipBehavior: Clip.antiAlias,
             child: Stack(fit: StackFit.expand, children: [
-              const Center(child: Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 24)),
-              if (isComplete && !isSelecting)
+              _thumb != null
+                ? Image.memory(_thumb!, fit: BoxFit.cover)
+                : const Center(child: Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 24)),
+              if (widget.isComplete && !widget.isSelecting)
                 Center(child: Container(width: 24, height: 24,
                     decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
                     child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16))),
-              if (isSelecting)
+              if (widget.isSelecting)
                 Positioned(top: 4, right: 4, child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 16, height: 16,
                   decoration: BoxDecoration(shape: BoxShape.circle,
-                      color: isSelected ? AppColors.primary : Colors.black38,
+                      color: widget.isSelected ? AppColors.primary : Colors.black38,
                       border: Border.all(color: Colors.white38)),
-                  child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 10) : null)),
+                  child: widget.isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 10) : null)),
             ])),
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+            Text(widget.title, maxLines: 2, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: AppColors.textPrimary, fontSize: 13,
                     fontWeight: FontWeight.w600, height: 1.3)),
             const SizedBox(height: 4),
             Row(children: [
-              Text(sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              Text(widget.sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               if (statusStr == 'failed') ...[
                 const SizedBox(width: 8),
                 Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -563,20 +597,20 @@ class _DownloadListTile extends StatelessWidget {
                         color: AppColors.error, fontSize: 9, fontWeight: FontWeight.w700))),
               ],
             ]),
-            if (isActive) ...[
+            if (widget.isActive) ...[
               const SizedBox(height: 6),
-              LinearProgressIndicator(value: progress,
+              LinearProgressIndicator(value: widget.progress,
                   backgroundColor: AppColors.card,
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                   minHeight: 2),
               const SizedBox(height: 3),
-              Text('${(progress * 100).toStringAsFixed(0)}%',
+              Text('${(widget.progress * 100).toStringAsFixed(0)}%',
                   style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
             ],
           ])),
-          if (!isSelecting)
+          if (!widget.isSelecting)
             IconButton(icon: const Icon(Icons.delete_outline_rounded,
-                size: 18, color: AppColors.textMuted), onPressed: onDelete),
+                size: 18, color: AppColors.textMuted), onPressed: widget.onDelete),
         ]),
       ),
     );

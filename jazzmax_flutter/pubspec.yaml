@@ -26,6 +26,9 @@ dependencies:
   # SHA-256 PIN hashing for vault
   crypto: ^3.0.3
 
+  # Video thumbnail generation for local/downloaded files
+  video_thumbnail: ^0.5.3
+
   # Local SQLite
   sqflite: ^2.3.2
   path_provider: ^2.1.2
