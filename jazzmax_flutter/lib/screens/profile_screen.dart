@@ -224,7 +224,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   String _formatDate(String isoDate) {
     try {
-      final dt = DateTime.parse(isoDate);
+      // Server returns expires_at as Unix epoch seconds (int string).
+      // Fall back to ISO string parse for forward compatibility.
+      final asInt = int.tryParse(isoDate);
+      final dt = asInt != null
+          ? DateTime.fromMillisecondsSinceEpoch(asInt * 1000)
+          : DateTime.parse(isoDate);
       return '${dt.day}/${dt.month}/${dt.year}';
     } catch (_) {
       return isoDate;
