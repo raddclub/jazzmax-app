@@ -112,7 +112,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
                     const SizedBox(height: 14),
                     JazzTextField(controller: _confirm, label: 'Confirm Password',
-                        obscureText: _obscure, prefixIcon: Icons.lock_check_outline,
+                        obscureText: _obscure, prefixIcon: Icons.lock_outlined,
                         validator: (v) {
                           if (v != _pass.text) return 'Passwords do not match';
                           return null;

@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../core/constants.dart';
 import '../services/vault_service.dart';
+import 'vault_settings_screen.dart';
 
 class VaultScreen extends StatefulWidget {
   final String? folderPath;

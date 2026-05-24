@@ -461,7 +461,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_dragIntent == 'seek' && _dragSeekDelta != null) {
       final newPos =
           _dragStartPosition + Duration(seconds: _dragSeekDelta!.toInt());
-      _player.seek(newPos.clamp(Duration.zero, _duration));
+      _player.seek((newPos < Duration.zero ? Duration.zero : newPos > _duration ? _duration : newPos));
     }
     setState(() {
       _draggingBrightness = false;
@@ -523,7 +523,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _seekRelative(int seconds) {
     final target = _position + Duration(seconds: seconds);
-    _player.seek(target.clamp(Duration.zero, _duration));
+    _player.seek((target < Duration.zero ? Duration.zero : target > _duration ? _duration : target));
     final label = seconds > 0 ? '+${seconds}s' : '${seconds}s';
     setState(() {
       if (seconds > 0) {
@@ -582,7 +582,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_draggingSeek && _dragSeekDelta != null) {
       final p =
           _dragStartPosition + Duration(seconds: _dragSeekDelta!.toInt());
-      return p.clamp(Duration.zero, _duration);
+      return (p < Duration.zero ? Duration.zero : p > _duration ? _duration : p);
     }
     return _position;
   }
@@ -658,7 +658,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
                 decoration: BoxDecoration(
-                    color: Colors.black70,
+                    color: Colors.black.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(12)),
                 child: Text(
                   '${_fmtDur(_previewPosition)}  (${_dragSeekDelta! >= 0 ? '+' : ''}${_dragSeekDelta!.toInt()}s)',
@@ -718,7 +718,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                    color: Colors.black70,
+                    color: Colors.black.withOpacity(0.7),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.orange.withOpacity(0.5))),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -742,7 +742,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                      color: Colors.black70,
+                      color: Colors.black.withOpacity(0.7),
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                       border: Border.all(color: Colors.white38)),
                   child: const Text('Skip Intro →',
@@ -1368,7 +1368,7 @@ class _DragIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(color: Colors.black70, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(12)),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Icon(icon, color: Colors.white, size: 28),
         const SizedBox(height: 8),

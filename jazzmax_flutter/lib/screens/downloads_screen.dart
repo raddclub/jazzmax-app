@@ -501,7 +501,7 @@ class _DownloadCardState extends State<_DownloadCard> {
                 Text(widget.sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
                 const Spacer(),
                 if (!widget.isSelecting)
-                  GestureDetector(widget.onTap: widget.onDelete,
+                  GestureDetector(onTap: widget.onDelete,
                       child: const Icon(Icons.delete_outline_rounded,
                           size: 16, color: AppColors.textMuted)),
               ]),
@@ -588,7 +588,7 @@ class _DownloadListTileState extends State<_DownloadListTile> {
             const SizedBox(height: 4),
             Row(children: [
               Text(widget.sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
-              if (statusStr == 'failed') ...[
+              if (widget.statusStr == 'failed') ...[
                 const SizedBox(width: 8),
                 Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(color: AppColors.error.withOpacity(0.15),

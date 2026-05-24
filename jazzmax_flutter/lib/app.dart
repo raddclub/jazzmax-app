@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'models/catalog_item.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -62,7 +63,7 @@ class JazzMaxApp extends ConsumerWidget {
         if (settings.name == AppRoutes.showDetail) {
           final item = settings.arguments;
           return PageRouteBuilder(
-            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item),
+            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item as CatalogItem),
             transitionsBuilder: (_, anim, __, child) =>
                 SlideTransition(
                   position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
