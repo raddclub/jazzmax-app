@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
 import '../providers/subscription_provider.dart';
@@ -28,9 +29,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       ref.read(subscriptionProvider.notifier).loadPlans();
       ref.read(subscriptionProvider.notifier).loadStatus();
     });
-    // Pre-fill phone from logged-in user
+    // Pre-fill phone from logged-in user (skip for guests — their phone is 'guest')
     final user = ref.read(authProvider).user;
-    if (user != null) _phoneCtrl.text = user.phone;
+    if (user != null && !user.isGuest) _phoneCtrl.text = user.phone;
   }
 
   @override
@@ -119,42 +120,55 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
                                 'Send payment via JazzCash or Easypaisa to:',
                           ),
                           const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      '03286839827',
-                                      style: TextStyle(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 1,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Muhammad Rehan',
-                                      style: TextStyle(
-                                        color: AppColors.textMuted,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
+                          GestureDetector(
+                            onTap: () {
+                              Clipboard.setData(
+                                  const ClipboardData(text: '03286839827'));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Number copied to clipboard'),
+                                  duration: Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
                                 ),
-                                const Icon(Icons.copy_outlined,
-                                    color: AppColors.textMuted, size: 18),
-                              ],
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '03286839827',
+                                        style: TextStyle(
+                                          color: AppColors.textPrimary,
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Muhammad Rehan',
+                                        style: TextStyle(
+                                          color: AppColors.textMuted,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  Icon(Icons.copy_outlined,
+                                      color: AppColors.primary, size: 18),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 10),
