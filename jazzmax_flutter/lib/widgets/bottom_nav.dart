@@ -46,11 +46,18 @@ class JazzMaxBottomNav extends StatelessWidget {
               onTap: () => onTap(2),
             ),
             _NavItem(
+              icon: Icons.folder_outlined,
+              activeIcon: Icons.folder_rounded,
+              label: 'My Files',
+              isActive: currentIndex == 3,
+              onTap: () => onTap(3),
+            ),
+            _NavItem(
               icon: Icons.person_outline_rounded,
               activeIcon: Icons.person_rounded,
               label: 'Profile',
-              isActive: currentIndex == 3,
-              onTap: () => onTap(3),
+              isActive: currentIndex == 4,
+              onTap: () => onTap(4),
             ),
           ],
         ),
@@ -80,7 +87,7 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -95,8 +102,7 @@ class _NavItem extends StatelessWidget {
               style: TextStyle(
                 color: isActive ? AppColors.primary : AppColors.textMuted,
                 fontSize: 10,
-                fontWeight:
-                    isActive ? FontWeight.w600 : FontWeight.normal,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
               ),
             ),
           ],
