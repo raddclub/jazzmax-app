@@ -231,6 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         crossAxisCount: 3, childAspectRatio: 2/3,
                         crossAxisSpacing: 10, mainAxisSpacing: 10),
                   ),
+          ),
 
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
