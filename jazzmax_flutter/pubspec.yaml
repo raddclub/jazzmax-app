@@ -1,7 +1,7 @@
 name: jazzmax
 description: JazzMAX - Pakistan ka entertainment, data-free
 publish_to: 'none'
-version: 1.2.0+3
+version: 1.3.0+3000
 
 environment:
   sdk: '>=3.0.0 <4.0.0'

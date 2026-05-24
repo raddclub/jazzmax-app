@@ -22,11 +22,18 @@ class SubscriptionPlan {
     return SubscriptionPlan(
       id: json['id'] as String? ?? json['plan_id'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      priceMonthly: json['price'] as int? ?? json['price_monthly'] as int? ?? 0,
+      // Server field is price_pkr — also check price and price_monthly as fallbacks
+      priceMonthly: (json['price_pkr'] ?? json['price'] ?? json['price_monthly'] ?? 0) is int
+          ? (json['price_pkr'] ?? json['price'] ?? json['price_monthly'] ?? 0) as int
+          : int.tryParse((json['price_pkr'] ?? json['price'] ?? json['price_monthly'] ?? 0).toString()) ?? 0,
       description: json['description'] as String? ?? '',
-      downloadsPerDay: json['downloads_per_day'] as int? ?? 0,
+      // downloads_per_day can be null (e.g. Premium = unlimited) — default to 999
+      downloadsPerDay: json['downloads_per_day'] is int
+          ? json['downloads_per_day'] as int
+          : (json['downloads_per_day'] == null ? 999 : int.tryParse(json['downloads_per_day'].toString()) ?? 0),
       // Server may return bool or int — handle both
-      hdAccess: json['hd_access'] == true || json['hd_access'] == 1,
+      hdAccess: json['hd_access'] == true || json['hd_access'] == 1 ||
+          (json['quality'] as String? ?? '').contains('1080'),
       features: featuresRaw.cast<String>(),
     );
   }

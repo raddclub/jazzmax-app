@@ -33,8 +33,13 @@ class DeviceIdentifier {
   static Future<String> getDeviceName() async {
     try {
       final androidInfo = await _deviceInfo.androidInfo;
-      final brand = androidInfo.brand;
-      final model = androidInfo.model;
+      final brand = androidInfo.brand.trim();
+      final model = androidInfo.model.trim();
+      // Some manufacturers (Infinix, Samsung, etc.) include brand in the model name already.
+      // e.g. brand="Infinix" model="Infinix X680F" → avoid "Infinix Infinix X680F"
+      if (model.toLowerCase().startsWith(brand.toLowerCase())) {
+        return model;
+      }
       return '$brand $model'.trim();
     } catch (_) {
       return 'Android Device';
