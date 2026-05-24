@@ -340,48 +340,72 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Audio tracks ──────────────────────────────────────────────────────────
 
   void _showAudioTracks() {
-    final tracks = _player.state.tracks.audio;
+    // Filter out special meta-tracks (auto/no) — only show real audio streams
+    final tracks = _player.state.tracks.audio
+        .where((t) => t.id != 'no' && t.id != 'auto')
+        .toList();
     if (tracks.isEmpty) return;
 
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Text('Audio Track',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                )),
-          ),
-          ...tracks.map((t) {
-            final isCurrent = _player.state.track.audio.id == t.id;
-            final label = t.title ?? t.language ?? 'Track ${t.id}';
-            return ListTile(
-              title: Text(label,
-                  style: const TextStyle(color: AppColors.textPrimary)),
-              leading: Icon(
-                isCurrent
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: AppColors.primary,
+      builder: (_) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('Audio Track',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  )),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: tracks.length,
+                itemBuilder: (_, i) {
+                  final t = tracks[i];
+                  final isCurrent = _player.state.track.audio.id == t.id;
+                  // Build a human-readable label: title > language > "Track N"
+                  final String label;
+                  if (t.title != null && t.title!.isNotEmpty) {
+                    label = t.title!;
+                  } else if (t.language != null && t.language!.isNotEmpty) {
+                    label = t.language!.toUpperCase();
+                  } else {
+                    label = 'Track ${i + 1}';
+                  }
+                  return ListTile(
+                    title: Text(label,
+                        style: const TextStyle(color: AppColors.textPrimary)),
+                    leading: Icon(
+                      isCurrent
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                      color: AppColors.primary,
+                    ),
+                    onTap: () {
+                      _player.setAudioTrack(t);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
               ),
-              onTap: () {
-                _player.setAudioTrack(t);
-                Navigator.pop(context);
-              },
-            );
-          }),
-          const SizedBox(height: 16),
-        ],
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
@@ -396,118 +420,136 @@ class _PlayerScreenState extends State<PlayerScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => StatefulBuilder(
-        builder: (ctx, setSheet) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                'Subtitles',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+        builder: (ctx, setSheet) => ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.6,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text(
+                  'Subtitles',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-            ),
 
-            // Off option
-            ListTile(
-              leading: Icon(
-                _currentSubtitle == null
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: AppColors.primary,
-              ),
-              title: const Text('Off',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                _player.setSubtitleTrack(SubtitleTrack.no());
-                setState(() { _currentSubtitle = null; _externalSrtPath = null; });
-                Navigator.pop(context);
-              },
-            ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    // Off option
+                    ListTile(
+                      leading: Icon(
+                        _currentSubtitle == null
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: AppColors.primary,
+                      ),
+                      title: const Text('Off',
+                          style: TextStyle(color: AppColors.textPrimary)),
+                      onTap: () {
+                        _player.setSubtitleTrack(SubtitleTrack.no());
+                        setState(() { _currentSubtitle = null; _externalSrtPath = null; });
+                        Navigator.pop(context);
+                      },
+                    ),
 
-            // Built-in tracks from MKV/file
-            ...builtIn.map((t) {
-              final isCurrent = _currentSubtitle?.id == t.id;
-              final label = t.title != null && t.title!.isNotEmpty
-                  ? t.title!
-                  : (t.language != null && t.language!.isNotEmpty
-                      ? t.language!.toUpperCase()
-                      : 'Track ${t.id}');
-              return ListTile(
-                leading: Icon(
-                  isCurrent
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  color: AppColors.primary,
+                    // Built-in tracks from MKV/file
+                    ...builtIn.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final t = entry.value;
+                      final isCurrent = _currentSubtitle?.id == t.id;
+                      final String label;
+                      if (t.title != null && t.title!.isNotEmpty) {
+                        label = t.title!;
+                      } else if (t.language != null && t.language!.isNotEmpty) {
+                        label = t.language!.toUpperCase();
+                      } else {
+                        label = 'Track ${i + 1}';
+                      }
+                      return ListTile(
+                        leading: Icon(
+                          isCurrent
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_unchecked,
+                          color: AppColors.primary,
+                        ),
+                        title: Text(label,
+                            style: const TextStyle(color: AppColors.textPrimary)),
+                        onTap: () {
+                          _player.setSubtitleTrack(t);
+                          setState(() { _currentSubtitle = t; _externalSrtPath = null; });
+                          Navigator.pop(context);
+                        },
+                      );
+                    }),
+
+                    // External .srt file option
+                    ListTile(
+                      leading: Icon(
+                        _externalSrtPath != null
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_unchecked,
+                        color: AppColors.primary,
+                      ),
+                      title: Text(
+                        _externalSrtPath != null
+                            ? _externalSrtPath!.split('/').last
+                            : 'Load .srt file from device...',
+                        style: TextStyle(
+                          color: _externalSrtPath != null
+                              ? AppColors.textPrimary
+                              : AppColors.textMuted,
+                          fontStyle: _externalSrtPath != null
+                              ? FontStyle.normal
+                              : FontStyle.italic,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(Icons.folder_open_rounded,
+                          color: AppColors.textMuted, size: 18),
+                      onTap: () async {
+                        Navigator.pop(context);
+                        final result = await FilePicker.platform.pickFiles(
+                          type: FileType.custom,
+                          allowedExtensions: ['srt', 'ass', 'ssa', 'vtt'],
+                          allowMultiple: false,
+                        );
+                        if (result != null && result.files.single.path != null) {
+                          final path = result.files.single.path!;
+                          if (File(path).existsSync()) {
+                            final track = SubtitleTrack.uri('file://$path');
+                            _player.setSubtitleTrack(track);
+                            if (mounted) {
+                              setState(() {
+                                _currentSubtitle = track;
+                                _externalSrtPath = path;
+                              });
+                            }
+                          }
+                        }
+                      },
+                    ),
+                  ],
                 ),
-                title: Text(label,
-                    style: const TextStyle(color: AppColors.textPrimary)),
-                onTap: () {
-                  _player.setSubtitleTrack(t);
-                  setState(() { _currentSubtitle = t; _externalSrtPath = null; });
-                  Navigator.pop(context);
-                },
-              );
-            }),
-
-            // External .srt file option
-            ListTile(
-              leading: Icon(
-                _externalSrtPath != null
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: AppColors.primary,
               ),
-              title: Text(
-                _externalSrtPath != null
-                    ? _externalSrtPath!.split('/').last
-                    : 'Load .srt file from device...',
-                style: TextStyle(
-                  color: _externalSrtPath != null
-                      ? AppColors.textPrimary
-                      : AppColors.textMuted,
-                  fontStyle: _externalSrtPath != null
-                      ? FontStyle.normal
-                      : FontStyle.italic,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: const Icon(Icons.folder_open_rounded,
-                  color: AppColors.textMuted, size: 18),
-              onTap: () async {
-                Navigator.pop(context);
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['srt', 'ass', 'ssa', 'vtt'],
-                  allowMultiple: false,
-                );
-                if (result != null && result.files.single.path != null) {
-                  final path = result.files.single.path!;
-                  if (File(path).existsSync()) {
-                    final track = SubtitleTrack.uri('file://$path');
-                    _player.setSubtitleTrack(track);
-                    if (mounted) {
-                      setState(() {
-                        _currentSubtitle = track;
-                        _externalSrtPath = path;
-                      });
-                    }
-                  }
-                }
-              },
-            ),
 
-            const SizedBox(height: 16),
-          ],
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
