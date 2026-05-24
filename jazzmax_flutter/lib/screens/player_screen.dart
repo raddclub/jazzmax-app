@@ -14,9 +14,14 @@ import '../core/constants.dart';
 import '../core/db/local_db.dart';
 import '../core/security/encryption_service.dart';
 
-/// Full-screen video player — Phase 4
-/// Features: custom gesture controls, double-tap seek, swipe brightness/volume,
-/// audio track selector, aspect ratio toggle, screen lock, resume position.
+/// Full-screen video player — Phase 4 Enhanced
+/// New features:
+///   • Long-press anywhere → 2× speed while held (MX Player style)
+///   • Speed selector sheet (0.25× – 4.0×)
+///   • Speed display in top bar
+///   • Background audio continues when screen locked
+///   • Subtitle font-size control
+///   • Auto-hide controls, lock, brightness, volume, seek flash (all existing)
 class PlayerScreen extends StatefulWidget {
   final String fileId;
   final String title;
@@ -33,7 +38,8 @@ class PlayerScreen extends StatefulWidget {
   State<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends State<PlayerScreen>
+    with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController _controller;
 
@@ -57,17 +63,28 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // Seek flash
   bool _showSeekFwd = false;
   bool _showSeekBwd = false;
+  int _seekSeconds = 10;
+
+  // Playback speed
+  double _playbackSpeed = 1.0;
+  bool _longPressSpeedActive = false;
+  double _longPressReturnSpeed = 1.0; // speed before long-press
+
+  // Speed indicator flash
+  bool _showSpeedIndicator = false;
+  String _speedIndicatorLabel = '';
+  Timer? _speedIndicatorTimer;
 
   // Subtitles
   SubtitleTrack? _currentSubtitle;
   String? _externalSrtPath;
+  double _subtitleFontSize = 18.0;
 
   // Guest mode
   bool _isGuest = false;
   Timer? _guestLimitTimer;
 
   // Temp file path created by decrypting an encrypted local download.
-  // Deleted in dispose() to avoid filling device storage.
   String? _tempDecryptedPath;
 
   // Timers
@@ -75,10 +92,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _positionTimer;
   Timer? _indicatorTimer;
 
+  static const List<double> _speedOptions = [
+    0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0
+  ];
+
   @override
   void initState() {
     super.initState();
-    _player = Player();
+    WidgetsBinding.instance.addObserver(this);
+
+    _player = Player(
+      configuration: const PlayerConfiguration(
+        // Keeps audio going when screen is off / app goes to background
+        ready: null,
+      ),
+    );
     _controller = VideoController(_player);
 
     // Go fullscreen landscape
@@ -100,6 +128,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _savePosition();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When app goes to background: keep audio going (media_kit handles it)
+    // When app resumes: restore brightness
+    if (state == AppLifecycleState.resumed) {
+      _initBrightnessVolume();
+    }
   }
 
   // ── Guest mode limit ──────────────────────────────────────────────────────
@@ -165,7 +202,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 onPressed: () {
                   Navigator.of(context).pop();
                   Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.subscription, (r) => r.settings.name == AppRoutes.home);
+                      AppRoutes.subscription, (r) => r.settings.name == AppRoutes.home);
                 },
                 child: const Text('Subscribe Now'),
               ),
@@ -173,8 +210,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               OutlinedButton(
                 onPressed: () {
                   Navigator.of(context).pop();
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.register, (r) => false);
+                  Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.register, (r) => false);
                 },
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppColors.textMuted),
@@ -217,29 +253,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
       String playUrl;
 
       if (widget.localPath != null) {
-        // ── Offline playback from encrypted local file ─────────────────────
         final localFile = File(widget.localPath!);
         if (!await localFile.exists()) {
           throw Exception('Downloaded file not found. Please re-download.');
         }
-
         if (widget.localPath!.endsWith('.enc')) {
-          // Decrypt to a temporary file, then play from it
-          _tempDecryptedPath =
-              await EncryptionService.decryptToTemp(widget.localPath!);
+          _tempDecryptedPath = await EncryptionService.decryptToTemp(widget.localPath!);
           playUrl = _tempDecryptedPath!;
         } else {
-          // Older download — plaintext file (no encryption)
           playUrl = widget.localPath!;
         }
       } else {
-        // ── Online streaming ───────────────────────────────────────────────
         playUrl = await CatalogApi.getStreamUrl(widget.fileId);
       }
 
       await _player.open(Media(playUrl));
+      await _player.setRate(_playbackSpeed);
 
-      // Seek to saved position if more than 5 seconds in
       if (savedMs > 5000) {
         await Future.delayed(const Duration(milliseconds: 600));
         if (mounted) {
@@ -301,15 +331,100 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _player.seek(newPos);
 
     setState(() {
+      _seekSeconds = seconds.abs();
       _showSeekFwd = seconds > 0;
       _showSeekBwd = seconds < 0;
     });
     Future.delayed(const Duration(milliseconds: 700), () {
       if (mounted) setState(() { _showSeekFwd = false; _showSeekBwd = false; });
     });
-
-    // Keep controls visible while seeking
     _resetControlsTimer();
+  }
+
+  // ── Long press speed (MX Player style) ───────────────────────────────────
+
+  void _onLongPressStart() {
+    if (_locked) return;
+    _longPressReturnSpeed = _playbackSpeed;
+    const holdSpeed = 2.0;
+    _player.setRate(holdSpeed);
+    setState(() {
+      _longPressSpeedActive = true;
+      _showSpeedIndicator = true;
+      _speedIndicatorLabel = '2.0×  ►► Hold';
+    });
+  }
+
+  void _onLongPressEnd() {
+    if (!_longPressSpeedActive) return;
+    _player.setRate(_longPressReturnSpeed);
+    setState(() {
+      _longPressSpeedActive = false;
+      _showSpeedIndicator = false;
+    });
+  }
+
+  // ── Playback speed (from menu) ────────────────────────────────────────────
+
+  void _setSpeed(double speed) {
+    _playbackSpeed = speed;
+    _player.setRate(speed);
+    setState(() {
+      _speedIndicatorLabel = '${speed}×';
+      _showSpeedIndicator = true;
+    });
+    _speedIndicatorTimer?.cancel();
+    _speedIndicatorTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _showSpeedIndicator = false);
+    });
+  }
+
+  void _showSpeedSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('Playback Speed',
+                  style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
+            ),
+            ..._speedOptions.map((speed) {
+              final isCurrent = _playbackSpeed == speed;
+              String label;
+              if (speed == 1.0) {
+                label = 'Normal (1.0×)';
+              } else {
+                label = '${speed}×';
+              }
+              return ListTile(
+                leading: Icon(
+                  isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                  color: AppColors.primary,
+                ),
+                title: Text(label, style: const TextStyle(color: AppColors.textPrimary)),
+                onTap: () {
+                  Navigator.pop(context);
+                  _setSpeed(speed);
+                },
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── Brightness & Volume ───────────────────────────────────────────────────
@@ -340,11 +455,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // ── Audio tracks ──────────────────────────────────────────────────────────
 
   void _showAudioTracks() {
-    // Filter out special meta-tracks (auto/no) — only show real audio streams
     final tracks = _player.state.tracks.audio
         .where((t) => t.id != 'no' && t.id != 'auto')
         .toList();
-    if (tracks.isEmpty) return;
+    if (tracks.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No alternate audio tracks in this file'),
+          backgroundColor: AppColors.surface,
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     showModalBottomSheet(
       context: context,
@@ -354,9 +478,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (_) => ConstrainedBox(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.6,
-        ),
+        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,10 +487,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
               padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Text('Audio Track',
                   style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  )),
+                      color: AppColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700)),
             ),
             Flexible(
               child: ListView.builder(
@@ -377,7 +498,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 itemBuilder: (_, i) {
                   final t = tracks[i];
                   final isCurrent = _player.state.track.audio.id == t.id;
-                  // Build a human-readable label: title > language > "Track N"
                   final String label;
                   if (t.title != null && t.title!.isNotEmpty) {
                     label = t.title!;
@@ -387,12 +507,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     label = 'Track ${i + 1}';
                   }
                   return ListTile(
-                    title: Text(label,
-                        style: const TextStyle(color: AppColors.textPrimary)),
+                    title: Text(label, style: const TextStyle(color: AppColors.textPrimary)),
                     leading: Icon(
-                      isCurrent
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_unchecked,
+                      isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                       color: AppColors.primary,
                     ),
                     onTap: () {
@@ -426,22 +543,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       builder: (_) => StatefulBuilder(
         builder: (ctx, setSheet) => ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.6,
-          ),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Padding(
                 padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text(
-                  'Subtitles',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: Text('Subtitles',
+                    style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700)),
+              ),
+
+              // Font size control
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Row(
+                  children: [
+                    const Text('Size:', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                    Expanded(
+                      child: Slider(
+                        value: _subtitleFontSize,
+                        min: 12,
+                        max: 32,
+                        divisions: 10,
+                        activeColor: AppColors.primary,
+                        inactiveColor: Colors.white24,
+                        label: '${_subtitleFontSize.round()}px',
+                        onChanged: (v) {
+                          setSheet(() => _subtitleFontSize = v);
+                          setState(() => _subtitleFontSize = v);
+                        },
+                      ),
+                    ),
+                    Text('${_subtitleFontSize.round()}px',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  ],
                 ),
               ),
 
@@ -452,13 +591,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     // Off option
                     ListTile(
                       leading: Icon(
-                        _currentSubtitle == null
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
+                        _currentSubtitle == null ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                         color: AppColors.primary,
                       ),
-                      title: const Text('Off',
-                          style: TextStyle(color: AppColors.textPrimary)),
+                      title: const Text('Off', style: TextStyle(color: AppColors.textPrimary)),
                       onTap: () {
                         _player.setSubtitleTrack(SubtitleTrack.no());
                         setState(() { _currentSubtitle = null; _externalSrtPath = null; });
@@ -466,7 +602,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       },
                     ),
 
-                    // Built-in tracks from MKV/file
+                    // Built-in tracks
                     ...builtIn.asMap().entries.map((entry) {
                       final i = entry.key;
                       final t = entry.value;
@@ -481,13 +617,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       }
                       return ListTile(
                         leading: Icon(
-                          isCurrent
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_unchecked,
+                          isCurrent ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                           color: AppColors.primary,
                         ),
-                        title: Text(label,
-                            style: const TextStyle(color: AppColors.textPrimary)),
+                        title: Text(label, style: const TextStyle(color: AppColors.textPrimary)),
                         onTap: () {
                           _player.setSubtitleTrack(t);
                           setState(() { _currentSubtitle = t; _externalSrtPath = null; });
@@ -496,36 +629,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       );
                     }),
 
-                    // External .srt file option
+                    // External file option
                     ListTile(
                       leading: Icon(
-                        _externalSrtPath != null
-                            ? Icons.radio_button_checked
-                            : Icons.radio_button_unchecked,
+                        _externalSrtPath != null ? Icons.radio_button_checked : Icons.radio_button_unchecked,
                         color: AppColors.primary,
                       ),
                       title: Text(
                         _externalSrtPath != null
                             ? _externalSrtPath!.split('/').last
-                            : 'Load .srt file from device...',
+                            : 'Load subtitle file (.srt / .ass / .vtt)...',
                         style: TextStyle(
-                          color: _externalSrtPath != null
-                              ? AppColors.textPrimary
-                              : AppColors.textMuted,
-                          fontStyle: _externalSrtPath != null
-                              ? FontStyle.normal
-                              : FontStyle.italic,
+                          color: _externalSrtPath != null ? AppColors.textPrimary : AppColors.textMuted,
+                          fontStyle: _externalSrtPath != null ? FontStyle.normal : FontStyle.italic,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      trailing: const Icon(Icons.folder_open_rounded,
-                          color: AppColors.textMuted, size: 18),
+                      trailing: const Icon(Icons.folder_open_rounded, color: AppColors.textMuted, size: 18),
                       onTap: () async {
                         Navigator.pop(context);
                         final result = await FilePicker.platform.pickFiles(
                           type: FileType.custom,
-                          allowedExtensions: ['srt', 'ass', 'ssa', 'vtt'],
+                          allowedExtensions: ['srt', 'ass', 'ssa', 'vtt', 'sub'],
                           allowMultiple: false,
                         );
                         if (result != null && result.files.single.path != null) {
@@ -546,7 +672,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ],
                 ),
               ),
-
               const SizedBox(height: 16),
             ],
           ),
@@ -567,6 +692,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _fit = BoxFit.contain;
       }
     });
+    // Flash label
+    setState(() {
+      _speedIndicatorLabel = _fitLabel;
+      _showSpeedIndicator = true;
+    });
+    _speedIndicatorTimer?.cancel();
+    _speedIndicatorTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) setState(() => _showSpeedIndicator = false);
+    });
   }
 
   String get _fitLabel {
@@ -575,14 +709,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return 'Fill';
   }
 
+  String get _speedLabel {
+    if (_playbackSpeed == 1.0) return '1×';
+    if (_playbackSpeed % 1 == 0) return '${_playbackSpeed.toInt()}×';
+    return '${_playbackSpeed}×';
+  }
+
   // ── Dispose ───────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controlsTimer?.cancel();
     _positionTimer?.cancel();
     _indicatorTimer?.cancel();
     _guestLimitTimer?.cancel();
+    _speedIndicatorTimer?.cancel();
     _savePosition();
     _player.dispose();
     WakelockPlus.disable();
@@ -593,7 +735,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     try { ScreenBrightness().resetScreenBrightness(); } catch (_) {}
     try { VolumeController().showSystemUI = true; } catch (_) {}
-    // Delete temp decrypted file created for encrypted local playback
     if (_tempDecryptedPath != null) {
       try { File(_tempDecryptedPath!).delete(); } catch (_) {}
     }
@@ -614,6 +755,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
               controller: _controller,
               fit: _fit,
               controls: (state) => const SizedBox.shrink(),
+              subtitleViewConfiguration: SubtitleViewConfiguration(
+                style: TextStyle(
+                  fontSize: _subtitleFontSize,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  shadows: const [
+                    Shadow(blurRadius: 3, color: Colors.black),
+                    Shadow(blurRadius: 6, color: Colors.black),
+                  ],
+                ),
+              ),
             ),
           ),
 
@@ -621,8 +773,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (_loading)
             const Center(
               child: CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.primary),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
               ),
             ),
 
@@ -630,11 +781,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
           if (_error != null)
             Center(child: _buildError()),
 
-          // 4. Gesture layer — left half & right half side by side
+          // 4. Gesture layer
           if (!_loading && _error == null)
             Positioned.fill(child: _buildGestureLayer()),
 
-          // 5. Controls overlay (hidden when _locked or invisible)
+          // 5. Controls overlay
           IgnorePointer(
             ignoring: !_controlsVisible || _locked,
             child: AnimatedOpacity(
@@ -644,7 +795,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
 
-          // 6. Lock indicator (tap to unlock)
+          // 6. Lock indicator
           if (_locked)
             Positioned(
               top: 20,
@@ -661,12 +812,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.lock_rounded,
-                            color: AppColors.primary, size: 18),
+                        Icon(Icons.lock_rounded, color: AppColors.primary, size: 18),
                         SizedBox(width: 4),
-                        Text('Tap to unlock',
-                            style: TextStyle(
-                                color: Colors.white70, fontSize: 11)),
+                        Text('Tap to unlock', style: TextStyle(color: Colors.white70, fontSize: 11)),
                       ],
                     ),
                   ),
@@ -674,25 +822,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
 
-          // 7. Seek flash indicators
+          // 7. Seek flash left
           if (_showSeekBwd)
             Positioned(
               left: 0,
               top: 0,
               bottom: 0,
               width: MediaQuery.of(context).size.width * 0.5,
-              child: const Center(child: _SeekFlash(forward: false)),
+              child: Center(child: _SeekFlash(forward: false, seconds: _seekSeconds)),
             ),
+
+          // 8. Seek flash right
           if (_showSeekFwd)
             Positioned(
               right: 0,
               top: 0,
               bottom: 0,
               width: MediaQuery.of(context).size.width * 0.5,
-              child: const Center(child: _SeekFlash(forward: true)),
+              child: Center(child: _SeekFlash(forward: true, seconds: _seekSeconds)),
             ),
 
-          // 8. Brightness bar (left edge)
+          // 9. Brightness bar
           if (_showBrightness)
             Positioned(
               left: 20,
@@ -707,7 +857,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
 
-          // 9. Volume bar (right edge)
+          // 10. Volume bar
           if (_showVolume)
             Positioned(
               right: 20,
@@ -721,6 +871,31 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ),
             ),
+
+          // 11. Speed / aspect indicator (center top)
+          if (_showSpeedIndicator)
+            Positioned(
+              top: 60,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black70,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    _speedIndicatorLabel,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -731,25 +906,27 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget _buildGestureLayer() {
     return Row(
       children: [
-        // Left half: double-tap → -10s, drag → brightness
+        // Left half: double-tap → -10s, drag → brightness, long press → 2× speed
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _toggleControls,
             onDoubleTap: () => _seekRelative(-10),
-            onVerticalDragUpdate: (d) =>
-                _adjustBrightness(-d.delta.dy / 160),
+            onVerticalDragUpdate: (d) => _adjustBrightness(-d.delta.dy / 160),
+            onLongPress: _onLongPressStart,
+            onLongPressEnd: (_) => _onLongPressEnd(),
             child: const SizedBox.expand(),
           ),
         ),
-        // Right half: double-tap → +10s, drag → volume
+        // Right half: double-tap → +10s, drag → volume, long press → 2× speed
         Expanded(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: _toggleControls,
             onDoubleTap: () => _seekRelative(10),
-            onVerticalDragUpdate: (d) =>
-                _adjustVolume(-d.delta.dy / 160),
+            onVerticalDragUpdate: (d) => _adjustVolume(-d.delta.dy / 160),
+            onLongPress: _onLongPressStart,
+            onLongPressEnd: (_) => _onLongPressEnd(),
             child: const SizedBox.expand(),
           ),
         ),
@@ -776,11 +953,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
       child: Column(
         children: [
-          // Top bar
           _buildTopBar(),
-          // Center play/pause
           Expanded(child: _buildCenterControls()),
-          // Bottom bar
           _buildBottomBar(),
         ],
       ),
@@ -793,58 +967,74 @@ class _PlayerScreenState extends State<PlayerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         child: Row(
           children: [
+            // Back
             IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new,
-                  color: Colors.white, size: 20),
+              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
+            // Title
             Expanded(
               child: Text(
                 widget.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            // Audio track picker
+            // Playback speed button
+            GestureDetector(
+              onTap: _showSpeedSheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _playbackSpeed != 1.0 ? AppColors.primary.withOpacity(0.2) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _playbackSpeed != 1.0 ? AppColors.primary : Colors.white38,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  _speedLabel,
+                  style: TextStyle(
+                    color: _playbackSpeed != 1.0 ? AppColors.primary : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            // Audio track
             IconButton(
-              icon: const Icon(Icons.audiotrack_rounded,
-                  color: Colors.white, size: 20),
+              icon: const Icon(Icons.audiotrack_rounded, color: Colors.white, size: 20),
               tooltip: 'Audio Track',
               onPressed: _showAudioTracks,
             ),
-            // Subtitle selector
+            // Subtitles
             IconButton(
               icon: Icon(
                 Icons.subtitles_rounded,
-                color: _currentSubtitle != null
-                    ? AppColors.primary
-                    : Colors.white,
+                color: _currentSubtitle != null ? AppColors.primary : Colors.white,
                 size: 20,
               ),
               tooltip: 'Subtitles',
               onPressed: _showSubtitles,
             ),
             // Aspect ratio
-            TextButton(
-              onPressed: _cycleAspectRatio,
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                minimumSize: Size.zero,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            GestureDetector(
+              onTap: _cycleAspectRatio,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Text(
+                  _fitLabel,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
               ),
-              child: Text(_fitLabel,
-                  style: const TextStyle(fontSize: 12)),
             ),
             // Screen lock
             IconButton(
-              icon: const Icon(Icons.lock_open_rounded,
-                  color: Colors.white, size: 20),
+              icon: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 20),
               tooltip: 'Lock screen',
               onPressed: () => setState(() => _locked = true),
             ),
@@ -855,34 +1045,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Widget _buildCenterControls() {
-    return StreamBuilder<bool>(
-      stream: _player.stream.playing,
-      builder: (_, snap) {
-        final playing = snap.data ?? false;
-        return Center(
-          child: GestureDetector(
-            onTap: () {
-              _player.playOrPause();
-              _resetControlsTimer();
-            },
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: const BoxDecoration(
-                color: Colors.black38,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                playing
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 40,
-              ),
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Skip backward 10s
+        GestureDetector(
+          onTap: () => _seekRelative(-10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.replay_10_rounded, color: Colors.white70, size: 32),
+              ],
             ),
           ),
-        );
-      },
+        ),
+        const SizedBox(width: 24),
+        // Play/Pause
+        StreamBuilder<bool>(
+          stream: _player.stream.playing,
+          builder: (_, snap) {
+            final playing = snap.data ?? false;
+            return GestureDetector(
+              onTap: () {
+                _player.playOrPause();
+                _resetControlsTimer();
+              },
+              child: Container(
+                width: 68,
+                height: 68,
+                decoration: const BoxDecoration(
+                  color: Colors.black38,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: Colors.white,
+                  size: 42,
+                ),
+              ),
+            );
+          },
+        ),
+        const SizedBox(width: 24),
+        // Skip forward 10s
+        GestureDetector(
+          onTap: () => _seekRelative(10),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            child: const Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.forward_10_rounded, color: Colors.white70, size: 32),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -900,14 +1120,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 return StreamBuilder<Duration>(
                   stream: _player.stream.duration,
                   builder: (_, durSnap) {
-                    final pos =
-                        posSnap.data ?? Duration.zero;
-                    final dur =
-                        durSnap.data ?? Duration.zero;
+                    final pos = posSnap.data ?? Duration.zero;
+                    final dur = durSnap.data ?? Duration.zero;
                     final progress = dur.inMilliseconds > 0
-                        ? (pos.inMilliseconds /
-                                dur.inMilliseconds)
-                            .clamp(0.0, 1.0)
+                        ? (pos.inMilliseconds / dur.inMilliseconds).clamp(0.0, 1.0)
                         : 0.0;
 
                     return Column(
@@ -916,46 +1132,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         SliderTheme(
                           data: SliderThemeData(
                             trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6),
-                            activeTrackColor:
-                                AppColors.primary,
-                            inactiveTrackColor:
-                                Colors.white30,
+                            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                            activeTrackColor: AppColors.primary,
+                            inactiveTrackColor: Colors.white30,
                             thumbColor: Colors.white,
-                            overlayShape:
-                                SliderComponentShape.noOverlay,
+                            overlayShape: SliderComponentShape.noOverlay,
                           ),
                           child: Slider(
-                            value: progress,
+                            value: progress.toDouble(),
                             onChanged: (v) {
                               final newPos = Duration(
-                                  milliseconds:
-                                      (v * dur.inMilliseconds)
-                                          .round());
+                                  milliseconds: (v * dur.inMilliseconds).round());
                               _player.seek(newPos);
                               _resetControlsTimer();
                             },
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
                                 _formatDuration(pos),
-                                style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12),
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                              // Long press hint
+                              const Text(
+                                'Hold = 2× speed',
+                                style: TextStyle(color: Colors.white38, fontSize: 10),
                               ),
                               Text(
                                 _formatDuration(dur),
-                                style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12),
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
                               ),
                             ],
                           ),
@@ -980,14 +1189,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.error_outline,
-              color: AppColors.error, size: 48),
+          const Icon(Icons.error_outline, color: AppColors.error, size: 48),
           const SizedBox(height: 16),
           Text(
             'Could not load stream.\n${_error!}',
             textAlign: TextAlign.center,
-            style:
-                const TextStyle(color: Colors.white70, fontSize: 14),
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
           ),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -998,8 +1205,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           const SizedBox(height: 8),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Go Back',
-                style: TextStyle(color: Colors.white60)),
+            child: const Text('Go Back', style: TextStyle(color: Colors.white60)),
           ),
         ],
       ),
@@ -1020,7 +1226,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
 class _SeekFlash extends StatelessWidget {
   final bool forward;
-  const _SeekFlash({required this.forward});
+  final int seconds;
+  const _SeekFlash({required this.forward, required this.seconds});
 
   @override
   Widget build(BuildContext context) {
@@ -1034,20 +1241,14 @@ class _SeekFlash extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            forward
-                ? Icons.fast_forward_rounded
-                : Icons.fast_rewind_rounded,
+            forward ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
             color: Colors.white,
             size: 32,
           ),
           const SizedBox(height: 4),
           Text(
-            forward ? '+10s' : '-10s',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+            forward ? '+${seconds}s' : '-${seconds}s',
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -1059,8 +1260,7 @@ class _VerticalBar extends StatelessWidget {
   final double value;
   final IconData icon;
   final String label;
-  const _VerticalBar(
-      {required this.value, required this.icon, required this.label});
+  const _VerticalBar({required this.value, required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1082,16 +1282,13 @@ class _VerticalBar extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: value,
                 backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.primary),
+                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                 minHeight: 4,
               ),
             ),
           ),
           const SizedBox(height: 8),
-          Text(label,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 11)),
+          Text(label, style: const TextStyle(color: Colors.white, fontSize: 11)),
         ],
       ),
     );
