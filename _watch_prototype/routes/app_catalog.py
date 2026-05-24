@@ -70,10 +70,14 @@ def sync():
             SELECT
                 t.id, t.title, t.year, t.media_type, t.plot, t.overview,
                 t.rating, t.genres, t.language, t.is_free, t.updated_at,
-                t.poster, t.runtime, t.season_count, t.episode_count
+                t.poster, t.runtime, t.season_count, t.episode_count,
+                f.id AS file_id
             FROM titles t
+            LEFT JOIN files f ON f.title_id = t.id
+              AND (f.season IS NULL OR f.season = 0)
             WHERE t.is_published = 1
               AND (t.updated_at IS NULL OR t.updated_at > ?)
+            GROUP BY t.id
             ORDER BY t.updated_at DESC
             """,
             (since_param,)
@@ -107,6 +111,7 @@ def sync():
             "poster_key":    f"title_{r['id']}",
             "poster_url":    r["poster"] or "",
             "db_version":    int(r["updated_at"] or 0),
+            "file_id":       r["file_id"],
         })
 
     episodes = []
