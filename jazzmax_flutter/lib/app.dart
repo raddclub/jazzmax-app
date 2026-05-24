@@ -11,6 +11,7 @@ import 'screens/player_screen.dart';
 import 'screens/subscription_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/downloads_screen.dart';
+import 'screens/local_media_screen.dart';
 
 class JazzMaxApp extends ConsumerWidget {
   const JazzMaxApp({super.key});
@@ -31,6 +32,7 @@ class JazzMaxApp extends ConsumerWidget {
         AppRoutes.subscription: (_) => const SubscriptionScreen(),
         AppRoutes.profile: (_) => const ProfileScreen(),
         AppRoutes.downloads: (_) => const DownloadsScreen(),
+        AppRoutes.localMedia: (_) => const LocalMediaScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.player) {
@@ -73,8 +75,7 @@ class JazzMaxApp extends ConsumerWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide.none,
@@ -85,13 +86,11 @@ class JazzMaxApp extends ConsumerWidget {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: AppColors.primary, width: 2),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              const BorderSide(color: Colors.redAccent, width: 1),
+          borderSide: const BorderSide(color: Colors.redAccent, width: 1),
         ),
         labelStyle: const TextStyle(color: AppColors.textMuted),
         hintStyle: const TextStyle(color: AppColors.textMuted),
@@ -101,10 +100,8 @@ class JazzMaxApp extends ConsumerWidget {
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 52),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-          textStyle: GoogleFonts.inter(
-              fontSize: 16, fontWeight: FontWeight.w600),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w600),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
