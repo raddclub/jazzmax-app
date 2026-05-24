@@ -62,7 +62,6 @@ class MainActivity : FlutterActivity() {
                     "discoverDevices" -> {
                         try {
                             val devices = mutableListOf<Map<String, String>>()
-                            val router = castContext?.mergedMediaRouteSelector
                             // Return current cast device if connected
                             val sess = castContext?.sessionManager?.currentCastSession
                             if (sess != null && sess.isConnected) {
