@@ -15,6 +15,7 @@ import 'screens/subscription_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/search_screen.dart';
+import 'screens/show_detail_screen.dart';
 
 class JazzMaxApp extends ConsumerWidget {
   const JazzMaxApp({super.key});
@@ -47,10 +48,25 @@ class JazzMaxApp extends ConsumerWidget {
               fileId: args['file_id'] as String,
               title: args['title'] as String,
               localPath: args['local_path'] as String?,
+              episodes: args['episodes'] as List<Map<String, dynamic>>?,
+              episodeIndex: args['episode_index'] as int? ?? 0,
             ),
             transitionsBuilder: (_, anim, __, child) =>
                 FadeTransition(opacity: anim, child: child),
             transitionDuration: AppDurations.normal,
+          );
+        }
+        if (settings.name == AppRoutes.showDetail) {
+          final item = settings.arguments;
+          return PageRouteBuilder(
+            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item),
+            transitionsBuilder: (_, anim, __, child) =>
+                SlideTransition(
+                  position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
+                      .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+                  child: FadeTransition(opacity: anim, child: child),
+                ),
+            transitionDuration: const Duration(milliseconds: 350),
           );
         }
         return null;

@@ -22,6 +22,15 @@ PLAN_DURATIONS = {
     "premium":  30,
 }
 
+# Expected prices per plan (PKR). Used for SMS amount validation on manual approval.
+PLAN_PRICES = {
+    "basic":    149,
+    "standard": 299,
+    "premium":  499,
+}
+# Amount tolerance in PKR — allow minor rounding differences
+AMOUNT_TOLERANCE = 5
+
 _HTML = """
 {% extends "base.html" %}
 {% block title %}TID Payments{% endblock %}
@@ -314,6 +323,47 @@ def approve(payment_id: int):
     user_id       = payment["user_id"]
     phone         = payment["phone"]
     duration_days = PLAN_DURATIONS.get(plan, 30)
+
+    # ── SMS Amount validation ───────────────────────────────────────────────
+    # If the admin hasn't force-confirmed, warn them if amount doesn't match plan price.
+    amount_pkr    = payment.get("amount_pkr")
+    expected_price = PLAN_PRICES.get(plan)
+    force_approve  = request.form.get("force_approve") == "1"
+    if (not force_approve and amount_pkr is not None and expected_price is not None):
+        try:
+            paid = float(amount_pkr)
+            if abs(paid - expected_price) > AMOUNT_TOLERANCE:
+                log.warning(
+                    "TID %s amount mismatch: paid=%.0f expected=%.0f plan=%s — admin must force-confirm",
+                    payment["tid"], paid, expected_price, plan
+                )
+                # Return warning page — admin must confirm
+                _warn_html = f"""
+                <html><head><style>
+                body{{background:#0a0c11;color:#e7eaf2;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}}
+                .box{{background:#12151e;border:1px solid #ff6b6b;border-radius:14px;padding:32px;max-width:440px;width:90%}}
+                h2{{color:#ff6b6b;margin:0 0 12px}} p{{color:#9ca3af;margin:0 0 20px;line-height:1.6}}
+                .amt{{font-size:1.5rem;font-weight:700}} .exp{{color:#7e859b}}
+                .btn-confirm{{background:#ff6b6b;color:#000;border:none;padding:10px 24px;border-radius:8px;font-weight:700;cursor:pointer;font-size:.9rem;margin-right:8px}}
+                .btn-cancel{{background:transparent;color:#7e859b;border:1px solid #252d3d;padding:10px 24px;border-radius:8px;cursor:pointer;font-size:.9rem}}
+                </style></head><body><div class="box">
+                <h2>⚠ Amount Mismatch</h2>
+                <p>TID <code style="color:#e7eaf2">{payment['tid']}</code><br>
+                <span class="amt" style="color:#ff6b6b">PKR {int(paid):,}</span> paid — 
+                <span class="exp">PKR {int(expected_price):,} expected for <strong>{plan.upper()}</strong></span></p>
+                <p>This could indicate a wrong plan selection or partial payment. Approve anyway?</p>
+                <form method="post" action="/tid/{payment_id}/approve">
+                  <input type="hidden" name="_csrf_token" value="{request.form.get('_csrf_token', '')}">
+                  <input type="hidden" name="note" value="{note}">
+                  <input type="hidden" name="force_approve" value="1">
+                  <button class="btn-confirm" type="submit">Force Approve</button>
+                  <a href="/tid/?tab=pending"><button class="btn-cancel" type="button">Cancel</button></a>
+                </form>
+                </div></body></html>"""
+                from flask import Response
+                return Response(_warn_html, status=200, mimetype='text/html')
+        except (TypeError, ValueError):
+            pass
     started_at    = now
     expires_at    = now + duration_days * 86400
 

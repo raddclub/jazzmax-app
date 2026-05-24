@@ -327,10 +327,7 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        if (item.fileId != null) {
-          Navigator.of(context).pushNamed(AppRoutes.player,
-              arguments: {'file_id': item.fileId!, 'title': item.title});
-        }
+        Navigator.of(context).pushNamed(AppRoutes.showDetail, arguments: item);
       },
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16),

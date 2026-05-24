@@ -96,21 +96,8 @@ class ContentCard extends StatelessWidget {
   }
 
   void _onTap(BuildContext context) {
-    if (item.isMovie && item.fileId != null) {
-      Navigator.of(context).pushNamed(AppRoutes.player,
-          arguments: {'file_id': item.fileId!, 'title': item.title});
-    } else {
-      _showDetail(context);
-    }
-  }
-
-  void _showDetail(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _DetailSheet(item: item),
-    );
+    // Always navigate to ShowDetailScreen — it handles both movies and shows
+    Navigator.of(context).pushNamed(AppRoutes.showDetail, arguments: item);
   }
 }
 
