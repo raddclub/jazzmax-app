@@ -133,6 +133,7 @@ def sync():
             episodes.append({
                 "id":       r["id"],
                 "title_id": r["title_id"],
+                "file_id":  str(r["id"]),  # files.id IS the file_id used for play links
                 "season":   r["season"],
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
