@@ -55,7 +55,12 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   Future<void> _loadFromDb() async {
     try {
       final movies  = await LocalDb.getMovies();
-      final shows   = await LocalDb.getShows();
+      final rawShows = await LocalDb.getShows();
+      // Embed episodes into each show so ShowDetailScreen has them on first open
+      final shows = await Future.wait(rawShows.map((show) async {
+        final eps = await LocalDb.getEpisodes(show.id);
+        return show.copyWithEpisodes(eps);
+      }));
       final count   = await LocalDb.getTotalCount();
       final recent  = await _loadRecentlyWatched(movies, shows);
       state = state.copyWith(

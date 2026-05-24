@@ -70,4 +70,13 @@ class CatalogItem {
     episodes: episodes, fileId: fileId, language: language, isNew: isNew,
     watchProgress: watchProgress ?? this.watchProgress,
   );
+
+  /// Returns a new CatalogItem with episodes replaced (used by CatalogNotifier).
+  CatalogItem copyWithEpisodes(List<Map<String, dynamic>> eps) => CatalogItem(
+    id: id, title: title, year: year, mediaType: mediaType,
+    description: description, rating: rating, genres: genres,
+    posterUrl: posterUrl, isFree: isFree, dbVersion: dbVersion,
+    episodes: eps, fileId: fileId, language: language, isNew: isNew,
+    watchProgress: watchProgress,
+  );
 }
