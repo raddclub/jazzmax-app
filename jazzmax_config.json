@@ -1,7 +1,6 @@
 {
   "api_base_url": "http://92.4.95.252",
-  "app_version": "1.5.0",
-  "min_supported_version": "1.0.0",
-  "subscription_price_pkr": 149,
-  "jazzdrive_db_update_url": "https://jazzdrive.jazz.com.pk/jazzmax/db_update.json"
+  "min_version_code": 1,
+  "update_url": "https://github.com/raddclub/jazzmax-app/releases/latest",
+  "note": "Update api_base_url here to change the server without rebuilding the APK"
 }

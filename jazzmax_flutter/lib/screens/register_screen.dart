@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
@@ -30,6 +31,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     try {
       await ref.read(authProvider.notifier).register(phone: _phone.text.trim(), password: _pass.text);
       if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    } on DioException catch (e) {
+      final serverMsg = (e.response?.data as Map?)?['error'] as String?;
+      setState(() { _error = serverMsg ?? _friendly(e.toString()); _loading = false; });
     } catch (e) {
       setState(() { _error = _friendly(e.toString()); _loading = false; });
     }

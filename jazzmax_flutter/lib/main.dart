@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'app.dart';
 import 'core/remote_config.dart';
+import 'core/services/app_update_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,8 @@ void main() async {
   // Fetch server URL from GitHub config — no APK rebuild needed when server changes.
   // Falls back to hardcoded AppConstants.apiBaseUrl if network/parse fails.
   await RemoteConfig.fetch();
+  // Check for forced app updates / blocked APK on every cold start
+  await AppUpdateService.check();
 
   runApp(
     const ProviderScope(
