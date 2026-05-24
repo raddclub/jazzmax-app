@@ -16,6 +16,8 @@ import 'screens/profile_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/show_detail_screen.dart';
+import 'screens/vault_lock_screen.dart';
+import 'screens/vault_screen.dart';
 
 class JazzMaxApp extends ConsumerWidget {
   const JazzMaxApp({super.key});
@@ -39,6 +41,7 @@ class JazzMaxApp extends ConsumerWidget {
         AppRoutes.profile:      (_) => const ProfileScreen(),
         AppRoutes.downloads:    (_) => const DownloadsScreen(),
         AppRoutes.search:       (_) => const SearchScreen(),
+        AppRoutes.vault:         (_) => const VaultScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.player) {
@@ -67,6 +70,13 @@ class JazzMaxApp extends ConsumerWidget {
                   child: FadeTransition(opacity: anim, child: child),
                 ),
             transitionDuration: const Duration(milliseconds: 350),
+          );
+        }
+        if (settings.name == AppRoutes.vaultLock) {
+          final args = settings.arguments as Map<String, dynamic>?;
+          final isSetup = args?['setup'] == true;
+          return MaterialPageRoute(
+            builder: (_) => VaultLockScreen(isSetup: isSetup),
           );
         }
         return null;

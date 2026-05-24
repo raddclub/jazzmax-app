@@ -1,0 +1,518 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../core/constants.dart';
+import '../services/vault_service.dart';
+
+class VaultScreen extends StatefulWidget {
+  final String? folderPath;
+  final String? folderName;
+  const VaultScreen({super.key, this.folderPath, this.folderName});
+  @override
+  State<VaultScreen> createState() => _VaultScreenState();
+}
+
+class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
+  List<VaultFile> _files = [];
+  bool _loading = true;
+  bool _gridView = false;
+  Set<String> _selected = {};
+  bool _selectMode = false;
+  int _totalSize = 0;
+  bool _isFake = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _isFake = VaultService.isFakeVault;
+    _load();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Auto-lock when app goes to background
+    if (state == AppLifecycleState.paused) {
+      VaultService.lock();
+    } else if (state == AppLifecycleState.resumed) {
+      if (!VaultService.isUnlocked) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.vaultLock);
+      } else {
+        VaultService.refreshUnlockTime();
+      }
+    }
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    final files = await VaultService.listFiles(
+        folder: widget.folderPath != null
+            ? widget.folderPath!.split('/').last
+            : null);
+    final size = widget.folderPath == null ? await VaultService.totalVaultSize() : 0;
+    if (mounted) setState(() { _files = files; _totalSize = size; _loading = false; });
+  }
+
+  void _toggleSelect(String path) {
+    setState(() {
+      if (_selected.contains(path)) {
+        _selected.remove(path);
+        if (_selected.isEmpty) _selectMode = false;
+      } else {
+        _selected.add(path);
+        _selectMode = true;
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    final count = _selected.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('Delete $count item${count > 1 ? 's' : ''}?',
+            style: TextStyle(color: AppColors.text)),
+        content: Text('This permanently removes the file${count > 1 ? 's' : ''} from the vault.',
+            style: TextStyle(color: AppColors.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    for (final path in _selected) {
+      await VaultService.deleteVaultFile(path);
+    }
+    HapticFeedback.mediumImpact();
+    setState(() { _selected.clear(); _selectMode = false; });
+    await _load();
+  }
+
+  Future<void> _createFolder() async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('New Folder', style: TextStyle(color: AppColors.text)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: TextStyle(color: AppColors.text),
+          decoration: InputDecoration(
+            hintText: 'Folder name',
+            hintStyle: TextStyle(color: AppColors.textSecondary),
+            filled: true, fillColor: AppColors.background,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.border)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+              child: Text('Create', style: TextStyle(color: AppColors.primary))),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    await VaultService.createFolder(name);
+    await _load();
+  }
+
+  void _openFile(VaultFile f) {
+    if (f.isFolder) {
+      Navigator.of(context).push(MaterialPageRoute(
+        builder: (_) => VaultScreen(folderPath: f.path, folderName: f.name),
+      ));
+      return;
+    }
+    if (f.isVideo) {
+      Navigator.of(context).pushNamed(AppRoutes.player, arguments: {
+        'file_id': '',
+        'title': f.name,
+        'local_path': f.path,
+      });
+    }
+  }
+
+  Future<void> _renameFile(VaultFile f) async {
+    final ctrl = TextEditingController(text: f.name);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('Rename', style: TextStyle(color: AppColors.text)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          style: TextStyle(color: AppColors.text),
+          decoration: InputDecoration(
+            filled: true, fillColor: AppColors.background,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: AppColors.border)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+              child: Text('Rename', style: TextStyle(color: AppColors.primary))),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty || name == f.name) return;
+    await VaultService.renameFile(f.path, name);
+    await _load();
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '${bytes}B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)}KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)}MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)}GB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isRoot = widget.folderPath == null;
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        leading: _selectMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() { _selected.clear(); _selectMode = false; }),
+              )
+            : (isRoot
+                ? IconButton(
+                    icon: const Icon(Icons.lock_rounded),
+                    tooltip: 'Lock vault',
+                    onPressed: () {
+                      VaultService.lock();
+                      Navigator.of(context).pushReplacementNamed(AppRoutes.vaultLock);
+                    },
+                  )
+                : null),
+        title: _selectMode
+            ? Text('${_selected.length} selected',
+                style: TextStyle(color: AppColors.text, fontSize: 16))
+            : Row(children: [
+                if (!isRoot) ...[
+                  Icon(Icons.folder_rounded, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  isRoot
+                      ? (_isFake ? '📁 Private Vault' : '🔒 Private Vault')
+                      : (widget.folderName ?? 'Folder'),
+                  style: TextStyle(color: AppColors.text, fontSize: 17, fontWeight: FontWeight.w600),
+                ),
+              ]),
+        actions: _selectMode
+            ? [
+                IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                    onPressed: _deleteSelected),
+                if (_selected.length == 1)
+                  IconButton(
+                      icon: const Icon(Icons.drive_file_rename_outline_rounded),
+                      onPressed: () {
+                        final f = _files.firstWhere((f) => f.path == _selected.first);
+                        _renameFile(f);
+                      }),
+                IconButton(
+                    icon: Icon(_selected.length == _files.length
+                        ? Icons.deselect_rounded : Icons.select_all_rounded),
+                    onPressed: () => setState(() {
+                      if (_selected.length == _files.length) {
+                        _selected.clear(); _selectMode = false;
+                      } else {
+                        _selected = _files.map((f) => f.path).toSet();
+                      }
+                    })),
+              ]
+            : [
+                IconButton(
+                    icon: Icon(_gridView ? Icons.list_rounded : Icons.grid_view_rounded),
+                    color: AppColors.textSecondary,
+                    onPressed: () => setState(() => _gridView = !_gridView)),
+                if (isRoot)
+                  IconButton(
+                      icon: const Icon(Icons.settings_outlined),
+                      color: AppColors.textSecondary,
+                      onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const VaultSettingsScreen()),
+                          ).then((_) => _load())),
+              ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                // Storage bar (root only)
+                if (isRoot && _totalSize > 0)
+                  Container(
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.storage_rounded, color: AppColors.primary, size: 18),
+                      const SizedBox(width: 10),
+                      Text('Vault size: ', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      Text(_formatSize(_totalSize),
+                          style: TextStyle(color: AppColors.text, fontSize: 13, fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      Text('${_files.length} items',
+                          style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    ]),
+                  ).animate().fadeIn(),
+
+                // File list / grid
+                Expanded(
+                  child: _files.isEmpty
+                      ? Center(
+                          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            Icon(Icons.lock_open_rounded, size: 64, color: AppColors.border),
+                            const SizedBox(height: 16),
+                            Text('Vault is empty', style: TextStyle(
+                                color: AppColors.textSecondary, fontSize: 16)),
+                            const SizedBox(height: 8),
+                            Text('Add files using the + button below',
+                                style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                          ]).animate().fadeIn(),
+                        )
+                      : _gridView
+                          ? _buildGrid()
+                          : _buildList(),
+                ),
+              ],
+            ),
+      floatingActionButton: !_selectMode
+          ? FloatingActionButton.extended(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Add'),
+              onPressed: _showAddMenu,
+            )
+          : null,
+    );
+  }
+
+  Widget _buildList() {
+    return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 80),
+      itemCount: _files.length,
+      itemBuilder: (_, i) {
+        final f = _files[i];
+        final selected = _selected.contains(f.path);
+        return _FileListTile(
+          file: f,
+          selected: selected,
+          selectMode: _selectMode,
+          onTap: () => _selectMode ? _toggleSelect(f.path) : _openFile(f),
+          onLongPress: () { HapticFeedback.mediumImpact(); _toggleSelect(f.path); },
+          onMenuTap: () => _showFileMenu(f),
+        ).animate(delay: Duration(milliseconds: i * 30)).fadeIn();
+      },
+    );
+  }
+
+  Widget _buildGrid() {
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 80),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3, childAspectRatio: 0.8,
+        crossAxisSpacing: 8, mainAxisSpacing: 8,
+      ),
+      itemCount: _files.length,
+      itemBuilder: (_, i) {
+        final f = _files[i];
+        final selected = _selected.contains(f.path);
+        return GestureDetector(
+          onTap: () => _selectMode ? _toggleSelect(f.path) : _openFile(f),
+          onLongPress: () { HapticFeedback.mediumImpact(); _toggleSelect(f.path); },
+          child: AnimatedContainer(
+            duration: AppDurations.fast,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.primary.withOpacity(0.15) : AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.border,
+                width: selected ? 2 : 1,
+              ),
+            ),
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              if (selected)
+                const Icon(Icons.check_circle_rounded, color: Color(0xFF7C5CFF), size: 40)
+              else
+                Icon(f.icon, color: f.isFolder ? AppColors.primary : AppColors.textSecondary, size: 40),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Text(f.name, maxLines: 2, overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.text, fontSize: 11, fontWeight: FontWeight.w500)),
+              ),
+              const SizedBox(height: 4),
+              Text(f.displaySize, style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+            ]),
+          ),
+        ).animate(delay: Duration(milliseconds: i * 25)).fadeIn().scale(begin: const Offset(0.9, 0.9));
+      },
+    );
+  }
+
+  void _showFileMenu(VaultFile f) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+          ListTile(leading: Icon(f.icon, color: AppColors.primary),
+              title: Text(f.name, style: TextStyle(color: AppColors.text, fontWeight: FontWeight.w600))),
+          const Divider(height: 1),
+          if (f.isVideo)
+            _SheetTile(icon: Icons.play_arrow_rounded, label: 'Play', onTap: () {
+              Navigator.pop(context); _openFile(f);
+            }),
+          _SheetTile(icon: Icons.drive_file_rename_outline_rounded, label: 'Rename', onTap: () {
+            Navigator.pop(context); _renameFile(f);
+          }),
+          _SheetTile(icon: Icons.delete_outline_rounded, label: 'Delete', color: Colors.red,
+              onTap: () async {
+                Navigator.pop(context);
+                await VaultService.deleteVaultFile(f.path);
+                await _load();
+              }),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+
+  void _showAddMenu() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 4, 20, 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Add to Vault', style: TextStyle(color: Colors.white,
+                  fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          _SheetTile(icon: Icons.create_new_folder_rounded, label: 'New Folder',
+              onTap: () { Navigator.pop(context); _createFolder(); }),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+}
+
+class _FileListTile extends StatelessWidget {
+  final VaultFile file;
+  final bool selected;
+  final bool selectMode;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+  final VoidCallback onMenuTap;
+  const _FileListTile({required this.file, required this.selected,
+    required this.selectMode, required this.onTap,
+    required this.onLongPress, required this.onMenuTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: AnimatedContainer(
+          duration: AppDurations.fast,
+          color: selected ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(children: [
+            AnimatedSwitcher(
+              duration: AppDurations.fast,
+              child: selected
+                  ? const Icon(Icons.check_circle_rounded, color: Color(0xFF7C5CFF), size: 40, key: ValueKey('check'))
+                  : Container(
+                      key: const ValueKey('icon'),
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(
+                        color: file.isFolder
+                            ? AppColors.primary.withOpacity(0.15)
+                            : AppColors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(file.icon,
+                          color: file.isFolder ? AppColors.primary : AppColors.textSecondary,
+                          size: 24),
+                    ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: AppColors.text, fontSize: 14, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 3),
+              Text(file.displaySize,
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+            ])),
+            if (!selectMode)
+              IconButton(
+                icon: Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
+                onPressed: onMenuTap,
+              ),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+  const _SheetTile({required this.icon, required this.label, required this.onTap, this.color});
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: color ?? AppColors.text),
+      title: Text(label, style: TextStyle(color: color ?? AppColors.text)),
+      onTap: onTap,
+    );
+  }
+}

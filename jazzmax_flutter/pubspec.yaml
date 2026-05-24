@@ -20,6 +20,12 @@ dependencies:
   # Secure token storage
   flutter_secure_storage: ^9.0.0
 
+  # Biometric + PIN auth for vault
+  local_auth: ^2.2.0
+
+  # SHA-256 PIN hashing for vault
+  crypto: ^3.0.3
+
   # Local SQLite
   sqflite: ^2.3.2
   path_provider: ^2.1.2

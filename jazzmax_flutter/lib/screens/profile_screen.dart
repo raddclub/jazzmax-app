@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
+import '../services/vault_service.dart';
 import '../core/security/device_id.dart';
 import '../core/theme/theme_provider.dart';
 import '../providers/auth_provider.dart';
@@ -176,6 +177,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       iconColor: AppColors.primary,
                       label: 'Upgrade Plan',
                       onTap: () => Navigator.of(context).pushNamed(AppRoutes.subscription),
+                    ),
+                    _divider(),
+                    _SectionTile(
+                      icon: Icons.lock_rounded,
+                      iconColor: const Color(0xFF7C5CFF),
+                      label: 'Private Vault',
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0x207C5CFF),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('PRIVATE', style: TextStyle(
+                            color: Color(0xFF7C5CFF), fontSize: 10, fontWeight: FontWeight.w700)),
+                      ),
+                      onTap: () async {
+                        final hasPin = await VaultService.hasPin();
+                        if (!context.mounted) return;
+                        if (hasPin) {
+                          if (VaultService.isUnlocked) {
+                            Navigator.of(context).pushNamed(AppRoutes.vault);
+                          } else {
+                            Navigator.of(context).pushNamed(AppRoutes.vaultLock);
+                          }
+                        } else {
+                          Navigator.of(context).pushNamed(AppRoutes.vaultLock,
+                              arguments: {'setup': true});
+                        }
+                      },
                     ),
                     _divider(),
                     _SectionTile(

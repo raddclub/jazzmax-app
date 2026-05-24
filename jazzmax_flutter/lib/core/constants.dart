@@ -61,6 +61,10 @@ class AppColors {
   static const Color lightTextSecondary = Color(0xFF444466);
   static const Color lightTextMuted     = Color(0xFF888899);
 
+  // Shorthand aliases used across screens
+  static const Color text      = textPrimary;
+  static const Color border    = glassBorder;
+
   // Status
   static const Color success       = Color(0xFF22C55E);
   static const Color successGlow   = Color(0x2222C55E);
@@ -200,6 +204,9 @@ class AppRoutes {
   static const String downloads    = '/downloads';
   static const String localMedia   = '/local-media';
   static const String settings     = '/settings';
+  static const String vault        = '/vault';
+  static const String vaultLock    = '/vault-lock';
+  static const String showDetail   = '/show-detail';
 }
 
 // ── Storage Keys ──────────────────────────────────────────────────────────────

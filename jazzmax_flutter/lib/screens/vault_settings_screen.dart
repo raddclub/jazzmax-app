@@ -1,0 +1,392 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:local_auth/local_auth.dart';
+import '../core/constants.dart';
+import '../services/vault_service.dart';
+
+class VaultSettingsScreen extends StatefulWidget {
+  const VaultSettingsScreen({super.key});
+  @override
+  State<VaultSettingsScreen> createState() => _VaultSettingsScreenState();
+}
+
+class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
+  bool _biometricEnabled = false;
+  bool _biometricAvailable = false;
+  bool _hasFakePin = false;
+  int _autoLockSeconds = 0;
+  bool _loading = false;
+
+  static const _lockOptions = [
+    (label: 'Never', value: 0),
+    (label: '30 seconds', value: 30),
+    (label: '1 minute', value: 60),
+    (label: '5 minutes', value: 300),
+    (label: '15 minutes', value: 900),
+    (label: '1 hour', value: 3600),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final biAvail = await VaultService.isBiometricAvailable();
+    final biEnabled = await VaultService.isBiometricEnabled();
+    final hasFake = await VaultService.hasFakePin();
+    final autoLock = await VaultService.getAutoLockSeconds();
+    if (mounted) {
+      setState(() {
+        _biometricAvailable = biAvail;
+        _biometricEnabled = biEnabled;
+        _hasFakePin = hasFake;
+        _autoLockSeconds = autoLock;
+      });
+    }
+  }
+
+  Future<void> _changePin() async {
+    final result = await _showPinDialog('Change PIN', 'Enter current PIN, then new PIN');
+    if (result == null) return;
+    setState(() => _loading = true);
+    try {
+      await VaultService.changePin(result.$1, result.$2);
+      if (mounted) _toast('PIN changed successfully');
+    } catch (e) {
+      if (mounted) _toast('Incorrect current PIN', error: true);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _setFakePin() async {
+    final pin = await _showNewPinDialog(
+        _hasFakePin ? 'Change Decoy PIN' : 'Set Decoy PIN',
+        'A fake vault opens with this PIN — shows empty vault to protect real content');
+    if (pin == null) return;
+    await VaultService.setFakePin(pin);
+    setState(() => _hasFakePin = pin.isNotEmpty);
+    if (mounted) _toast(pin.isEmpty ? 'Decoy PIN removed' : 'Decoy PIN set');
+  }
+
+  Future<void> _clearVault() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text('Clear Vault?', style: TextStyle(color: Colors.red.shade300)),
+        content: Text(
+          'This permanently deletes ALL files in your vault. This cannot be undone.',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete Everything', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await VaultService.clearVault();
+    if (mounted) _toast('Vault cleared');
+  }
+
+  void _toast(String msg, {bool error = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: error ? Colors.red : AppColors.primary,
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  // Simplified pin dialogs
+  Future<(String, String)?> _showPinDialog(String title, String hint) async {
+    final ctrl1 = TextEditingController();
+    final ctrl2 = TextEditingController();
+    return showDialog<(String, String)>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(title, style: TextStyle(color: AppColors.text)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(hint, style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+          const SizedBox(height: 16),
+          _pinField(ctrl1, 'Current PIN'),
+          const SizedBox(height: 10),
+          _pinField(ctrl2, 'New PIN'),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context, (ctrl1.text, ctrl2.text)),
+              child: Text('Change', style: TextStyle(color: AppColors.primary))),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showNewPinDialog(String title, String hint) async {
+    final ctrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Text(title, style: TextStyle(color: AppColors.text)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(hint, style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          const SizedBox(height: 16),
+          _pinField(ctrl, 'PIN (leave empty to remove)'),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context),
+              child: Text('Cancel', style: TextStyle(color: AppColors.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(context, ctrl.text),
+              child: Text('Save', style: TextStyle(color: AppColors.primary))),
+        ],
+      ),
+    );
+  }
+
+  Widget _pinField(TextEditingController ctrl, String hint) => TextField(
+    controller: ctrl,
+    obscureText: true,
+    keyboardType: TextInputType.number,
+    maxLength: 6,
+    style: TextStyle(color: AppColors.text, fontSize: 20, letterSpacing: 8),
+    decoration: InputDecoration(
+      hintText: hint,
+      hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13, letterSpacing: 0),
+      counterText: '',
+      filled: true,
+      fillColor: AppColors.background,
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppColors.border)),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        title: Text('Vault Settings', style: TextStyle(color: AppColors.text)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Security section
+          _SectionHeader(label: 'Security'),
+          _SettingCard(children: [
+            _SettingTile(
+              icon: Icons.pin_rounded,
+              title: 'Change PIN',
+              subtitle: 'Update your vault unlock PIN',
+              onTap: _changePin,
+              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+            ),
+            if (_biometricAvailable) ...[
+              const _Divider(),
+              _SettingTile(
+                icon: Icons.fingerprint_rounded,
+                title: 'Biometric Unlock',
+                subtitle: 'Use fingerprint to open vault',
+                trailing: Switch(
+                  value: _biometricEnabled,
+                  activeColor: AppColors.primary,
+                  onChanged: (v) async {
+                    await VaultService.setBiometricEnabled(v);
+                    setState(() => _biometricEnabled = v);
+                  },
+                ),
+              ),
+            ],
+            const _Divider(),
+            _SettingTile(
+              icon: Icons.timer_outlined,
+              title: 'Auto-Lock',
+              subtitle: _lockOptions
+                  .firstWhere((o) => o.value == _autoLockSeconds,
+                      orElse: () => (label: 'Custom', value: _autoLockSeconds))
+                  .label,
+              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+              onTap: () => _showAutoLockPicker(),
+            ),
+          ]).animate().fadeIn(delay: 50.ms),
+
+          const SizedBox(height: 16),
+
+          // Privacy section
+          _SectionHeader(label: 'Privacy'),
+          _SettingCard(children: [
+            _SettingTile(
+              icon: Icons.masks_rounded,
+              title: 'Decoy PIN',
+              subtitle: _hasFakePin
+                  ? 'Active — shows empty vault'
+                  : 'Set a fake PIN that opens an empty vault',
+              trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                if (_hasFakePin) Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text('ON', style: TextStyle(
+                      color: Colors.green, fontSize: 11, fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(width: 8),
+                const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+              ]),
+              onTap: _setFakePin,
+            ),
+          ]).animate().fadeIn(delay: 100.ms),
+
+          const SizedBox(height: 16),
+
+          // Danger zone
+          _SectionHeader(label: 'Danger Zone'),
+          _SettingCard(children: [
+            _SettingTile(
+              icon: Icons.delete_forever_rounded,
+              title: 'Clear Vault',
+              subtitle: 'Permanently delete all vault files',
+              titleColor: Colors.red.shade300,
+              onTap: _clearVault,
+              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+            ),
+          ]).animate().fadeIn(delay: 150.ms),
+
+          const SizedBox(height: 32),
+
+          // Info card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(Icons.shield_rounded, color: AppColors.primary, size: 20),
+              const SizedBox(width: 12),
+              Expanded(child: Text(
+                'Vault files are stored in your app\'s private directory — invisible to other apps, file managers, and the system gallery. Auto-lock secures the vault when your phone is idle.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 12, height: 1.5),
+              )),
+            ]),
+          ).animate().fadeIn(delay: 200.ms),
+        ],
+      ),
+    );
+  }
+
+  void _showAutoLockPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (_) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 10),
+              decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2))),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 4, 20, 8),
+            child: Align(alignment: Alignment.centerLeft,
+              child: Text('Auto-Lock After', style: TextStyle(
+                  color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ),
+          ..._lockOptions.map((o) => ListTile(
+            title: Text(o.label, style: TextStyle(color: AppColors.text)),
+            trailing: _autoLockSeconds == o.value
+                ? Icon(Icons.check_rounded, color: AppColors.primary)
+                : null,
+            onTap: () async {
+              await VaultService.setAutoLockSeconds(o.value);
+              setState(() => _autoLockSeconds = o.value);
+              if (mounted) Navigator.pop(context);
+            },
+          )),
+          const SizedBox(height: 8),
+        ]),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String label;
+  const _SectionHeader({required this.label});
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(left: 4, bottom: 8),
+    child: Text(label.toUpperCase(), style: TextStyle(
+        color: AppColors.textSecondary, fontSize: 11,
+        fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+  );
+}
+
+class _SettingCard extends StatelessWidget {
+  final List<Widget> children;
+  const _SettingCard({required this.children});
+  @override
+  Widget build(BuildContext context) => Container(
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Column(children: children),
+  );
+}
+
+class _SettingTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final Color? titleColor;
+  const _SettingTile({required this.icon, required this.title,
+    required this.subtitle, this.trailing, this.onTap, this.titleColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          color: AppColors.border,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: titleColor ?? AppColors.text, size: 20),
+      ),
+      title: Text(title, style: TextStyle(
+          color: titleColor ?? AppColors.text, fontSize: 14, fontWeight: FontWeight.w500)),
+      subtitle: Text(subtitle, style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+      trailing: trailing,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+    );
+  }
+}
+
+class _Divider extends StatelessWidget {
+  const _Divider();
+  @override
+  Widget build(BuildContext context) => Divider(
+    height: 1, indent: 64,
+    color: AppColors.border,
+  );
+}
