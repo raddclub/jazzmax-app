@@ -55,6 +55,7 @@ android {
                 ?: keystoreProperties['storeFile']
                 ?: 'keystore/jazzmax.keystore'
             storeFile file(ksPath)
+            storeType (System.getenv('KEYSTORE_TYPE') ?: keystoreProperties['storeType'] ?: 'PKCS12')
             storePassword System.getenv('KEYSTORE_PASSWORD') ?: keystoreProperties['storePassword'] ?: ''
             keyAlias System.getenv('KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'jazzmax'
             keyPassword System.getenv('KEY_PASSWORD') ?: keystoreProperties['keyPassword'] ?: ''
