@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -25,8 +24,7 @@ class _PayMethod {
     name:          j['name']           as String? ?? '',
     accountNumber: j['account_number'] as String?,
     instructions:  j['instructions']   as String?,
-    enabled:       (j['enabled'] as int? ?? j['enabled'] as bool? ?? 1) == 1 ||
-                   (j['enabled'] is bool && j['enabled'] as bool),
+    enabled:       j['enabled'] is bool ? j['enabled'] as bool : (j['enabled'] as int? ?? 1) == 1,
   );
 }
 

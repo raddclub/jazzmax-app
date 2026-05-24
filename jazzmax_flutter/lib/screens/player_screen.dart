@@ -12,8 +12,6 @@ import 'package:file_picker/file_picker.dart';
 import '../core/constants.dart';
 import '../core/security/keystore.dart';
 import '../core/db/local_db.dart';
-import '../models/catalog_item.dart';
-import '../providers/auth_provider.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String fileId;
