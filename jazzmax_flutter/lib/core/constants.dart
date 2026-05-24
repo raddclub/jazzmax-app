@@ -7,7 +7,7 @@ class AppConstants {
   /// Runtime-mutable: updated by RemoteConfig.fetch() on every app start.
   /// Fallback = Oracle production server (permanent IP — never changes).
   /// To switch servers, edit jazzmax_config.json in GitHub — no APK rebuild needed.
-  static String apiBaseUrl = 'http://92.4.95.252';
+  static String apiBaseUrl = 'https://eea2d3bd-981a-430e-9006-68ef14b442b6-00-3s6tqmvcu0f60.sisko.replit.dev';
 
   static const String onboardingSeenKey = 'jm_onboarding_seen';
 
@@ -16,7 +16,7 @@ class AppConstants {
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'jazzmax_catalog.db';
-  static const int catalogDbVersion = 6;
+  static const int catalogDbVersion = 7;
 
   // JazzDrive stream links are confirmed valid for 6 hours.
   // The SAME link is reused for both streaming and downloading within this window.
@@ -48,6 +48,7 @@ class AppRoutes {
   static const String subscription = '/subscription';
   static const String profile = '/profile';
   static const String downloads = '/downloads';
+  static const String localMedia = '/local-media';
 }
 
 class StorageKeys {
