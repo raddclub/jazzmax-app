@@ -82,13 +82,24 @@ class UserSubscription {
   });
 
   factory UserSubscription.fromJson(Map<String, dynamic> json) {
-    final expiresAt = json['expires_at']?.toString();
+    final expiresAtRaw = json['expires_at'];
+    final String? expiresAt = expiresAtRaw?.toString();
     bool active = json['is_active'] == true ||
         (json['is_active'] as int? ?? 0) == 1;
 
-    if (active && expiresAt != null) {
+    if (active && expiresAtRaw != null) {
       try {
-        final expiry = DateTime.parse(expiresAt);
+        // Server returns expires_at as Unix epoch seconds (int).
+        // Fall back to ISO string parse for forward compatibility.
+        DateTime expiry;
+        final asInt = expiresAtRaw is int
+            ? expiresAtRaw
+            : int.tryParse(expiresAtRaw.toString());
+        if (asInt != null) {
+          expiry = DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
+        } else {
+          expiry = DateTime.parse(expiresAtRaw.toString());
+        }
         active = expiry.isAfter(DateTime.now());
       } catch (_) {}
     }
