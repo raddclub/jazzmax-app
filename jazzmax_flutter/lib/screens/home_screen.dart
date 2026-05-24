@@ -162,7 +162,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         if (catalog.movies.isNotEmpty || catalog.shows.isNotEmpty)
           SliverToBoxAdapter(child: _HeroSpotlight(
             items: (catalog.movies.isNotEmpty ? catalog.movies : catalog.shows).take(5).toList())
-              .animate().fadeIn(duration: 500.ms)),
+              .animate().fadeIn(duration: 500.ms),
 
         // Category chips
         SliverToBoxAdapter(

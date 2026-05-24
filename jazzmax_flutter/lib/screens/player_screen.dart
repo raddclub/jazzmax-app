@@ -355,7 +355,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // No device found via discovery — open system Cast dialog
     final args = ModalRoute.of(context)?.settings.arguments as Map?;
     final url  = args?['stream_url'] as String? ?? args?['local_path'] as String? ?? '';
-    final title = args?['title'] as String? ?? _title;
+    final title = args?['title'] as String? ?? widget.title;
     final ok = await CastService.castVideo(
       url: url,
       title: title,
