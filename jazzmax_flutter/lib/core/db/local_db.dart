@@ -7,8 +7,9 @@ import '../../models/catalog_item.dart';
 /// Shared local SQLite database for:
 /// - Catalog (titles + episodes)
 /// - Watch history / resume positions
-/// - Download metadata (including AES-256 encryption flag)
-/// - Stream URL cache (JazzDrive links valid 6 hours — reuse for play AND download)
+/// - Download metadata (AES-256 encrypted flag)
+/// - Stream URL cache (JazzDrive links valid 6 hours)
+/// - Local media history (user's own files played in JazzMAX)
 class LocalDb {
   static Database? _db;
 
@@ -23,7 +24,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -93,8 +94,16 @@ class LocalDb {
         expires_at  INTEGER NOT NULL
       )
     ''');
+    await db.execute('''
+      CREATE TABLE local_media_history (
+        file_path   TEXT PRIMARY KEY,
+        file_size   INTEGER DEFAULT 0,
+        played_at   INTEGER DEFAULT 0
+      )
+    ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
     await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
+    await db.execute('CREATE INDEX idx_local_media_played ON local_media_history(played_at DESC)');
   }
 
   static Future<void> _migrate(Database db, int oldV, int newV) async {
@@ -124,8 +133,7 @@ class LocalDb {
     }
     if (oldV < 4) {
       try {
-        await db.execute(
-            'ALTER TABLE downloads ADD COLUMN is_encrypted INTEGER DEFAULT 0');
+        await db.execute('ALTER TABLE downloads ADD COLUMN is_encrypted INTEGER DEFAULT 0');
       } catch (_) {}
     }
     if (oldV < 5) {
@@ -134,7 +142,6 @@ class LocalDb {
       } catch (_) {}
     }
     if (oldV < 6) {
-      // Stream URL cache — JazzDrive links valid 6 hours, reused for play + download
       await db.execute('''
         CREATE TABLE IF NOT EXISTS stream_cache (
           file_id     TEXT PRIMARY KEY,
@@ -143,6 +150,19 @@ class LocalDb {
           expires_at  INTEGER NOT NULL
         )
       ''');
+    }
+    if (oldV < 7) {
+      // Local media history — user's own files played in JazzMAX
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS local_media_history (
+          file_path   TEXT PRIMARY KEY,
+          file_size   INTEGER DEFAULT 0,
+          played_at   INTEGER DEFAULT 0
+        )
+      ''');
+      try {
+        await db.execute('CREATE INDEX idx_local_media_played ON local_media_history(played_at DESC)');
+      } catch (_) {}
     }
   }
 
@@ -274,8 +294,7 @@ class LocalDb {
 
   static Future<void> clearPosition(String fileId) async {
     final db = await instance;
-    await db.delete('watch_positions',
-        where: 'file_id = ?', whereArgs: [fileId]);
+    await db.delete('watch_positions', where: 'file_id = ?', whereArgs: [fileId]);
   }
 
   // ── Downloads ─────────────────────────────────────────────────────────────
@@ -308,15 +327,10 @@ class LocalDb {
     );
   }
 
-  static Future<void> updateDownloadProgress(
-      String fileId, double progress) async {
+  static Future<void> updateDownloadProgress(String fileId, double progress) async {
     final db = await instance;
-    await db.update(
-      'downloads',
-      {'progress': progress},
-      where: 'file_id = ?',
-      whereArgs: [fileId],
-    );
+    await db.update('downloads', {'progress': progress},
+        where: 'file_id = ?', whereArgs: [fileId]);
   }
 
   static Future<void> updateDownloadStatus(
@@ -330,7 +344,6 @@ class LocalDb {
     );
   }
 
-  /// Called after encryption completes — updates path + marks encrypted.
   static Future<void> finalizeDownload(
       String fileId, String encryptedPath, int fileSize) async {
     final db = await instance;
@@ -350,48 +363,34 @@ class LocalDb {
 
   static Future<void> deleteDownload(String fileId) async {
     final db = await instance;
-    final rows = await db.query('downloads',
-        where: 'file_id = ?', whereArgs: [fileId]);
+    final rows = await db.query('downloads', where: 'file_id = ?', whereArgs: [fileId]);
     if (rows.isNotEmpty) {
       final path = rows.first['local_path'] as String?;
       if (path != null) {
-        try {
-          await File(path).delete();
-        } catch (_) {}
+        try { await File(path).delete(); } catch (_) {}
       }
     }
     await db.delete('downloads', where: 'file_id = ?', whereArgs: [fileId]);
   }
 
   // ── Stream URL Cache ──────────────────────────────────────────────────────
-  // JazzDrive links are valid for 6 hours (21600 seconds).
-  // Once generated, the SAME link is reused for both play AND download.
-  // This means zero extra JazzDrive requests within the 6-hour window.
 
-  static const int _streamCacheTtl = 21600; // 6 hours in seconds
+  static const int _streamCacheTtl = 21600; // 6 hours
 
-  /// Returns cached stream URL if it exists and has not expired.
-  /// Returns null if no cache or link has expired.
   static Future<String?> getCachedStreamUrl(String fileId) async {
     final db = await instance;
-    final rows = await db.query(
-      'stream_cache',
-      where: 'file_id = ?',
-      whereArgs: [fileId],
-    );
+    final rows = await db.query('stream_cache',
+        where: 'file_id = ?', whereArgs: [fileId]);
     if (rows.isEmpty) return null;
     final expiresAt = rows.first['expires_at'] as int? ?? 0;
     final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     if (nowSec >= expiresAt) {
-      // Expired — delete and return null
       await db.delete('stream_cache', where: 'file_id = ?', whereArgs: [fileId]);
       return null;
     }
     return rows.first['stream_url'] as String?;
   }
 
-  /// Cache a JazzDrive stream URL for 6 hours.
-  /// Call this immediately after fetching from server.
   static Future<void> cacheStreamUrl(String fileId, String url) async {
     final db = await instance;
     final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -407,7 +406,6 @@ class LocalDb {
     );
   }
 
-  /// Clear expired stream cache entries (housekeeping — call on startup).
   static Future<void> pruneExpiredStreamCache() async {
     final db = await instance;
     final nowSec = DateTime.now().millisecondsSinceEpoch ~/ 1000;
@@ -416,17 +414,49 @@ class LocalDb {
 
   // ── Download quota — daily count ──────────────────────────────────────────
 
-  /// Count downloads that completed today (since midnight local time).
   static Future<int> getTodayDownloadCount() async {
     final db = await instance;
     final now = DateTime.now();
-    final midnight = DateTime(now.year, now.month, now.day)
-        .millisecondsSinceEpoch;
+    final midnight = DateTime(now.year, now.month, now.day).millisecondsSinceEpoch;
     final result = await db.rawQuery(
       "SELECT COUNT(*) as c FROM downloads WHERE status='completed' AND downloaded_at >= ?",
       [midnight],
     );
     return (result.first['c'] as int?) ?? 0;
+  }
+
+  // ── Local Media History ───────────────────────────────────────────────────
+  // Tracks user's own video files they've played in JazzMAX
+
+  static Future<List<Map<String, dynamic>>> getLocalMediaHistory() async {
+    final db = await instance;
+    return db.query(
+      'local_media_history',
+      orderBy: 'played_at DESC',
+      limit: 50,
+    );
+  }
+
+  static Future<void> saveLocalMediaHistory({
+    required String path,
+    int fileSize = 0,
+  }) async {
+    final db = await instance;
+    await db.insert(
+      'local_media_history',
+      {
+        'file_path': path,
+        'file_size': fileSize,
+        'played_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deleteLocalMediaHistory(String path) async {
+    final db = await instance;
+    await db.delete('local_media_history',
+        where: 'file_path = ?', whereArgs: [path]);
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
