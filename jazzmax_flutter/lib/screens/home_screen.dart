@@ -210,6 +210,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           if (i == 2) {
             Navigator.of(context).pushNamed(AppRoutes.downloads);
           } else if (i == 3) {
+            Navigator.of(context).pushNamed(AppRoutes.localMedia);
+          } else if (i == 4) {
             Navigator.of(context).pushNamed(AppRoutes.profile);
           }
         },
