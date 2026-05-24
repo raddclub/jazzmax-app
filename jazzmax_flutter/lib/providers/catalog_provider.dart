@@ -9,6 +9,7 @@ class CatalogState {
   final CatalogStatus status;
   final List<CatalogItem> movies;
   final List<CatalogItem> shows;
+  final List<CatalogItem> recentlyWatched;
   final String? error;
   final int totalCount;
 
@@ -16,6 +17,7 @@ class CatalogState {
     this.status = CatalogStatus.idle,
     this.movies = const [],
     this.shows = const [],
+    this.recentlyWatched = const [],
     this.error,
     this.totalCount = 0,
   });
@@ -24,6 +26,7 @@ class CatalogState {
     CatalogStatus? status,
     List<CatalogItem>? movies,
     List<CatalogItem>? shows,
+    List<CatalogItem>? recentlyWatched,
     String? error,
     int? totalCount,
   }) {
@@ -31,6 +34,7 @@ class CatalogState {
       status: status ?? this.status,
       movies: movies ?? this.movies,
       shows: shows ?? this.shows,
+      recentlyWatched: recentlyWatched ?? this.recentlyWatched,
       error: error,
       totalCount: totalCount ?? this.totalCount,
     );
@@ -43,7 +47,6 @@ class CatalogState {
 class CatalogNotifier extends StateNotifier<CatalogState> {
   CatalogNotifier() : super(const CatalogState());
 
-  /// Load from local DB first (instant), then sync from server in background.
   Future<void> initialize() async {
     await _loadFromDb();
     await syncFromServer();
@@ -51,17 +54,46 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
   Future<void> _loadFromDb() async {
     try {
-      final movies = await LocalDb.getMovies();
-      final shows = await LocalDb.getShows();
-      final count = await LocalDb.getTotalCount();
+      final movies  = await LocalDb.getMovies();
+      final shows   = await LocalDb.getShows();
+      final count   = await LocalDb.getTotalCount();
+      final recent  = await _loadRecentlyWatched(movies, shows);
       state = state.copyWith(
         status: CatalogStatus.ready,
         movies: movies,
         shows: shows,
+        recentlyWatched: recent,
         totalCount: count,
       );
     } catch (e) {
       state = state.copyWith(error: e.toString());
+    }
+  }
+
+  Future<List<CatalogItem>> _loadRecentlyWatched(
+      List<CatalogItem> movies, List<CatalogItem> shows) async {
+    try {
+      final positions = await LocalDb.getWatchPositions();
+      if (positions.isEmpty) return [];
+      final all = [...movies, ...shows];
+      final result = <CatalogItem>[];
+      for (final pos in positions) {
+        final fileId   = pos['file_id'] as String? ?? '';
+        final posMs    = pos['position_ms'] as int? ?? 0;
+        final durMs    = pos['duration_ms'] as int? ?? 0;
+        if (posMs < 3000) continue; // Skip if barely watched
+        final progress = durMs > 0 ? posMs / durMs : 0.0;
+        if (progress > 0.95) continue; // Skip if essentially finished
+        // Find the CatalogItem that has this fileId
+        final match = all.where((i) => i.fileId == fileId).firstOrNull;
+        if (match != null) {
+          result.add(match.copyWith(watchProgress: progress));
+        }
+        if (result.length >= 10) break;
+      }
+      return result;
+    } catch (_) {
+      return [];
     }
   }
 
@@ -71,7 +103,6 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     if (result.success) {
       await _loadFromDb();
     } else {
-      // Sync failed but we still have local data — show it
       state = state.copyWith(
         status: CatalogStatus.ready,
         error: result.itemsSynced == 0 ? result.message : null,

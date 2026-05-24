@@ -310,6 +310,23 @@ class LocalDb {
     await db.delete('downloads', where: 'file_id = ?', whereArgs: [fileId]);
   }
 
+
+  /// Returns all watch positions ordered by most-recently-updated first.
+  /// Used for building the 'Continue Watching' row on the home screen.
+  static Future<List<Map<String, dynamic>>> getWatchPositions() async {
+    final db = await instance;
+    return db.query('watch_positions',
+        orderBy: 'updated_at DESC', limit: 20);
+  }
+
+  /// Alias that matches the savePosition signature but with named params for clarity.
+  static Future<void> saveWatchPosition({
+    required String fileId,
+    required int positionMs,
+    required int durationMs,
+  }) async {
+    await savePosition(fileId, positionMs, durationMs: durationMs);
+  }
   // ── Helpers ───────────────────────────────────────────────────────────────
 
   static CatalogItem _rowToItem(Map<String, dynamic> row) {

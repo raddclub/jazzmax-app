@@ -1,270 +1,584 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import '../core/constants.dart';
-import '../core/download/download_service.dart';
 import '../providers/downloads_provider.dart';
+
+enum _SortMode { name, size, date }
+enum _FilterMode { all, completed, downloading, failed }
+enum _ViewMode { grid, list }
 
 class DownloadsScreen extends ConsumerStatefulWidget {
   const DownloadsScreen({super.key});
-
   @override
   ConsumerState<DownloadsScreen> createState() => _DownloadsScreenState();
 }
 
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
+  _SortMode   _sort   = _SortMode.date;
+  _FilterMode _filter = _FilterMode.all;
+  _ViewMode   _view   = _ViewMode.grid;
+  bool _selecting     = false;
+  final Set<String> _selected = {};
+  String? _activeFolder;
+
+  static const _folders = ['Movies', 'TV Shows', 'Dramas', 'Other'];
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(downloadsProvider.notifier).loadDownloads();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) =>
+        ref.read(downloadsProvider.notifier).loadDownloads());
+  }
+
+  // ── Helpers on raw Map ────────────────────────────────────────────────────
+  String _id(Map m)       => m['file_id']    as String? ?? '';
+  String _title(Map m)    => m['title_text'] as String? ?? 'Unknown';
+  String _path(Map m)     => m['local_path'] as String? ?? '';
+  String _status(Map m)   => m['status']     as String? ?? 'pending';
+  double _progress(Map m) => (m['progress']  as num?)?.toDouble() ?? 0.0;
+  int    _size(Map m)     => m['file_size']  as int? ?? 0;
+  int    _date(Map m)     => m['downloaded_at'] as int? ?? 0;
+
+  bool _isComplete(Map m)    => _status(m) == 'complete';
+  bool _isDownloading(Map m) => _status(m) == 'downloading' || _status(m) == 'pending';
+  bool _isFailed(Map m)      => _status(m) == 'failed';
+
+  String _fmtSize(int bytes) {
+    if (bytes == 0) return '—';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(0)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+  }
+
+  String _folderFor(Map m) {
+    final title = _title(m).toLowerCase();
+    if (title.contains('drama') || title.contains('episode')) return 'Dramas';
+    if (title.contains('season') || title.contains('s0') || title.contains('ep ')) return 'TV Shows';
+    return 'Movies';
+  }
+
+  List<Map<String, dynamic>> _applyFilter(List<Map<String, dynamic>> items) {
+    switch (_filter) {
+      case _FilterMode.completed:   return items.where((m) => _isComplete(m)).toList();
+      case _FilterMode.downloading: return items.where((m) => _isDownloading(m)).toList();
+      case _FilterMode.failed:      return items.where((m) => _isFailed(m)).toList();
+      default: return items;
+    }
+  }
+
+  List<Map<String, dynamic>> _applySort(List<Map<String, dynamic>> items) {
+    final copy = [...items];
+    switch (_sort) {
+      case _SortMode.name: copy.sort((a, b) => _title(a).compareTo(_title(b)));
+      case _SortMode.size: copy.sort((a, b) => _size(b).compareTo(_size(a)));
+      case _SortMode.date: copy.sort((a, b) => _date(b).compareTo(_date(a)));
+    }
+    return copy;
   }
 
   @override
   Widget build(BuildContext context) {
-    final dl = ref.watch(downloadsProvider);
-
+    final state = ref.watch(downloadsProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: const Text('Downloads'),
-        backgroundColor: AppColors.background,
+      appBar: _buildAppBar(state),
+      body: Column(children: [
+        _buildStorageBar(state),
+        _buildFilterRow(),
+        const Divider(height: 1),
+        Expanded(child: state.loading
+            ? _buildLoadingShimmer()
+            : state.downloads.isEmpty
+                ? _buildEmpty()
+                : _activeFolder == null
+                    ? _buildFolderView(state)
+                    : _buildItemsView(state)),
+      ]),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(DownloadsState state) {
+    return AppBar(
+      backgroundColor: AppColors.surface,
+      elevation: 0,
+      title: _selecting
+          ? Text('${_selected.length} selected',
+              style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700))
+          : Text(_activeFolder ?? 'Downloads',
+              style: const TextStyle(fontWeight: FontWeight.w800)),
+      leading: IconButton(
+        icon: Icon(_activeFolder != null || _selecting
+            ? Icons.arrow_back_ios_new_rounded : Icons.close_rounded, size: 20),
+        onPressed: () {
+          if (_selecting) {
+            setState(() { _selecting = false; _selected.clear(); });
+          } else if (_activeFolder != null) {
+            setState(() => _activeFolder = null);
+          } else {
+            Navigator.of(context).pop();
+          }
+        },
       ),
-      body: dl.loading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.primary),
-              ),
-            )
-          : dl.downloads.isEmpty
-              ? _buildEmpty()
-              : _buildList(dl),
+      actions: [
+        if (_selecting) ...[
+          TextButton(
+            onPressed: () => setState(() => _selected.addAll(state.downloads.map((d) => _id(d)))),
+            child: const Text('All'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+            onPressed: _selected.isEmpty ? null : () => _bulkDelete(),
+          ),
+        ] else ...[
+          IconButton(
+            icon: Icon(_view == _ViewMode.grid ? Icons.view_list_rounded : Icons.grid_view_rounded),
+            onPressed: () => setState(() => _view = _view == _ViewMode.grid ? _ViewMode.list : _ViewMode.grid),
+            tooltip: 'Toggle view',
+          ),
+          PopupMenuButton<_SortMode>(
+            icon: const Icon(Icons.sort_rounded),
+            tooltip: 'Sort',
+            onSelected: (s) => setState(() => _sort = s),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: _SortMode.date, child: Text('By Date')),
+              const PopupMenuItem(value: _SortMode.name, child: Text('By Name')),
+              const PopupMenuItem(value: _SortMode.size, child: Text('By Size')),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStorageBar(DownloadsState state) {
+    final totalBytes = state.downloads.fold<int>(0, (sum, d) => sum + _size(d));
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: const BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.divider, width: 0.5))),
+      child: Row(children: [
+        const Icon(Icons.storage_rounded, size: 16, color: AppColors.textMuted),
+        const SizedBox(width: 6),
+        Text(_fmtSize(totalBytes) + ' downloaded',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+        const Spacer(),
+        Text('${state.downloads.length} file${state.downloads.length == 1 ? '' : 's'}',
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+      ]),
+    );
+  }
+
+  Widget _buildFilterRow() {
+    return SizedBox(
+      height: 44,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        children: _FilterMode.values.map((f) {
+          final selected = _filter == f;
+          final labels = {_FilterMode.all:'All', _FilterMode.completed:'Done',
+              _FilterMode.downloading:'Downloading', _FilterMode.failed:'Failed'};
+          return GestureDetector(
+            onTap: () => setState(() => _filter = f),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primary : AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.round),
+                border: Border.all(color: selected ? AppColors.primary : AppColors.glassBorder)),
+              child: Text(labels[f]!, style: TextStyle(
+                  color: selected ? Colors.white : AppColors.textMuted,
+                  fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildLoadingShimmer() {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, childAspectRatio: 0.72, crossAxisSpacing: 12, mainAxisSpacing: 12),
+      itemCount: 6,
+      itemBuilder: (_, __) => Shimmer.fromColors(
+        baseColor: AppColors.surface, highlightColor: AppColors.surfaceHigh,
+        child: Container(decoration: BoxDecoration(color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.sm)))),
     );
   }
 
   Widget _buildEmpty() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.download_outlined,
-              color: AppColors.textMuted, size: 64),
-          const SizedBox(height: 16),
-          const Text(
-            'No downloads yet',
-            style: TextStyle(
-                color: AppColors.textPrimary, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Download movies to watch without streaming',
-            style:
-                TextStyle(color: AppColors.textMuted, fontSize: 13),
-          ),
-        ],
-      ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.download_for_offline_outlined, color: AppColors.textMuted, size: 72),
+        const SizedBox(height: 20),
+        const Text('No Downloads Yet', style: TextStyle(
+            color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        const Text('Videos you download will appear here.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        const SizedBox(height: 24),
+        ElevatedButton(
+          onPressed: () => Navigator.of(context).pushReplacementNamed(AppRoutes.home),
+          child: const Text('Browse Content'),
+        ),
+      ]).animate().fadeIn(duration: 400.ms),
     );
   }
 
-  Widget _buildList(DownloadsState dl) {
-    return RefreshIndicator(
-      color: AppColors.primary,
-      onRefresh: () =>
-          ref.read(downloadsProvider.notifier).loadDownloads(),
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: dl.downloads.length,
-        itemBuilder: (_, i) {
-          final item = dl.downloads[i];
-          return _DownloadTile(
-            item: item,
-            activeProgress: dl.isDownloading(item['file_id'] as String)
-                ? dl.progressOf(item['file_id'] as String)
-                : null,
-            onDelete: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (_) => AlertDialog(
-                  backgroundColor: AppColors.surface,
-                  title: const Text('Delete Download?',
-                      style:
-                          TextStyle(color: AppColors.textPrimary)),
-                  content: Text(
-                    'Delete "${item['title_text']}"?',
-                    style:
-                        const TextStyle(color: AppColors.textMuted),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      child: const Text('Cancel',
-                          style: TextStyle(
-                              color: AppColors.textMuted)),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, true),
-                      child: const Text('Delete',
-                          style:
-                              TextStyle(color: AppColors.error)),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true && mounted) {
-                await ref.read(downloadsProvider.notifier).deleteDownload(
-                    item['file_id'] as String);
-              }
-            },
-            onPlay: () {
-              // Play from local file
-              final localPath = item['local_path'] as String?;
-              if (localPath != null && item['status'] == 'completed') {
-                Navigator.of(context).pushNamed(
-                  AppRoutes.player,
-                  arguments: {
-                    'file_id': item['file_id'] as String,
-                    'title': item['title_text'] as String? ?? '',
-                    'local_path': localPath,
-                  },
-                );
-              }
-            },
-          );
-        },
+  Widget _buildFolderView(DownloadsState state) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, childAspectRatio: 1.55, crossAxisSpacing: 12, mainAxisSpacing: 12),
+      itemCount: _folders.length,
+      itemBuilder: (_, i) {
+        final folder = _folders[i];
+        final count = state.downloads.where((d) => _folderFor(d) == folder).length;
+        return GestureDetector(
+          onTap: count > 0 ? () => setState(() => _activeFolder = folder) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            decoration: BoxDecoration(
+              color: count > 0 ? AppColors.surface : AppColors.surface.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: AppColors.glassBorder)),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Icon(_folderIcon(folder), color: AppColors.primary, size: 28),
+                  const Spacer(),
+                  if (count > 0) Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(AppRadius.round)),
+                    child: Text('$count', style: const TextStyle(
+                        color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700))),
+                ]),
+                const Spacer(),
+                Text(folder, style: TextStyle(
+                    color: count > 0 ? AppColors.textPrimary : AppColors.textMuted,
+                    fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(count == 0 ? 'Empty' : '$count video${count == 1 ? '' : 's'}',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              ]),
+            ),
+          ),
+        ).animate(delay: (i * 60).ms).fadeIn(duration: 300.ms)
+            .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1),
+                duration: 300.ms, curve: AppCurves.enter);
+      },
+    );
+  }
+
+  Widget _buildItemsView(DownloadsState state) {
+    var items = state.downloads.where((d) => _folderFor(d) == _activeFolder!).toList();
+    items = _applyFilter(items);
+    items = _applySort(items);
+
+    if (items.isEmpty) {
+      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        const Icon(Icons.filter_list_off_rounded, color: AppColors.textMuted, size: 48),
+        const SizedBox(height: 12),
+        Text('No ${_filter.name} downloads in $_activeFolder',
+            style: const TextStyle(color: AppColors.textMuted)),
+      ]));
+    }
+
+    return _view == _ViewMode.grid ? _gridView(items, state) : _listView(items, state);
+  }
+
+  Widget _gridView(List<Map<String, dynamic>> items, DownloadsState state) {
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2, childAspectRatio: 0.72, crossAxisSpacing: 12, mainAxisSpacing: 12),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final d = items[i];
+        final id = _id(d);
+        final liveProgress = state.activeProgress[id];
+        final isActive = liveProgress != null;
+        return _DownloadCard(
+          title: _title(d),
+          sizeStr: _fmtSize(_size(d)),
+          statusStr: _status(d),
+          progress: liveProgress ?? _progress(d),
+          isActive: isActive,
+          isComplete: _isComplete(d),
+          isSelected: _selected.contains(id),
+          isSelecting: _selecting,
+          onTap: () {
+            if (_selecting) {
+              setState(() { _selected.contains(id) ? _selected.remove(id) : _selected.add(id); });
+            } else if (_isComplete(d)) {
+              Navigator.of(context).pushNamed(AppRoutes.player, arguments: {
+                'file_id': id, 'title': _title(d), 'local_path': _path(d)});
+            }
+          },
+          onLongPress: () => setState(() { _selecting = true; _selected.add(id); }),
+          onDelete: () => _deleteOne(id, _title(d)),
+        ).animate(delay: (i * 30).ms).fadeIn(duration: 250.ms);
+      },
+    );
+  }
+
+  Widget _listView(List<Map<String, dynamic>> items, DownloadsState state) {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      itemCount: items.length,
+      itemBuilder: (_, i) {
+        final d = items[i];
+        final id = _id(d);
+        final liveProgress = state.activeProgress[id];
+        final isActive = liveProgress != null;
+        return _DownloadListTile(
+          title: _title(d),
+          sizeStr: _fmtSize(_size(d)),
+          statusStr: _status(d),
+          progress: liveProgress ?? _progress(d),
+          isActive: isActive,
+          isComplete: _isComplete(d),
+          isSelected: _selected.contains(id),
+          isSelecting: _selecting,
+          onTap: () {
+            if (_selecting) {
+              setState(() { _selected.contains(id) ? _selected.remove(id) : _selected.add(id); });
+            } else if (_isComplete(d)) {
+              Navigator.of(context).pushNamed(AppRoutes.player, arguments: {
+                'file_id': id, 'title': _title(d), 'local_path': _path(d)});
+            }
+          },
+          onLongPress: () => setState(() { _selecting = true; _selected.add(id); }),
+          onDelete: () => _deleteOne(id, _title(d)),
+        ).animate(delay: (i * 30).ms).fadeIn(duration: 250.ms)
+            .slideX(begin: 0.1, end: 0, duration: 250.ms, curve: AppCurves.standard);
+      },
+    );
+  }
+
+  Future<void> _deleteOne(String id, String title) async {
+    final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+      title: const Text('Delete Download'),
+      content: Text('Delete "$title"?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error))),
+      ],
+    ));
+    if (ok == true) ref.read(downloadsProvider.notifier).deleteDownload(id);
+  }
+
+  Future<void> _bulkDelete() async {
+    final count = _selected.length;
+    final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+      title: const Text('Delete Selected'),
+      content: Text('Delete $count download${count == 1 ? '' : 's'}?'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+        TextButton(onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error))),
+      ],
+    ));
+    if (ok == true) {
+      for (final id in _selected) ref.read(downloadsProvider.notifier).deleteDownload(id);
+      setState(() { _selecting = false; _selected.clear(); });
+    }
+  }
+
+  IconData _folderIcon(String name) {
+    switch (name) {
+      case 'Movies':   return Icons.movie_outlined;
+      case 'TV Shows': return Icons.tv_outlined;
+      case 'Dramas':   return Icons.live_tv_outlined;
+      default:         return Icons.folder_outlined;
+    }
+  }
+}
+
+// ── Download Card (Grid) ──────────────────────────────────────────────────────
+class _DownloadCard extends StatelessWidget {
+  final String title, sizeStr, statusStr;
+  final double progress;
+  final bool isActive, isComplete, isSelected, isSelecting;
+  final VoidCallback onTap, onLongPress, onDelete;
+  const _DownloadCard({required this.title, required this.sizeStr,
+      required this.statusStr, required this.progress, required this.isActive,
+      required this.isComplete, required this.isSelected, required this.isSelecting,
+      required this.onTap, required this.onLongPress, required this.onDelete});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap, onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.glassBorder,
+              width: isSelected ? 1.5 : 0.5)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          // Thumbnail area
+          Expanded(child: Stack(fit: StackFit.expand, children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.sm - 1)),
+              child: Container(color: AppColors.card,
+                  child: const Center(child: Icon(Icons.movie_outlined,
+                      color: AppColors.textMuted, size: 36)))),
+            // Play overlay
+            if (isComplete && !isSelecting)
+              Center(child: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black54,
+                    border: Border.all(color: Colors.white30)),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24))),
+            // Download progress bar
+            if (isActive || (!isComplete && statusStr != 'failed'))
+              Positioned(bottom: 0, left: 0, right: 0,
+                child: LinearProgressIndicator(value: progress,
+                    backgroundColor: Colors.black38,
+                    valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    minHeight: 3)),
+            // Selection checkbox
+            if (isSelecting)
+              Positioned(top: 6, right: 6, child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                width: 22, height: 22,
+                decoration: BoxDecoration(shape: BoxShape.circle,
+                    color: isSelected ? AppColors.primary : Colors.black38,
+                    border: Border.all(color: isSelected ? AppColors.primary : Colors.white38, width: 1.5)),
+                child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 14) : null)),
+            // Failed badge
+            if (statusStr == 'failed')
+              Positioned(top: 6, left: 6, child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(color: AppColors.error,
+                    borderRadius: BorderRadius.circular(3)),
+                child: const Text('FAILED', style: TextStyle(
+                    color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)))),
+          ])),
+          // Info
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 11,
+                      fontWeight: FontWeight.w600, height: 1.3)),
+              const SizedBox(height: 4),
+              Row(children: [
+                Text(sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 10)),
+                const Spacer(),
+                if (!isSelecting)
+                  GestureDetector(onTap: onDelete,
+                      child: const Icon(Icons.delete_outline_rounded,
+                          size: 16, color: AppColors.textMuted)),
+              ]),
+              if (isActive) ...[
+                const SizedBox(height: 4),
+                Text('${(progress * 100).toStringAsFixed(0)}%',
+                    style: const TextStyle(color: AppColors.primary,
+                        fontSize: 10, fontWeight: FontWeight.w700)),
+              ],
+            ]),
+          ),
+        ]),
       ),
     );
   }
 }
 
-class _DownloadTile extends StatelessWidget {
-  final Map<String, dynamic> item;
-  final double? activeProgress;
-  final VoidCallback onDelete;
-  final VoidCallback onPlay;
-
-  const _DownloadTile({
-    required this.item,
-    this.activeProgress,
-    required this.onDelete,
-    required this.onPlay,
-  });
+// ── Download List Tile ────────────────────────────────────────────────────────
+class _DownloadListTile extends StatelessWidget {
+  final String title, sizeStr, statusStr;
+  final double progress;
+  final bool isActive, isComplete, isSelected, isSelecting;
+  final VoidCallback onTap, onLongPress, onDelete;
+  const _DownloadListTile({required this.title, required this.sizeStr,
+      required this.statusStr, required this.progress, required this.isActive,
+      required this.isComplete, required this.isSelected, required this.isSelecting,
+      required this.onTap, required this.onLongPress, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
-    final title = item['title_text'] as String? ?? 'Unknown';
-    final poster = item['poster_url'] as String?;
-    final status = item['status'] as String? ?? 'unknown';
-    final progress = activeProgress ?? (item['progress'] as num? ?? 0).toDouble();
-    final fileSize = item['file_size'] as int? ?? 0;
-    final isComplete = status == 'completed';
-    final isFailed = status == 'failed';
-    final isDownloading = status == 'downloading' || activeProgress != null;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          // Poster
-          ClipRRect(
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(12),
-              bottomLeft: Radius.circular(12),
-            ),
-            child: SizedBox(
-              width: 72,
-              height: 90,
-              child: poster != null && poster.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: poster,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) =>
-                          _posterFallback(),
-                    )
-                  : _posterFallback(),
-            ),
-          ),
-
-          // Info
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4),
-                  if (isComplete)
-                    Text(
-                      DownloadService.formatFileSize(fileSize),
-                      style: const TextStyle(
-                          color: AppColors.textMuted, fontSize: 12),
-                    ),
-                  if (isFailed)
-                    const Text('Download failed',
-                        style: TextStyle(
-                            color: AppColors.error, fontSize: 12)),
-                  if (isDownloading) ...[
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(
-                      value: progress,
-                      backgroundColor: AppColors.divider,
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                          AppColors.primary),
-                      minHeight: 3,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${(progress * 100).round()}%',
-                      style: const TextStyle(
-                          color: AppColors.textMuted, fontSize: 11),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-
-          // Actions
-          Column(
-            children: [
-              if (isComplete)
-                IconButton(
-                  icon: const Icon(Icons.play_circle_filled_rounded,
-                      color: AppColors.primary, size: 28),
-                  onPressed: onPlay,
-                ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded,
-                    color: AppColors.textMuted, size: 22),
-                onPressed: isDownloading ? null : onDelete,
-              ),
+    return GestureDetector(
+      onTap: onTap, onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.08) : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.glassBorder,
+              width: isSelected ? 1.5 : 0.5)),
+        child: Row(children: [
+          // Thumbnail
+          Container(width: 64, height: 48,
+            decoration: BoxDecoration(color: AppColors.card,
+                borderRadius: BorderRadius.circular(AppRadius.xs)),
+            child: Stack(fit: StackFit.expand, children: [
+              const Center(child: Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 24)),
+              if (isComplete && !isSelecting)
+                Center(child: Container(width: 24, height: 24,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black54),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 16))),
+              if (isSelecting)
+                Positioned(top: 4, right: 4, child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 16, height: 16,
+                  decoration: BoxDecoration(shape: BoxShape.circle,
+                      color: isSelected ? AppColors.primary : Colors.black38,
+                      border: Border.all(color: Colors.white38)),
+                  child: isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 10) : null)),
+            ])),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 13,
+                    fontWeight: FontWeight.w600, height: 1.3)),
+            const SizedBox(height: 4),
+            Row(children: [
+              Text(sizeStr, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              if (statusStr == 'failed') ...[
+                const SizedBox(width: 8),
+                Container(padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(color: AppColors.error.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(3)),
+                    child: const Text('FAILED', style: TextStyle(
+                        color: AppColors.error, fontSize: 9, fontWeight: FontWeight.w700))),
+              ],
+            ]),
+            if (isActive) ...[
+              const SizedBox(height: 6),
+              LinearProgressIndicator(value: progress,
+                  backgroundColor: AppColors.card,
+                  valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
+                  minHeight: 2),
+              const SizedBox(height: 3),
+              Text('${(progress * 100).toStringAsFixed(0)}%',
+                  style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
             ],
-          ),
-        ],
+          ])),
+          if (!isSelecting)
+            IconButton(icon: const Icon(Icons.delete_outline_rounded,
+                size: 18, color: AppColors.textMuted), onPressed: onDelete),
+        ]),
       ),
-    );
-  }
-
-  Widget _posterFallback() {
-    return Container(
-      color: AppColors.card,
-      child: const Icon(Icons.movie_outlined,
-          color: AppColors.textMuted, size: 28),
     );
   }
 }

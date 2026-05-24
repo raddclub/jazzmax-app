@@ -1,11 +1,34 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../core/constants.dart';
+import '../core/api/api_client.dart';
+import '../models/subscription.dart';
 import '../providers/subscription_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
 import '../widgets/jazz_text_field.dart';
+
+// ── Payment method model (fetched from billing API) ──────────────────────────
+class _PayMethod {
+  final String key, name;
+  final String? accountNumber, instructions;
+  final bool enabled;
+  const _PayMethod({required this.key, required this.name,
+      this.accountNumber, this.instructions, this.enabled = true});
+
+  factory _PayMethod.fromJson(Map<String, dynamic> j) => _PayMethod(
+    key:           j['key']            as String? ?? j['id'] as String? ?? '',
+    name:          j['name']           as String? ?? '',
+    accountNumber: j['account_number'] as String?,
+    instructions:  j['instructions']   as String?,
+    enabled:       (j['enabled'] as int? ?? j['enabled'] as bool? ?? 1) == 1 ||
+                   (j['enabled'] is bool && j['enabled'] as bool),
+  );
+}
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
@@ -14,17 +37,51 @@ class SubscriptionScreen extends ConsumerStatefulWidget {
 }
 
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
-  final _tidCtrl = TextEditingController();
-  bool _submitting = false;
+  final _tidCtrl      = TextEditingController();
+  bool _submitting    = false;
   String? _tidError;
   String? _tidSuccess;
+  String? _selectedPlanId;
+  String? _selectedMethod;
+  List<_PayMethod> _methods   = [];
+  bool _methodsLoading        = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(subscriptionProvider.notifier).load();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      ref.read(subscriptionProvider.notifier).loadPlans();
+      ref.read(subscriptionProvider.notifier).loadStatus();
+      _fetchMethods();
     });
+  }
+
+  Future<void> _fetchMethods() async {
+    try {
+      final res = await ApiClient.instance.get(ApiPaths.publicMethods);
+      final data = res.data;
+      List<dynamic> raw = [];
+      if (data is Map && data['methods'] != null) raw = data['methods'] as List;
+      else if (data is List) raw = data;
+      setState(() {
+        _methods = raw
+            .cast<Map<String, dynamic>>()
+            .map((j) => _PayMethod.fromJson(j))
+            .where((m) => m.enabled && m.name.isNotEmpty)
+            .toList();
+        _methodsLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _methods = [
+          const _PayMethod(key: 'jazzcash', name: 'JazzCash',
+              accountNumber: '03xxxxxxxxx', instructions: 'Send to this JazzCash number, then enter your transaction ID below.'),
+          const _PayMethod(key: 'easypaisa', name: 'EasyPaisa',
+              accountNumber: '03xxxxxxxxx', instructions: 'Send to this EasyPaisa account, then enter your transaction ID below.'),
+        ];
+        _methodsLoading = false;
+      });
+    }
   }
 
   @override
@@ -32,19 +89,25 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
 
   Future<void> _submitTid() async {
     final tid = _tidCtrl.text.trim();
-    if (tid.length < 6) {
-      setState(() => _tidError = 'Enter a valid Transaction ID');
-      return;
-    }
+    if (tid.length < 6) { setState(() => _tidError = 'Enter a valid Transaction ID'); return; }
+    if (_selectedPlanId == null) { setState(() => _tidError = 'Select a plan first'); return; }
     setState(() { _submitting = true; _tidError = null; _tidSuccess = null; });
     try {
-      final msg = await ref.read(subscriptionProvider.notifier).submitTid(tid);
-      setState(() { _tidSuccess = msg; _submitting = false; _tidCtrl.clear(); });
+      final user = ref.read(authProvider).user;
+      final success = await ref.read(subscriptionProvider.notifier).submitTid(
+        phone: user?.phone ?? '',
+        tid: tid,
+        plan: _selectedPlanId!,
+        paymentMethod: _selectedMethod ?? 'jazzcash',
+      );
+      if (success) {
+        setState(() { _tidSuccess = 'Transaction submitted! Admin will verify and activate your plan shortly.'; _submitting = false; _tidCtrl.clear(); });
+      } else {
+        final err = ref.read(subscriptionProvider).error ?? 'Submission failed.';
+        setState(() { _tidError = err.replaceFirst('Exception: ', ''); _submitting = false; });
+      }
     } catch (e) {
-      setState(() {
-        _tidError = e.toString().replaceFirst('Exception: ', '');
-        _submitting = false;
-      });
+      setState(() { _tidError = e.toString().replaceFirst('Exception: ', ''); _submitting = false; });
     }
   }
 
@@ -59,8 +122,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           title: const Text('Subscription', style: TextStyle(fontWeight: FontWeight.w800)),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+            onPressed: () => Navigator.of(context).pop()),
         ),
         body: state.loading
             ? const Center(child: CircularProgressIndicator(
@@ -75,56 +137,62 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
       padding: const EdgeInsets.all(16),
       physics: const BouncingScrollPhysics(),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        // Active subscription status
-        if (state.activeSubscription != null) _buildActiveCard(state.activeSubscription!),
+        // Active status
+        if (state.status != null && state.status!.isActive)
+          _buildActiveCard(state.status!)
+              .animate().fadeIn(duration: 400.ms).slideY(begin: -0.2, end: 0, duration: 400.ms),
 
-        // Plans
-        const Text('Choose a Plan', style: TextStyle(
-            color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3))
+        // Plans header
+        const Text('Choose a Plan', style: TextStyle(color: AppColors.textPrimary,
+            fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3))
             .animate().fadeIn(duration: 400.ms),
         const SizedBox(height: 6),
-        const Text('Zero-rated streaming on Jazz network · Premium quality · All content',
+        const Text('Zero-rated on Jazz · HD quality · All content',
             style: TextStyle(color: AppColors.textMuted, fontSize: 13))
             .animate(delay: 80.ms).fadeIn(duration: 300.ms),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
+        // Plan cards
         if (state.plans.isEmpty)
-          _buildPlansShimmer()
+          ..._shimmerPlans()
         else
           ...state.plans.asMap().entries.map((e) => _PlanCard(
             plan: e.value,
             isPopular: e.key == 1,
-            isSelected: state.selectedPlanId == e.value.id,
-            onSelect: () => ref.read(subscriptionProvider.notifier).selectPlan(e.value.id),
+            isSelected: _selectedPlanId == e.value.id,
+            onSelect: () => setState(() => _selectedPlanId = e.value.id),
           ).animate(delay: (e.key * 80).ms).fadeIn(duration: 350.ms)
-              .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard)),
+              .slideY(begin: 0.15, end: 0, duration: 350.ms, curve: AppCurves.standard)),
 
-        const SizedBox(height: 24),
-
-        // Payment methods
-        if (state.selectedPlanId != null) ...[
-          const Text('Pay With', style: TextStyle(
-              color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3))
+        if (_selectedPlanId != null) ...[
+          const SizedBox(height: 24),
+          const Text('Pay With', style: TextStyle(color: AppColors.textPrimary,
+              fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3))
               .animate().fadeIn(duration: 300.ms),
-          const SizedBox(height: 14),
-          ...state.methods.where((m) => m.enabled).map((m) =>
-              _PaymentMethodCard(method: m)
-                  .animate().fadeIn(duration: 300.ms)
-                  .slideY(begin: 0.15, end: 0, duration: 300.ms, curve: AppCurves.standard)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
+          if (_methodsLoading)
+            ...List.generate(2, (_) => Container(
+              height: 80, margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.md))))
+          else
+            ..._methods.map((m) => _PayMethodCard(
+              method: m,
+              isSelected: _selectedMethod == m.key,
+              onSelect: () => setState(() => _selectedMethod = m.key),
+            ).animate().fadeIn(duration: 300.ms)),
 
-          // TID submission
-          const Text('Enter Transaction ID', style: TextStyle(
-              color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 20),
+          const Text('Transaction ID', style: TextStyle(color: AppColors.textPrimary,
+              fontSize: 16, fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
-          const Text('After sending payment, paste the Transaction ID here for verification.',
+          const Text('After sending payment, enter the Transaction ID here for verification.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5)),
           const SizedBox(height: 14),
           JazzTextField(
             controller: _tidCtrl,
             label: 'Transaction ID',
-            hint: 'e.g. JAZ123456789',
-            keyboardType: TextInputType.text,
+            hint: 'e.g. T123456789',
             prefixIcon: Icons.receipt_long_outlined,
           ).animate().fadeIn(duration: 300.ms),
           if (_tidError != null) ...[
@@ -142,67 +210,72 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
               child: Row(children: [
                 const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 16),
                 const SizedBox(width: 8),
-                Expanded(child: Text(_tidSuccess!, style: const TextStyle(
-                    color: AppColors.success, fontSize: 12))),
+                Expanded(child: Text(_tidSuccess!,
+                    style: const TextStyle(color: AppColors.success, fontSize: 12))),
               ]),
             ).animate().fadeIn(duration: 300.ms),
           ],
-          const SizedBox(height: 14),
-          Container(
-            height: 52,
+          const SizedBox(height: 16),
+          Container(height: 52,
             decoration: BoxDecoration(gradient: AppColors.primaryGradient,
-                borderRadius: BorderRadius.circular(AppRadius.md), boxShadow: AppShadows.primary),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                boxShadow: AppShadows.primary),
             child: Material(color: Colors.transparent,
               child: InkWell(borderRadius: BorderRadius.circular(AppRadius.md),
                 onTap: _submitting ? null : _submitTid,
                 child: const Center(child: Text('Submit Transaction',
-                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))))),
-          ).animate().fadeIn(duration: 300.ms),
+                    style: TextStyle(color: Colors.white, fontSize: 15,
+                        fontWeight: FontWeight.w700)))))),
           const SizedBox(height: 32),
         ],
 
-        // Feature comparison table
+        // Feature table
         const _FeatureTable(),
         const SizedBox(height: 40),
       ]),
     );
   }
 
-  Widget _buildActiveCard(ActiveSubscription sub) {
+  Widget _buildActiveCard(SubscriptionStatus sub) {
+    String? expStr;
+    if (sub.expiresAt != null) {
+      try {
+        final dt = DateTime.parse(sub.expiresAt!);
+        final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        expStr = '${dt.day} ${months[dt.month-1]} ${dt.year}';
+      } catch (_) { expStr = sub.expiresAt; }
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [AppColors.success.withOpacity(0.15), AppColors.success.withOpacity(0.05)],
+        gradient: LinearGradient(colors: [
+          AppColors.success.withOpacity(0.15), AppColors.success.withOpacity(0.04)],
           begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.success.withOpacity(0.3)),
-      ),
+        border: Border.all(color: AppColors.success.withOpacity(0.3))),
       child: Row(children: [
         Container(width: 44, height: 44,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.success.withOpacity(0.15)),
-          child: const Center(child: Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24))),
+          decoration: BoxDecoration(shape: BoxShape.circle,
+              color: AppColors.success.withOpacity(0.15)),
+          child: const Center(child: Icon(Icons.verified_rounded,
+              color: AppColors.success, size: 24))),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Active: ${sub.planName}', style: const TextStyle(
+          Text('Active: ${sub.plan.toUpperCase()}', style: const TextStyle(
               color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-          if (sub.expiresAt != null)
-            Text('Expires ${sub.expiresAt}', style: const TextStyle(
+          if (expStr != null)
+            Text('Expires $expStr', style: const TextStyle(
                 color: AppColors.textMuted, fontSize: 12)),
         ])),
       ]),
-    ).animate().fadeIn(duration: 400.ms)
-        .slideY(begin: -0.2, end: 0, duration: 400.ms, curve: AppCurves.standard);
+    );
   }
 
-  Widget _buildPlansShimmer() {
-    return Column(children: List.generate(3, (_) => Container(
-      height: 110, margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md)),
-    )));
-  }
+  List<Widget> _shimmerPlans() => List.generate(3, (_) => Container(
+    height: 100, margin: const EdgeInsets.only(bottom: 12),
+    decoration: BoxDecoration(color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md))));
 }
 
 // ── Plan Card ─────────────────────────────────────────────────────────────────
@@ -222,28 +295,21 @@ class _PlanCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
+          color: isSelected ? AppColors.primary.withOpacity(0.08) : AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
               color: isSelected ? AppColors.primary : AppColors.glassBorder,
               width: isSelected ? 1.5 : 0.5),
-          boxShadow: isSelected ? AppShadows.primary : null,
-        ),
+          boxShadow: isSelected ? AppShadows.primary : null),
         child: Row(children: [
-          // Radio
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+          AnimatedContainer(duration: const Duration(milliseconds: 200),
             width: 20, height: 20,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isSelected ? AppColors.primary : Colors.transparent,
-              border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2)),
+            decoration: BoxDecoration(shape: BoxShape.circle,
+                color: isSelected ? AppColors.primary : Colors.transparent,
+                border: Border.all(color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2)),
             child: isSelected ? const Center(
-                child: Icon(Icons.check_rounded, size: 12, color: Colors.white)) : null,
-          ),
+                child: Icon(Icons.check_rounded, size: 12, color: Colors.white)) : null),
           const SizedBox(width: 14),
-          // Info
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Text(plan.name, style: TextStyle(
@@ -256,21 +322,22 @@ class _PlanCard extends StatelessWidget {
                   decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(4)),
                   child: const Text('POPULAR', style: TextStyle(
-                      color: AppColors.warning, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
-                ),
+                      color: AppColors.warning, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8))),
               ],
             ]),
-            const SizedBox(height: 4),
-            Text(plan.features.join(' · '), style: const TextStyle(
-                color: AppColors.textMuted, fontSize: 11), maxLines: 2),
+            if (plan.features.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(plan.features.take(3).join(' · '),
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11), maxLines: 2),
+            ],
           ])),
-          // Price
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Text('Rs. ${plan.priceStr}', style: TextStyle(
-                color: isSelected ? AppColors.primary : AppColors.textPrimary,
-                fontSize: 17, fontWeight: FontWeight.w800)),
-            Text('/${plan.period}', style: const TextStyle(
-                color: AppColors.textMuted, fontSize: 11)),
+            Text(plan.priceMonthly == 0 ? 'Free' : 'Rs. ${plan.priceMonthly}',
+                style: TextStyle(
+                    color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                    fontSize: 17, fontWeight: FontWeight.w800)),
+            if (plan.priceMonthly > 0)
+              const Text('/month', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
           ]),
         ]),
       ),
@@ -279,119 +346,125 @@ class _PlanCard extends StatelessWidget {
 }
 
 // ── Payment Method Card ────────────────────────────────────────────────────────
-class _PaymentMethodCard extends StatelessWidget {
-  final PaymentMethod method;
-  const _PaymentMethodCard({required this.method});
+class _PayMethodCard extends StatelessWidget {
+  final _PayMethod method;
+  final bool isSelected;
+  final VoidCallback onSelect;
+  const _PayMethodCard({required this.method, required this.isSelected, required this.onSelect});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(method.name, style: const TextStyle(
-            color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        if (method.accountNumber != null)
+    return GestureDetector(
+      onTap: onSelect,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.06) : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.glassBorder,
+              width: isSelected ? 1.5 : 0.5)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.xs),
-                  border: Border.all(color: AppColors.primary.withOpacity(0.2))),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.account_balance_wallet_outlined,
-                    size: 16, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(method.accountNumber!, style: const TextStyle(
-                    color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5)),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: () {
-                    Clipboard.setData(ClipboardData(text: method.accountNumber!));
-                    HapticFeedback.lightImpact();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 2)));
-                  },
-                  child: const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary),
-                ),
-              ]),
-            ),
+            AnimatedContainer(duration: const Duration(milliseconds: 200),
+              width: 18, height: 18,
+              decoration: BoxDecoration(shape: BoxShape.circle,
+                  color: isSelected ? AppColors.primary : Colors.transparent,
+                  border: Border.all(color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2)),
+              child: isSelected ? const Center(
+                  child: Icon(Icons.check_rounded, size: 10, color: Colors.white)) : null),
+            const SizedBox(width: 10),
+            Text(method.name, style: TextStyle(
+                color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                fontSize: 14, fontWeight: FontWeight.w700)),
           ]),
-        if (method.instructions != null) ...[
-          const SizedBox(height: 8),
-          Text(method.instructions!, style: const TextStyle(
-              color: AppColors.textMuted, fontSize: 12, height: 1.5)),
-        ],
-      ]),
+          if (isSelected && method.accountNumber != null) ...[
+            const SizedBox(height: 10),
+            Row(children: [
+              Expanded(child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.xs),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.2))),
+                child: Row(children: [
+                  const Icon(Icons.account_balance_wallet_outlined, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(method.accountNumber!, style: const TextStyle(
+                      color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5))),
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: method.accountNumber!));
+                      HapticFeedback.lightImpact();
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Copied!'), duration: Duration(seconds: 2)));
+                    },
+                    child: const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary)),
+                ]),
+              )),
+            ]),
+            if (method.instructions != null) ...[
+              const SizedBox(height: 8),
+              Text(method.instructions!, style: const TextStyle(
+                  color: AppColors.textMuted, fontSize: 12, height: 1.5)),
+            ],
+          ],
+        ]),
+      ),
     );
   }
 }
 
-// ── Feature Table ─────────────────────────────────────────────────────────────
+// ── Feature Comparison Table ──────────────────────────────────────────────────
 class _FeatureTable extends StatelessWidget {
   const _FeatureTable();
-
   static const _rows = [
-    ('Zero-data streaming',   true, true, true),
-    ('Offline catalog',       true, true, true),
-    ('HD 720p quality',       false, true, true),
-    ('Full HD 1080p',         false, false, true),
-    ('All content',           false, true, true),
-    ('Free content',          true, true, true),
-    ('Multiple devices',      false, false, true),
+    ('Zero-data streaming', true,  true,  true),
+    ('Offline catalog',     true,  true,  true),
+    ('Free content',        true,  true,  true),
+    ('HD 720p quality',     false, true,  true),
+    ('Full HD 1080p',       false, false, true),
+    ('All premium content', false, true,  true),
+    ('Multiple devices',    false, false, true),
   ];
   static const _heads = ['Basic', 'Standard', 'Premium'];
-
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: AppColors.glassBorder)),
-      child: Column(children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(children: [
-            const Expanded(flex: 3, child: Padding(
-              padding: EdgeInsets.only(left: 16),
-              child: Text('Feature', style: TextStyle(color: AppColors.textMuted,
-                  fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)))),
-            ...List.generate(3, (i) => Expanded(
-              child: Center(child: Text(_heads[i], style: const TextStyle(
-                  color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700))),
-            )),
-          ]),
-        ),
-        const Divider(height: 1),
-        ..._rows.asMap().entries.map((e) {
-          final row = e.value;
-          return Column(children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(children: [
-                Expanded(flex: 3, child: Padding(
-                  padding: const EdgeInsets.only(left: 16),
-                  child: Text(row.$1, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)))),
-                _cell(row.$2), _cell(row.$3), _cell(row.$4),
-              ]),
-            ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('Plan Comparison', style: TextStyle(color: AppColors.textPrimary,
+          fontSize: 16, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 12),
+      Container(
+        decoration: BoxDecoration(color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.glassBorder)),
+        child: Column(children: [
+          Padding(padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(children: [
+              const Expanded(flex: 3, child: Padding(padding: EdgeInsets.only(left: 16),
+                child: Text('Feature', style: TextStyle(color: AppColors.textMuted,
+                    fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1)))),
+              ...List.generate(3, (i) => Expanded(child: Center(
+                  child: Text(_heads[i], style: const TextStyle(
+                      color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w700))))),
+            ])),
+          const Divider(height: 1),
+          ..._rows.asMap().entries.map((e) => Column(children: [
+            Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Row(children: [
+              Expanded(flex: 3, child: Padding(padding: const EdgeInsets.only(left: 16),
+                child: Text(e.value.$1, style: const TextStyle(
+                    color: AppColors.textPrimary, fontSize: 12)))),
+              _cell(e.value.$2), _cell(e.value.$3), _cell(e.value.$4),
+            ])),
             if (e.key < _rows.length - 1) const Divider(height: 1, indent: 16),
-          ]);
-        }),
-      ]),
-    );
+          ])),
+        ]),
+      ),
+    ]);
   }
-
   Widget _cell(bool yes) => Expanded(child: Center(child: Icon(
-    yes ? Icons.check_circle_rounded : Icons.remove_rounded,
-    size: 18,
-    color: yes ? AppColors.success : AppColors.textDisabled)));
+      yes ? Icons.check_circle_rounded : Icons.remove_rounded,
+      size: 16, color: yes ? AppColors.success : AppColors.textDisabled)));
 }

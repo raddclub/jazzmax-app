@@ -94,10 +94,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     try { await AuthApi.logout(); } catch (_) {}
+    await Keystore.clearAll();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(StorageKeys.isGuest);
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
+
+  /// Returns the current access token (for constructing stream URLs).
+  Future<String?> getAccessToken() => Keystore.getAccessToken();
 
   void refreshUser(AppUser user) {
     state = state.copyWith(user: user);
