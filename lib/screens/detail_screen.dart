@@ -141,14 +141,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen>
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  item.posterUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: item.posterUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) =>
-                              _BackdropFallback(item: item),
-                        )
-                      : _BackdropFallback(item: item),
+                  _buildDetailPoster(item),
                   // Gradient overlay
                   const DecoratedBox(
                     decoration: BoxDecoration(
@@ -442,6 +435,34 @@ class _MetaChip extends StatelessWidget {
     );
   }
 }
+
+
+Widget _buildDetailPoster(CatalogItem item) {
+  final primary = item.posterUrl;
+  final fallback = item.posterJdUrl;
+  if (primary != null && primary.isNotEmpty) {
+    return CachedNetworkImage(
+      imageUrl: primary,
+      fit: BoxFit.cover,
+      errorWidget: (_, __, ___) => fallback != null && fallback.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: fallback,
+              fit: BoxFit.cover,
+              errorWidget: (_, __, ___) => _BackdropFallback(item: item),
+            )
+          : _BackdropFallback(item: item),
+    );
+  }
+  if (fallback != null && fallback.isNotEmpty) {
+    return CachedNetworkImage(
+      imageUrl: fallback,
+      fit: BoxFit.cover,
+      errorWidget: (_, __, ___) => _BackdropFallback(item: item),
+    );
+  }
+  return _BackdropFallback(item: item);
+}
+
 
 class _BackdropFallback extends StatelessWidget {
   final CatalogItem item;

@@ -417,21 +417,7 @@ class _HeroBanner extends StatelessWidget {
           fit: StackFit.expand,
           children: [
             // Poster/backdrop
-            item.posterUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: item.posterUrl!,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(
-                      color: AppColors.surface,
-                      child: const Icon(Icons.movie_rounded,
-                          color: AppColors.textMuted, size: 64),
-                    ),
-                  )
-                : Container(
-                    color: AppColors.surface,
-                    child: const Icon(Icons.movie_rounded,
-                        color: AppColors.textMuted, size: 64),
-                  ),
+            _buildPosterImage(item),
 
             // Gradient
             const DecoratedBox(
@@ -597,6 +583,40 @@ class _HeroButton extends StatelessWidget {
       ),
     );
   }
+  Widget _buildPosterImage(CatalogItem item) {
+    final primary  = item.posterUrl;
+    final fallback = item.posterJdUrl;
+    if (primary != null && primary.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: primary,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => Container(color: AppColors.surface),
+        errorWidget: (_, __, ___) => fallback != null && fallback.isNotEmpty
+            ? CachedNetworkImage(
+                imageUrl: fallback,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => _posterFallback(),
+              )
+            : _posterFallback(),
+      );
+    }
+    if (fallback != null && fallback.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: fallback,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => _posterFallback(),
+      );
+    }
+    return _posterFallback();
+  }
+
+  Widget _posterFallback() {
+    return Container(
+      color: AppColors.surface,
+      child: const Icon(Icons.movie_rounded, color: AppColors.textMuted, size: 64),
+    );
+  }
+
 }
 
 // ── Subscribe Banner ───────────────────────────────────────────────────────────

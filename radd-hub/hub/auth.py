@@ -23,7 +23,7 @@ def _bot_key_ok() -> bool:
     req_key = request.headers.get("X-Bot-Key")
     
     # Also allow JazzBuzz app bypass for development
-    jb_key = os.environ.get("JAZZBUZZ_KEY", "jazzbuzz_dev_key_2026")
+    jb_key = os.environ.get("JAZZBUZZ_KEY", "")  # No hardcoded fallback — must be set explicitly
     req_jb_key = request.headers.get("X-JazzBuzz-Key")
     
     log.debug("_bot_key_ok: env_key=%s... req_key=%s...", key[:5] if key else "None", req_key[:5] if req_key else "None")
@@ -34,6 +34,8 @@ def _bot_key_ok() -> bool:
         return True
     return False
 
+
+ADMIN_SESSION_TTL = 3600  # 1 hour idle timeout
 
 def login_required(fn):
     @wraps(fn)
@@ -50,6 +52,52 @@ def login_required(fn):
         return fn(*a, **kw)
     return wrapper
 
+
+
+
+import hashlib as _hashlib
+import os as _os
+
+def _csrf_secret() -> str:
+    return _os.environ.get("SESSION_SECRET") or _os.environ.get("FLASK_SECRET_KEY") or "csrf-fallback"
+
+def get_csrf_token() -> str:
+    """Return a per-session CSRF token (generate if absent)."""
+    from flask import session
+    if "csrf_token" not in session:
+        session["csrf_token"] = _os.urandom(24).hex()
+    return session["csrf_token"]
+
+def validate_csrf() -> bool:
+    """Validate CSRF token from form or header. Returns True if valid."""
+    from flask import session
+    expected = session.get("csrf_token")
+    if not expected:
+        return False
+    submitted = (
+        request.form.get("_csrf_token") or
+        request.headers.get("X-CSRF-Token") or
+        ""
+    )
+    return _hashlib.compare_digest(expected, submitted) if submitted else False
+
+def csrf_protect(fn):
+    """Decorator: validates CSRF token on POST/PUT/DELETE requests.
+    Skip validation for API routes (they use Bearer tokens instead).
+    """
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*a, **kw):
+        if request.method in ("POST", "PUT", "DELETE", "PATCH"):
+            # API routes use Bearer tokens — skip CSRF
+            if request.path.startswith("/api/"):
+                return fn(*a, **kw)
+            if not validate_csrf():
+                log.warning("CSRF validation failed: path=%s ip=%s", request.path, request.remote_addr)
+                from flask import abort
+                abort(403)
+        return fn(*a, **kw)
+    return wrapper
 
 from flask import Blueprint
 bp = Blueprint("auth", __name__)
@@ -80,10 +128,36 @@ def login():
     if request.method == "POST":
         u = (request.form.get("username") or "").strip()
         p = (request.form.get("password") or "").strip()
+
+        # Brute-force protection: lockout after 10 failures per IP
+        import time as _time
+        _ip = request.remote_addr or "unknown"
+        _lock_key = f"admin_login:{_ip}"
+        _now = _time.time()
+
+        # Check if IP is locked
+        if not hasattr(login, "_fail_store"):
+            login._fail_store = {}
+        _fails = [t for t in login._fail_store.get(_lock_key, []) if _now - t < 900]
+        if len(_fails) >= 10:
+            remaining = int(900 - (_now - min(_fails)))
+            err = f"Too many failed attempts. Try again in {remaining//60+1} min."
+            return render_template_string(_LOGIN_HTML, error=err)
+
         au, ap = admin_creds()
-        if u == au and p == ap and ap:
+        # Constant-time comparison to prevent timing attacks
+        import hmac as _hmac
+        u_ok = _hmac.compare_digest(u, au)
+        p_ok = _hmac.compare_digest(p, ap) if ap else False
+        if u_ok and p_ok:
+            login._fail_store.pop(_lock_key, None)
             session["admin"] = u
+            session.permanent = True
             return redirect(request.args.get("next") or "/")
+        # Record failure
+        _fails.append(_now)
+        login._fail_store[_lock_key] = _fails
+        log.warning("Admin login failed: ip=%s user=%s attempt=%d", _ip, u[:20], len(_fails))
         err = "Invalid credentials"
     return render_template_string(_LOGIN_HTML, error=err)
 

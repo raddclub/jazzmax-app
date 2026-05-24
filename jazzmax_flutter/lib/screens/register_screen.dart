@@ -1,72 +1,53 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
+import '../widgets/jazz_text_field.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
-
   @override
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _phoneCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _confirmCtrl = TextEditingController();
-  bool _obscurePass = true;
-  bool _loading = false;
+  final _formKey  = GlobalKey<FormState>();
+  final _phone    = TextEditingController();
+  final _pass     = TextEditingController();
+  final _confirm  = TextEditingController();
+  bool _obscure   = true;
+  bool _loading   = false;
   String? _error;
 
   @override
-  void dispose() {
-    _phoneCtrl.dispose();
-    _passCtrl.dispose();
-    _confirmCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _continueAsGuest() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      await ref.read(authProvider.notifier).continueAsGuest();
-      if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-    } catch (e) {
-      setState(() {
-        _error = 'Cannot connect to server. Check your internet.';
-        _loading = false;
-      });
-    }
-  }
+  void dispose() { _phone.dispose(); _pass.dispose(); _confirm.dispose(); super.dispose(); }
 
   Future<void> _register() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() { _loading = true; _error = null; });
     try {
-      await ref.read(authProvider.notifier).register(
-        phone: _phoneCtrl.text.trim(),
-        password: _passCtrl.text,
-      );
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
-      }
+      await ref.read(authProvider.notifier).register(phone: _phone.text.trim(), password: _pass.text);
+      if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     } catch (e) {
-      setState(() {
-        _error = _friendlyError(e.toString());
-        _loading = false;
-      });
+      setState(() { _error = _friendly(e.toString()); _loading = false; });
     }
   }
 
-  String _friendlyError(String raw) {
-    if (raw.contains('409') || raw.contains('already')) {
-      return 'This phone number is already registered.';
+  Future<void> _guest() async {
+    setState(() { _loading = true; _error = null; });
+    try {
+      await ref.read(authProvider.notifier).continueAsGuest();
+      if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    } catch (e) {
+      setState(() { _error = 'Cannot connect. Check your internet.'; _loading = false; });
     }
-    if (raw.contains('connection') || raw.contains('SocketException')) {
-      return 'Cannot connect to server. Check your internet.';
-    }
+  }
+
+  String _friendly(String raw) {
+    if (raw.contains('409') || raw.contains('already')) return 'Phone already registered. Try signing in.';
+    if (raw.contains('SocketException')) return 'No internet connection.';
     return 'Registration failed. Please try again.';
   }
 
@@ -77,170 +58,111 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          backgroundColor: AppColors.background,
+          backgroundColor: Colors.transparent,
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new,
-                color: AppColors.textPrimary),
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ),
-        body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                const Text(
-                  'Create Account',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Join JazzMAX — free for Jazz SIM users',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 14),
-                ),
-                const SizedBox(height: 32),
-                Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      TextFormField(
-                        controller: _phoneCtrl,
-                        keyboardType: TextInputType.phone,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
-                          labelText: 'Phone Number',
-                          hintText: '03001234567',
-                          prefixIcon: Icon(Icons.phone_outlined,
-                              color: AppColors.textMuted),
-                        ),
+        body: Stack(
+          children: [
+            Positioned(top: -120, right: -80,
+              child: Container(width: 280, height: 280,
+                decoration: BoxDecoration(shape: BoxShape.circle,
+                  gradient: RadialGradient(colors: [AppColors.primary.withOpacity(0.12), Colors.transparent])))),
+            SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const SizedBox(height: 8),
+                  const Text('Create Account',
+                      style: TextStyle(color: AppColors.textPrimary, fontSize: 28,
+                          fontWeight: FontWeight.w800, letterSpacing: -0.5))
+                      .animate().fadeIn(duration: 400.ms)
+                      .slideX(begin: -0.2, end: 0, duration: 400.ms, curve: AppCurves.standard),
+                  const SizedBox(height: 6),
+                  const Text('Join JazzMAX — free for Jazz SIM users',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 14))
+                      .animate(delay: 80.ms).fadeIn(duration: 400.ms),
+                  const SizedBox(height: 32),
+                  Form(key: _formKey, child: Column(children: [
+                    JazzTextField(controller: _phone, label: 'Phone Number',
+                        hint: '03001234567', keyboardType: TextInputType.phone,
+                        prefixIcon: Icons.phone_outlined,
                         validator: (v) {
-                          if (v == null || v.trim().isEmpty) {
-                            return 'Enter your phone number';
-                          }
-                          if (v.trim().length < 10) {
-                            return 'Enter a valid Pakistan phone number';
-                          }
+                          if (v == null || v.trim().isEmpty) return 'Enter your phone number';
+                          if (v.trim().length < 10) return 'Enter a valid Pakistan phone number';
                           return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passCtrl,
-                        obscureText: _obscurePass,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock_outline,
-                              color: AppColors.textMuted),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePass
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              color: AppColors.textMuted,
-                            ),
-                            onPressed: () =>
-                                setState(() => _obscurePass = !_obscurePass),
-                          ),
-                        ),
+                        })
+                        .animate(delay: 120.ms).fadeIn(duration: 350.ms)
+                        .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
+                    const SizedBox(height: 14),
+                    JazzTextField(controller: _pass, label: 'Password',
+                        obscureText: _obscure, prefixIcon: Icons.lock_outline_rounded,
+                        suffixIcon: IconButton(
+                          icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: AppColors.textMuted, size: 20),
+                          onPressed: () => setState(() => _obscure = !_obscure)),
                         validator: (v) {
                           if (v == null || v.isEmpty) return 'Enter a password';
-                          if (v.length < 6) {
-                            return 'Password must be at least 6 characters';
-                          }
+                          if (v.length < 8) return 'Min 8 characters';
                           return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _confirmCtrl,
-                        obscureText: _obscurePass,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        decoration: const InputDecoration(
-                          labelText: 'Confirm Password',
-                          prefixIcon: Icon(Icons.lock_outline,
-                              color: AppColors.textMuted),
-                        ),
+                        })
+                        .animate(delay: 180.ms).fadeIn(duration: 350.ms)
+                        .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
+                    const SizedBox(height: 14),
+                    JazzTextField(controller: _confirm, label: 'Confirm Password',
+                        obscureText: _obscure, prefixIcon: Icons.lock_check_outline,
                         validator: (v) {
-                          if (v != _passCtrl.text) {
-                            return 'Passwords do not match';
-                          }
+                          if (v != _pass.text) return 'Passwords do not match';
                           return null;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: AppColors.error.withOpacity(0.4)),
-                    ),
-                    child: Text(
-                      _error!,
-                      style: const TextStyle(
-                          color: AppColors.error, fontSize: 13),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 28),
-                ElevatedButton(
-                  onPressed: _loading ? null : _register,
-                  child: const Text('Create Account'),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: _loading ? null : _continueAsGuest,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppColors.textMuted),
-                      minimumSize: const Size(double.infinity, 52),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: const Text(
-                      'Continue as Guest',
-                      style: TextStyle(color: AppColors.textMuted),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Center(
-                  child: TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text.rich(
-                      TextSpan(
+                        })
+                        .animate(delay: 240.ms).fadeIn(duration: 350.ms)
+                        .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
+                  ])),
+                  if (_error != null) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(color: AppColors.error.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          border: Border.all(color: AppColors.error.withOpacity(0.3))),
+                      child: Row(children: [
+                        const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(child: Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 13))),
+                      ]),
+                    ).animate().fadeIn(duration: 250.ms).shakeX(hz: 3, amount: 4),
+                  ],
+                  const SizedBox(height: 28),
+                  Container(height: 52,
+                    decoration: BoxDecoration(gradient: AppColors.primaryGradient,
+                        borderRadius: BorderRadius.circular(AppRadius.md), boxShadow: AppShadows.primary),
+                    child: Material(color: Colors.transparent,
+                      child: InkWell(borderRadius: BorderRadius.circular(AppRadius.md),
+                        onTap: _loading ? null : _register,
+                        child: const Center(child: Text('Create Account',
+                            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))))))
+                      .animate(delay: 300.ms).fadeIn(duration: 350.ms)
+                      .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
+                  const SizedBox(height: 12),
+                  OutlinedButton(onPressed: _loading ? null : _guest,
+                      child: const Text('Continue as Guest'))
+                      .animate(delay: 350.ms).fadeIn(duration: 300.ms),
+                  const SizedBox(height: 20),
+                  Center(child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Text.rich(TextSpan(
                         text: 'Already have an account? ',
-                        style: TextStyle(color: AppColors.textMuted),
-                        children: [
-                          TextSpan(
-                            text: 'Sign In',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 14),
+                        children: [TextSpan(text: 'Sign In',
+                            style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700))])),
+                  )).animate(delay: 400.ms).fadeIn(duration: 300.ms),
+                  const SizedBox(height: 40),
+                ]),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

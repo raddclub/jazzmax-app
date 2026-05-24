@@ -1,56 +1,44 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 
-/// Wraps any widget with a full-screen loading overlay.
-/// Use [loading] = true to show the spinner on top of the content.
 class LoadingOverlay extends StatelessWidget {
-  final bool loading;
   final Widget child;
+  final bool loading;
   final String? message;
-
-  const LoadingOverlay({
-    super.key,
-    required this.loading,
-    required this.child,
-    this.message,
-  });
+  const LoadingOverlay({super.key, required this.child, required this.loading, this.message});
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        child,
-        if (loading)
-          Container(
+    return Stack(children: [
+      child,
+      if (loading)
+        Positioned.fill(
+          child: Container(
             color: Colors.black54,
             child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const SizedBox(
-                    width: 40,
-                    height: 40,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 3,
-                      valueColor:
-                          AlwaysStoppedAnimation<Color>(AppColors.primary),
-                    ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  boxShadow: AppShadows.elevated,
+                ),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                    strokeCap: StrokeCap.round,
                   ),
                   if (message != null) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      message!,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
-                      ),
-                    ),
+                    const SizedBox(height: 14),
+                    Text(message!, style: const TextStyle(
+                        color: AppColors.textSecondary, fontSize: 13)),
                   ],
-                ],
+                ]),
               ),
             ),
           ),
-      ],
-    );
+        ),
+    ]);
   }
 }

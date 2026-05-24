@@ -291,6 +291,16 @@ def test_provider(provider: str, value: str) -> dict:
             r = requests.get(f"https://api.telegram.org/bot{value}/getMe", timeout=10)
             return {"ok": r.status_code == 200 and r.json().get("ok") is True,
                     "message": f"HTTP {r.status_code}"}
+        if p == "omdb":
+            r = requests.get("http://www.omdbapi.com/",
+                             params={"apikey": value, "t": "Inception", "type": "movie"},
+                             timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("Response") == "True":
+                    return {"ok": True, "message": f"OK — {data.get('Title', 'response valid')}"}
+                return {"ok": False, "message": data.get("Error", "Response=False")}
+            return {"ok": False, "message": f"HTTP {r.status_code}"}
         if p == "gsheets_sa_json":
             try:
                 json.loads(value)

@@ -2,10 +2,87 @@
 v3.0: Added filter_type, filter_genre, filter_dir, filter_actor, sort params,
       file_count on titles, /api/files per-title endpoint.
 """
+import threading
 from flask import Blueprint, render_template, request, jsonify, redirect
 from .. import db, auth
 
 bp = Blueprint("library", __name__)
+
+
+
+def _regen_db_update_bg():
+    """Background: regenerate db_update.json whenever catalog changes."""
+    import json as _json, time as _time, datetime as _dt, os as _os
+    from hub import db as _db
+    out_path = _os.path.join(
+        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+        "data", "db_update.json")
+    try:
+        with _db.conn() as c:
+            title_rows = c.execute(
+                "SELECT t.id, t.title, t.year, t.media_type, t.plot, t.overview, "
+                "t.rating, t.genres, t.language, t.is_free, t.updated_at, "
+                "t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count, "
+                "f.id AS file_id "
+                "FROM titles t "
+                "LEFT JOIN files f ON f.title_id = t.id "
+                "AND (f.season IS NULL OR f.season = 0) "
+                "WHERE t.is_published = 1 "
+                "GROUP BY t.id ORDER BY t.id"
+            ).fetchall()
+        title_ids = [r["id"] for r in title_rows]
+        titles_out = []
+        for r in title_rows:
+            genres = []
+            try:
+                genres = _json.loads(r["genres"] or "[]")
+                if not isinstance(genres, list):
+                    genres = [str(genres)]
+            except Exception:
+                pass
+            titles_out.append({
+                "id": r["id"], "title": r["title"] or "",
+                "year": r["year"], "media_type": r["media_type"] or "movie",
+                "description": r["plot"] or r["overview"] or "",
+                "rating": float(r["rating"] or 0), "genres": genres,
+                "language": r["language"] or "",
+                "is_free": 1 if r["is_free"] else 0,
+                "runtime": r.get("runtime"),
+                "season_count": r.get("season_count"),
+                "episode_count": r.get("episode_count"),
+                "poster_url": r["poster"] or "",
+                "poster_share_url": r.get("poster_share_url") or "",
+                "db_version": int(r["updated_at"] or 0),
+                "file_id": str(r["file_id"]) if r["file_id"] else None,
+            })
+        episodes_out = []
+        if title_ids:
+            ph = ",".join("?" * len(title_ids))
+            with _db.conn() as c:
+                ep_rows = c.execute(
+                    "SELECT id, title_id, season, episode FROM files "
+                    "WHERE title_id IN (" + ph + ") "
+                    "AND season IS NOT NULL AND season > 0 "
+                    "ORDER BY title_id, season, episode", title_ids
+                ).fetchall()
+            for r in ep_rows:
+                episodes_out.append({
+                    "id": r["id"], "title_id": r["title_id"],
+                    "file_id": str(r["id"]),
+                    "season": r["season"], "episode": r["episode"],
+                    "label": "S{:02d}E{:02d}".format(r["season"], r["episode"]),
+                    "quality": None, "is_free": 0,
+                })
+        now = int(_time.time())
+        payload = {
+            "version": now,
+            "generated_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "titles": titles_out, "episodes": episodes_out,
+        }
+        with open(out_path, "w", encoding="utf-8") as f:
+            _json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass  # Never crash the web request over a background regen
 
 _SORT_MAP = {
     "title":     "t.title ASC",
@@ -323,3 +400,370 @@ def api_recommendations():
         return jsonify({"ok": True, "count": len(items), "items": items})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e), "items": []}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Admin CRUD — edit / delete / enrich / link / toggle
+# ─────────────────────────────────────────────────────────────────────────────
+import time as _time
+
+@bp.route("/api/title/<int:title_id>", methods=["PUT"])
+@auth.login_required
+def api_edit_title(title_id):
+    """Update title metadata fields."""
+    data = request.get_json(force=True, silent=True) or {}
+    allowed = [
+        "title", "year", "media_type", "rating", "plot", "overview",
+        "director", "cast_names", "genres_csv", "languages_csv",
+        "runtime", "language", "country", "poster",
+    ]
+    sets, params = [], []
+    for key in allowed:
+        if key in data:
+            sets.append(f"{key}=?")
+            params.append(data[key])
+    if not sets:
+        return jsonify({"error": "no fields to update"}), 400
+    sets.append("updated_at=?")
+    params += [int(_time.time()), title_id]
+    with db.conn() as c:
+        c.execute(f"UPDATE titles SET {', '.join(sets)} WHERE id=?", params)
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/title/<int:title_id>/set-free", methods=["POST"])
+@auth.login_required
+def api_set_free(title_id):
+    data = request.get_json(force=True, silent=True) or {}
+    val = 1 if data.get("is_free") else 0
+    with db.conn() as c:
+        c.execute("UPDATE titles SET is_free=? WHERE id=?", (val, title_id))
+    return jsonify({"ok": True, "is_free": val})
+
+
+@bp.route("/api/title/<int:title_id>/set-published", methods=["POST"])
+@auth.login_required
+def api_set_published(title_id):
+    data = request.get_json(force=True, silent=True) or {}
+    val = 1 if data.get("is_published") else 0
+    with db.conn() as c:
+        c.execute("UPDATE titles SET is_published=? WHERE id=?", (val, title_id))
+    # Auto-regenerate db_update.json so zero-rated users get updated catalog
+    threading.Thread(target=_regen_db_update_bg, daemon=True).start()
+    return jsonify({"ok": True, "is_published": val})
+
+
+@bp.route("/api/title/<int:title_id>/delete", methods=["DELETE", "POST"])
+@auth.login_required
+def api_delete_title(title_id):
+    data = request.get_json(force=True, silent=True) or {}
+    delete_files = bool(data.get("delete_files", False))
+    with db.conn() as c:
+        if delete_files:
+            c.execute("DELETE FROM files WHERE title_id=?", (title_id,))
+        else:
+            c.execute("UPDATE files SET title_id=NULL WHERE title_id=?", (title_id,))
+        c.execute("DELETE FROM titles WHERE id=?", (title_id,))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/title/<int:title_id>/enrich-omdb", methods=["POST"])
+@auth.login_required
+def api_enrich_omdb(title_id):
+    """Fetch metadata from OMDB and save to title."""
+    import requests as _req
+    from .. import keys as _keys
+    with db.conn() as c:
+        t = c.execute(
+            "SELECT title, year, imdb_id FROM titles WHERE id=?", (title_id,)
+        ).fetchone()
+    if not t:
+        return jsonify({"error": "not found"}), 404
+    key = _keys.get_active_value("omdb")
+    if not key:
+        return jsonify({"error": "no OMDB key configured"}), 503
+    params = {"apikey": key, "plot": "full"}
+    if t["imdb_id"]:
+        params["i"] = t["imdb_id"]
+    else:
+        params["t"] = t["title"]
+        if t["year"]:
+            params["y"] = str(t["year"])[:4]
+    try:
+        r = _req.get("http://www.omdbapi.com/", params=params, timeout=10)
+        omdb = r.json()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 503
+    if omdb.get("Response") != "True":
+        return jsonify({"error": omdb.get("Error", "no result")}), 404
+    def _f(v): return None if not v or v == "N/A" else v
+    def _rating(s):
+        try: return float((s or "").split("/")[0])
+        except: return None
+    now = int(_time.time())
+    updates = {}
+    if _f(omdb.get("Title")):    updates["title"]         = omdb["Title"]
+    if _f(omdb.get("Year")):     updates["year"]          = omdb["Year"][:4]
+    if _f(omdb.get("Plot")):     updates["plot"]          = omdb["Plot"]
+    if _f(omdb.get("Director")): updates["director"]      = omdb["Director"]
+    if _f(omdb.get("Actors")):   updates["cast_names"]    = omdb["Actors"]
+    if _f(omdb.get("Genre")):    updates["genres_csv"]    = omdb["Genre"]
+    if _f(omdb.get("Language")): updates["languages_csv"] = omdb["Language"]
+    if _f(omdb.get("Poster")):   updates["poster"]        = omdb["Poster"]
+    if _f(omdb.get("imdbID")):   updates["imdb_id"]       = omdb["imdbID"]
+    rt = _f(omdb.get("Runtime"))
+    if rt:
+        try: updates["runtime"] = int(rt.split()[0])
+        except: pass
+    rv = _rating(omdb.get("imdbRating"))
+    if rv: updates["imdb_rating"] = rv
+    if updates:
+        sets = [f"{k}=?" for k in updates] + ["updated_at=?"]
+        vals = list(updates.values()) + [now, title_id]
+        with db.conn() as c:
+            c.execute(f"UPDATE titles SET {', '.join(sets)} WHERE id=?", vals)
+    return jsonify({"ok": True, "updated": list(updates.keys()), "omdb_title": omdb.get("Title")})
+
+
+
+@bp.route("/api/title/<int:title_id>/push-poster-to-jd", methods=["POST"])
+@auth.login_required
+def api_push_poster_jd(title_id):
+    """Download best poster (TMDB->TVmaze->Wikipedia) and upload to JazzDrive same folder."""
+    import tempfile, time, requests as _req, urllib.parse
+    from pathlib import Path as _P
+    from .. import uploader as _up, jazzdrive as _jd
+
+    with db.conn() as c:
+        title = c.execute(
+            "SELECT id, title, year, media_type, poster, folder_share_url "
+            "FROM titles WHERE id=?", (title_id,)
+        ).fetchone()
+        if not title:
+            return jsonify({"error": "title not found"}), 404
+        file_row = c.execute(
+            "SELECT remote_folder_id FROM files "
+            "WHERE title_id=? AND remote_folder_id IS NOT NULL AND remote_folder_id!='' LIMIT 1",
+            (title_id,)
+        ).fetchone()
+
+    if not file_row:
+        return jsonify({"error": "No JazzDrive folder for this title -- run Scanner first"}), 400
+
+    folder_id = int(file_row["remote_folder_id"])
+    mt = (title["media_type"] or "").lower()
+
+    poster_url = title["poster"] or ""
+
+    if not poster_url and mt in ("tv", "series", "show", "anime", "drama"):
+        try:
+            q = urllib.parse.quote(title["title"])
+            r = _req.get(f"https://api.tvmaze.com/singlesearch/shows?q={q}", timeout=8)
+            if r.status_code == 200:
+                img = r.json().get("image") or {}
+                poster_url = img.get("original") or img.get("medium") or ""
+        except Exception:
+            pass
+
+    if not poster_url:
+        try:
+            base = title["title"].replace(" ", "_")
+            yr = str(title["year"] or "")
+            for suf in ([f"_({yr}_film)"] if yr else []) + ["_(film)", "_(TV_series)", ""]:
+                slug = urllib.parse.quote(base + suf)
+                r = _req.get(f"https://en.wikipedia.org/api/rest_v1/page/summary/{slug}", timeout=8)
+                if r.status_code == 200:
+                    th = r.json().get("thumbnail") or {}
+                    if th.get("source"):
+                        poster_url = th["source"]
+                        break
+        except Exception:
+            pass
+
+    if not poster_url:
+        return jsonify({"error": "No poster found from TMDB/TVmaze/Wikipedia"}), 400
+
+    try:
+        r = _req.get(poster_url, timeout=20)
+        if r.status_code != 200:
+            return jsonify({"error": f"Poster download failed: HTTP {r.status_code}"}), 400
+        if len(r.content) < 2048:
+            return jsonify({"error": "Downloaded file too small -- not a valid image"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Download error: {e}"}), 400
+
+    tmp = _P(tempfile.mktemp(suffix=".jpg", prefix=f"poster_{title_id}_"))
+    tmp.write_bytes(r.content)
+
+    try:
+        acct = _up.get_active_account()
+        if not acct:
+            return jsonify({"error": "No active JazzDrive account -- add one under Scanner"}), 500
+
+        vk   = acct.get("validation_key") or acct.get("validationkey") or ""
+        jsid = acct.get("jsessionid") or ""
+        aid  = acct.get("id")
+
+        if not vk or not jsid:
+            return jsonify({"error": "JazzDrive session expired -- re-verify OTP in Scanner"}), 500
+
+        import requests as _rq2
+        sess = _rq2.Session()
+
+        result = _up._upload_file(
+            sess, vk, jsid, tmp,
+            parent_id=folder_id,
+            override_name="poster.jpg",
+            account_id=aid,
+        )
+        jd_file_id = (result or {}).get("id", 0)
+
+        poster_share_url = ""
+        folder_share = title["folder_share_url"] or ""
+        if folder_share:
+            try:
+                link_res = _jd.generate_folder_image_link(folder_share, filename_hint="poster")
+                if link_res.get("ok") and link_res.get("url"):
+                    poster_share_url = link_res["url"]
+            except Exception as e:
+                import logging
+                logging.getLogger("hub.library").warning("push-poster-to-jd link error: %s", e)
+
+        with db.conn() as c:
+            c.execute(
+                "UPDATE titles SET poster_share_url=?, updated_at=? WHERE id=?",
+                (poster_share_url or None, int(time.time()), title_id),
+            )
+
+        return jsonify({
+            "ok": True,
+            "jd_file_id": jd_file_id,
+            "folder_id": folder_id,
+            "poster_share_url": poster_share_url or "(view link pending)",
+            "source_url": poster_url,
+        })
+    finally:
+        try:
+            tmp.unlink()
+        except Exception:
+            pass
+
+
+@bp.route("/api/file/<int:file_id>/link", methods=["POST"])
+@auth.login_required
+def api_link_file(file_id):
+    """Link an orphan file to a title."""
+    data = request.get_json(force=True, silent=True) or {}
+    title_id = data.get("title_id")
+    if not title_id:
+        return jsonify({"error": "title_id required"}), 400
+    with db.conn() as c:
+        c.execute("UPDATE files SET title_id=? WHERE id=?", (title_id, file_id))
+    return jsonify({"ok": True})
+
+
+@bp.route("/api/titles/bulk-enrich-omdb", methods=["POST"])
+@auth.login_required
+def api_bulk_enrich_omdb():
+    """Bulk-enrich up to 10 titles missing plot from OMDB."""
+    import requests as _req
+    from .. import keys as _keys
+    key = _keys.get_active_value("omdb")
+    if not key:
+        return jsonify({"error": "no OMDB key configured"}), 503
+    with db.conn() as c:
+        rows = c.execute(
+            "SELECT id, title, year, imdb_id FROM titles "
+            "WHERE (plot IS NULL OR plot='') LIMIT 10"
+        ).fetchall()
+    results = []
+    for t in rows:
+        params = {"apikey": key, "plot": "full"}
+        if t["imdb_id"]:
+            params["i"] = t["imdb_id"]
+        else:
+            params["t"] = t["title"]
+            if t["year"]: params["y"] = str(t["year"])[:4]
+        try:
+            r = _req.get("http://www.omdbapi.com/", params=params, timeout=8)
+            omdb = r.json()
+            def _f(v): return None if not v or v == "N/A" else v
+            if omdb.get("Response") == "True":
+                updates = {}
+                if _f(omdb.get("Plot")):     updates["plot"]       = omdb["Plot"]
+                if _f(omdb.get("Director")): updates["director"]   = omdb["Director"]
+                if _f(omdb.get("Actors")):   updates["cast_names"] = omdb["Actors"]
+                if _f(omdb.get("Genre")):    updates["genres_csv"] = omdb["Genre"]
+                if _f(omdb.get("Poster")):   updates["poster"]     = omdb["Poster"]
+                if _f(omdb.get("imdbID")):   updates["imdb_id"]    = omdb["imdbID"]
+                if updates:
+                    sets = [f"{k}=?" for k in updates] + ["updated_at=?"]
+                    vals = list(updates.values()) + [int(_time.time()), t["id"]]
+                    with db.conn() as c2:
+                        c2.execute(f"UPDATE titles SET {', '.join(sets)} WHERE id=?", vals)
+                results.append({"id": t["id"], "title": t["title"], "ok": True, "updated": list(updates.keys())})
+            else:
+                results.append({"id": t["id"], "title": t["title"], "ok": False, "error": omdb.get("Error")})
+        except Exception as e:
+            results.append({"id": t["id"], "title": t["title"], "ok": False, "error": str(e)})
+        _time.sleep(0.25)
+    return jsonify({"ok": True, "processed": len(results), "results": results})
+
+
+@bp.route("/api/files/auto-identify", methods=["POST"])
+@auth.login_required
+def api_auto_identify():
+    """Parse orphan filenames, create titles if needed, link files automatically."""
+    import re as _re, time as _time
+    with db.conn() as c:
+        orphans = c.execute(
+            "SELECT id, filename, season, episode FROM files WHERE title_id IS NULL"
+        ).fetchall()
+    if not orphans:
+        return jsonify({"ok": True, "created": [], "linked": 0, "message": "No orphans to identify"})
+
+    def _parse(fn):
+        base = _re.sub(r"\.[a-z0-9]{2,4}$", "", fn, flags=_re.I)
+        m = _re.match(r"^(.+?)\s+[Ss](\d+)[Ee](\d+)", base)
+        if m:
+            return {"title": m.group(1).strip(), "type": "series",
+                    "season": int(m.group(2)), "episode": int(m.group(3)), "year": None}
+        m = _re.match(r"^(.+?)\s*\((\d{4})\)", base)
+        if m:
+            return {"title": m.group(1).strip(), "type": "movie",
+                    "year": m.group(2), "season": None, "episode": None}
+        return {"title": base.strip(), "type": "movie", "year": None, "season": None, "episode": None}
+
+    groups, now = {}, int(_time.time())
+    for f in orphans:
+        info = _parse(f["filename"])
+        key  = info["title"].lower().strip()
+        if key not in groups:
+            groups[key] = {"info": info, "files": []}
+        groups[key]["files"].append(f)
+
+    created, linked = [], 0
+    for key, g in groups.items():
+        info, files = g["info"], g["files"]
+        with db.conn() as c:
+            ex = c.execute("SELECT id FROM titles WHERE LOWER(title)=LOWER(?)", (info["title"],)).fetchone()
+        if ex:
+            title_id = ex["id"]
+        else:
+            with db.conn() as c:
+                cur = c.execute(
+                    "INSERT INTO titles (title, year, media_type, is_published, is_free, updated_at, created_at) "
+                    "VALUES (?, ?, ?, 1, 0, ?, ?)",
+                    (info["title"], info.get("year"), info["type"], now, now)
+                )
+                title_id = cur.lastrowid
+            created.append({"id": title_id, "title": info["title"], "type": info["type"]})
+        for f in files:
+            season  = f["season"]  if f["season"]  is not None else info.get("season")
+            episode = f["episode"] if f["episode"] is not None else info.get("episode")
+            with db.conn() as c:
+                c.execute("UPDATE files SET title_id=?, season=?, episode=? WHERE id=?",
+                          (title_id, season, episode, f["id"]))
+            linked += 1
+    return jsonify({"ok": True, "created": created, "linked": linked,
+                    "message": f"Created {len(created)} titles, linked {linked} files"})

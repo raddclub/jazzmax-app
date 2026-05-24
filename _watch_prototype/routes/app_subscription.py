@@ -150,12 +150,32 @@ def tid_submit():
 
     now = int(time.time())
     with db.conn() as c:
-        c.execute(
+        cur = c.execute(
             """INSERT INTO tid_payments
                (user_id, phone, amount_pkr, tid, payment_method, plan, status, submitted_at)
                VALUES (?,?,?,?,?,?,?,?)""",
             (user_id, phone, amount_pkr, tid, method, plan, "pending", now)
         )
+        new_payment_id = cur.lastrowid
+
+
+    # ── Auto-approve if SMS already received ────────────────────────────────
+    with db.conn() as c:
+        sms_row = c.execute(
+            "SELECT id FROM received_sms_payments WHERE tid=? AND matched_payment_id IS NULL",
+            (tid,)
+        ).fetchone()
+
+    if sms_row:
+        # SMS is on file — auto-approve immediately
+        _sms_auto_approve(tid, sms_row["id"], plan, user_id, phone, new_payment_id)
+        return jsonify({
+            "ok":     True,
+            "status": "approved",
+            "message": "payment verified! your subscription is now active.",
+            "plan":   plan,
+        }), 200
+    # ────────────────────────────────────────────────────────────────────────
 
     return jsonify({
         "ok": True,
@@ -181,3 +201,90 @@ def tid_status():
 
     payments = [dict(r) for r in rows]
     return jsonify({"payments": payments})
+
+
+
+@bp.route("/tid/check_by_phone")
+def tid_check_by_phone():
+    """Guest-accessible TID status check by phone — no auth required.
+    Used by Flutter guests who submitted TID and poll for approval.
+    Also auto-links subscription when the user later registers with same phone.
+    """
+    phone = request.args.get("phone", "").strip()
+    if not phone:
+        return jsonify({"error": "phone parameter required"}), 400
+
+    with db.conn() as c:
+        rows = c.execute(
+            "SELECT tid, plan, status, amount_pkr, payment_method, submitted_at, reviewed_at "
+            "FROM tid_payments WHERE phone=? ORDER BY submitted_at DESC LIMIT 5",
+            (phone,)
+        ).fetchall()
+
+    payments = [dict(r) for r in rows]
+    approved = next((p for p in payments if p["status"] == "approved"), None)
+
+    # If approved TID exists but user just registered, link subscription now
+    if approved:
+        with db.conn() as c:
+            user_row = c.execute(
+                "SELECT id FROM app_users WHERE phone=?", (phone,)
+            ).fetchone()
+            if user_row:
+                user_id = user_row["id"]
+                existing = c.execute(
+                    "SELECT id FROM app_subscriptions WHERE user_id=? AND is_active=1",
+                    (user_id,)
+                ).fetchone()
+                if not existing:
+                    plan = approved["plan"]
+                    now = int(time.time())
+                    expires = now + {"basic": 30, "standard": 30, "premium": 30}.get(plan, 30) * 86400
+                    c.execute(
+                        "INSERT INTO app_subscriptions"
+                        "(user_id,plan,started_at,expires_at,is_active,created_at) "
+                        "VALUES(?,?,?,?,1,?)",
+                        (user_id, plan, now, expires, now)
+                    )
+                    log.info("Auto-linked pre-approved TID: phone=%s plan=%s uid=%s", phone, plan, user_id)
+
+    return jsonify({
+        "phone": phone,
+        "payments": payments,
+        "has_approved": approved is not None,
+        "approved_plan": approved["plan"] if approved else None,
+    })
+
+
+def _sms_auto_approve(tid: str, sms_id: int, plan: str, user_id, phone: str, payment_id: int):
+    """Immediately approve a TID that was verified by SMS gateway."""
+    import time as _time
+    now = int(_time.time())
+    PLAN_DAYS = {"basic": 30, "standard": 30, "premium": 30}
+    duration  = PLAN_DAYS.get(plan, 30)
+    expires   = now + duration * 86400
+
+    if not user_id and phone:
+        with db.conn() as c:
+            row = c.execute("SELECT id FROM app_users WHERE phone=?", (phone,)).fetchone()
+            if row:
+                user_id = row["id"]
+                c.execute("UPDATE tid_payments SET user_id=? WHERE id=?", (user_id, payment_id))
+
+    with db.conn() as c:
+        c.execute(
+            "UPDATE tid_payments SET status='approved', admin_note='Auto-approved via SMS gateway', reviewed_at=? WHERE id=?",
+            (now, payment_id)
+        )
+        if user_id:
+            c.execute("UPDATE app_subscriptions SET is_active=0 WHERE user_id=?", (user_id,))
+            c.execute(
+                "INSERT INTO app_subscriptions(user_id,plan,started_at,expires_at,is_active,created_at) VALUES(?,?,?,?,1,?)",
+                (user_id, plan, now, expires, now)
+            )
+        c.execute(
+            "UPDATE received_sms_payments SET matched_payment_id=? WHERE id=?",
+            (payment_id, sms_id)
+        )
+    log.info("SMS auto-approved TID=%s user=%s plan=%s", tid, user_id, plan)
+

@@ -1,150 +1,183 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../core/constants.dart';
 
-/// First-run onboarding — shown once on fresh install.
-/// Explains zero-rating, offline browsing, subscription.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
-
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageCtrl = PageController();
-  int _currentPage = 0;
+  final PageController _ctrl = PageController();
+  int _page = 0;
 
-  final List<_OnboardingPage> _pages = const [
-    _OnboardingPage(
-      icon: Icons.signal_cellular_alt_rounded,
-      iconColor: Color(0xFF22C55E),
+  static const List<_PageData> _pages = [
+    _PageData(
+      icon: '📶',
+      gradient: [Color(0xFF22C55E), Color(0xFF16A34A)],
       title: 'Zero-Rated Streaming',
-      subtitle: 'JazzMAX is free of data charges for Jazz SIM users.\nWatch movies and shows without using your internet bundle.',
+      body: 'Watch movies & shows on Jazz SIM without spending any data. JazzMAX traffic is completely free of charge.',
     ),
-    _OnboardingPage(
-      icon: Icons.wifi_off_rounded,
-      iconColor: Color(0xFFF59E0B),
-      title: 'Browse Offline',
-      subtitle: 'The full movie catalog downloads to your phone.\nBrowse, search, and explore without any internet connection.',
+    _PageData(
+      icon: '📱',
+      gradient: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+      title: 'Offline Catalog',
+      body: 'The full movie catalog downloads to your phone. Browse, search and explore 7000+ titles without any internet.',
     ),
-    _OnboardingPage(
-      icon: Icons.movie_filter_rounded,
-      iconColor: Color(0xFFE8002D),
-      title: 'Movies & TV Shows',
-      subtitle: 'Urdu, Punjabi, Pakistani and international content.\nNew titles added every week by the JazzMAX team.',
+    _PageData(
+      icon: '🎬',
+      gradient: [Color(0xFFF59E0B), Color(0xFFD97706)],
+      title: 'Pakistani Content',
+      body: 'Urdu, Punjabi, Pakistani dramas and international hits. New titles added every week.',
     ),
-    _OnboardingPage(
-      icon: Icons.star_rounded,
-      iconColor: Color(0xFFE8002D),
+    _PageData(
+      icon: '⭐',
+      gradient: [Color(0xFFE8002D), Color(0xFFB5001F)],
       title: 'Subscribe to Unlock',
-      subtitle: 'Free plan gives you access to selected content.\nUpgrade to Basic, Standard or Premium for full access.',
+      body: 'Start free. Upgrade to Basic, Standard or Premium to unlock HD quality and all content.',
     ),
   ];
 
   Future<void> _finish() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(AppConstants.onboardingSeenKey, true);
-    if (mounted) {
-      Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-    }
+    if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.login);
   }
 
   @override
-  void dispose() {
-    _pageCtrl.dispose();
-    super.dispose();
-  }
+  void dispose() { _ctrl.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    final isLast = _currentPage == _pages.length - 1;
-
+    final isLast = _page == _pages.length - 1;
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Skip button
-            Align(
-              alignment: Alignment.topRight,
-              child: TextButton(
-                onPressed: _finish,
-                child: const Text(
-                  'Skip',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
+      body: Stack(
+        children: [
+          // Animated gradient background
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 500),
+            decoration: BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment.topCenter,
+                radius: 1.2,
+                colors: [
+                  _pages[_page].gradient[0].withOpacity(0.15),
+                  AppColors.background,
+                ],
               ),
             ),
-
-            // Page view
-            Expanded(
-              child: PageView.builder(
-                controller: _pageCtrl,
-                itemCount: _pages.length,
-                onPageChanged: (i) => setState(() => _currentPage = i),
-                itemBuilder: (_, i) => _pages[i],
-              ),
-            ),
-
-            // Dots
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                _pages.length,
-                (i) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: _currentPage == i ? 20 : 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: _currentPage == i
-                        ? AppColors.primary
-                        : AppColors.textMuted,
-                    borderRadius: BorderRadius.circular(3),
+          ),
+          SafeArea(
+            child: Column(
+              children: [
+                // Skip
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: TextButton(
+                      onPressed: _finish,
+                      child: const Text('Skip',
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                    ),
                   ),
                 ),
-              ),
+                // Pages
+                Expanded(
+                  child: PageView.builder(
+                    controller: _ctrl,
+                    itemCount: _pages.length,
+                    onPageChanged: (i) => setState(() => _page = i),
+                    itemBuilder: (_, i) => _OnboardPage(data: _pages[i], isActive: i == _page),
+                  ),
+                ),
+                // Indicator
+                SmoothPageIndicator(
+                  controller: _ctrl,
+                  count: _pages.length,
+                  effect: ExpandingDotsEffect(
+                    dotWidth: 8,
+                    dotHeight: 8,
+                    expansionFactor: 3,
+                    spacing: 6,
+                    activeDotColor: AppColors.primary,
+                    dotColor: AppColors.textMuted.withOpacity(0.3),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                // Button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
+                  child: _buildButton(isLast),
+                ),
+              ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(height: 24),
-
-            // Action button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-              child: ElevatedButton(
-                onPressed: () {
-                  if (isLast) {
-                    _finish();
-                  } else {
-                    _pageCtrl.nextPage(
-                      duration: const Duration(milliseconds: 300),
-                      curve: Curves.easeInOut,
-                    );
-                  }
-                },
-                child: Text(isLast ? 'Get Started' : 'Next'),
-              ),
-            ),
+  Widget _buildButton(bool isLast) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            _pages[_page].gradient[0],
+            _pages[_page].gradient[1],
           ],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        boxShadow: [
+          BoxShadow(
+            color: _pages[_page].gradient[0].withOpacity(0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          onTap: () {
+            if (isLast) {
+              _finish();
+            } else {
+              _ctrl.nextPage(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic,
+              );
+            }
+          },
+          child: Container(
+            height: 52,
+            alignment: Alignment.center,
+            child: Text(
+              isLast ? 'Get Started' : 'Next →',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
 }
 
-class _OnboardingPage extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-
-  const _OnboardingPage({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-  });
+class _OnboardPage extends StatelessWidget {
+  final _PageData data;
+  final bool isActive;
+  const _OnboardPage({required this.data, required this.isActive});
 
   @override
   Widget build(BuildContext context) {
@@ -155,40 +188,68 @@ class _OnboardingPage extends StatelessWidget {
         children: [
           // Icon circle
           Container(
-            width: 120,
-            height: 120,
+            width: 130,
+            height: 130,
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.12),
               shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  data.gradient[0].withOpacity(0.2),
+                  data.gradient[1].withOpacity(0.08),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              border: Border.all(
+                color: data.gradient[0].withOpacity(0.3),
+                width: 1.5,
+              ),
             ),
-            child: Icon(icon, color: iconColor, size: 56),
-          ),
-          const SizedBox(height: 40),
-
-          // Title
+            child: Center(
+              child: Text(data.icon, style: const TextStyle(fontSize: 56)),
+            ),
+          )
+              .animate(target: isActive ? 1.0 : 0.0)
+              .scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1),
+                  duration: 400.ms, curve: AppCurves.enter),
+          const SizedBox(height: 48),
           Text(
-            title,
+            data.title,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppColors.textPrimary,
-              fontSize: 24,
+              fontSize: 26,
               fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              height: 1.1,
             ),
-          ),
+          )
+              .animate(target: isActive ? 1.0 : 0.0)
+              .fadeIn(duration: 350.ms, delay: 100.ms)
+              .slideY(begin: 0.3, end: 0, duration: 350.ms, curve: AppCurves.standard),
           const SizedBox(height: 16),
-
-          // Subtitle
           Text(
-            subtitle,
+            data.body,
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: AppColors.textMuted,
               fontSize: 15,
-              height: 1.6,
+              height: 1.65,
+              letterSpacing: 0.1,
             ),
-          ),
+          )
+              .animate(target: isActive ? 1.0 : 0.0)
+              .fadeIn(duration: 350.ms, delay: 200.ms),
         ],
       ),
     );
   }
+}
+
+class _PageData {
+  final String icon;
+  final List<Color> gradient;
+  final String title;
+  final String body;
+  const _PageData({required this.icon, required this.gradient, required this.title, required this.body});
 }

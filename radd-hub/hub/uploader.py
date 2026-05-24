@@ -387,7 +387,7 @@ def get_active_account() -> Optional[dict]:
         with db.conn() as c:
             # Prioritize role='flix', then by id
             row = c.execute(
-                "SELECT * FROM accounts WHERE is_active=1 AND validation_key!='' "
+                "SELECT * FROM accounts WHERE is_active=1 "
                 "AND jsessionid!='' ORDER BY (CASE WHEN role='flix' THEN 0 ELSE 1 END), id LIMIT 1"
             ).fetchone()
         if not row:

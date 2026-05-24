@@ -240,6 +240,85 @@ def _parse_tmdb(data: dict, kind: str) -> dict:
     }
 
 
+
+# ---------------------------------------------------------------------------
+# IMDbAPI.dev Fallback (free, no key, great for Pakistani/Punjabi dramas)
+# ---------------------------------------------------------------------------
+
+def fetch_imdbapi(title: str, year: Optional[str] = None, media_type: str = "movie") -> dict:
+    """Search IMDbAPI.dev — free API, no key needed.
+    Excellent for Pakistani/Punjabi/South Asian content absent from TMDB+OMDB.
+    """
+    if not title:
+        return {}
+    
+    try:
+        import requests as _req
+        kinds = ["movie"] if media_type in ("movie",) else ["tvSeries", "movie"]
+        if media_type in ("drama", "series", "tv", "show", "anime"):
+            kinds = ["tvSeries", "tvMiniSeries", "movie"]
+        
+        for kind in kinds:
+            params = {"q": title, "type": kind}
+            if year:
+                params["year"] = str(year)[:4]
+            
+            r = _req.get(
+                "https://imdbapi.dev/api/v1/titles/search",
+                params=params,
+                timeout=10,
+                headers={"User-Agent": "JazzMAX/1.5"}
+            )
+            if r.status_code != 200:
+                continue
+            
+            results = r.json()
+            if not isinstance(results, list):
+                results = (results or {}).get("results") or []
+            
+            if not results:
+                continue
+                
+            item = results[0]
+            poster = ""
+            img = item.get("primaryImage") or {}
+            poster = img.get("url") or item.get("poster") or item.get("image") or ""
+            
+            genres = item.get("genres") or []
+            if isinstance(genres, list):
+                genres_csv = ", ".join(g.get("text", g) if isinstance(g, dict) else str(g) for g in genres)
+            else:
+                genres_csv = str(genres)
+            
+            cast = []
+            for c in (item.get("cast") or [])[:5]:
+                name = c.get("name") or (c.get("fullName") or {}).get("text") or ""
+                if name:
+                    cast.append({"name": name})
+            
+            result = {
+                "title": item.get("primaryTitle") or item.get("title") or title,
+                "year": str(item.get("startYear") or year or "")[:4] or None,
+                "media_type": "tv" if "Series" in kind or "Mini" in kind else "movie",
+                "overview": item.get("plot") or item.get("description") or "",
+                "plot": item.get("plot") or item.get("description") or "",
+                "genres": genres,
+                "genres_csv": genres_csv,
+                "rating": item.get("averageRating") or item.get("rating"),
+                "imdb_id": item.get("id") or item.get("tconst") or "",
+                "poster": poster,
+                "cast": cast,
+                "cast_names": ", ".join(c["name"] for c in cast),
+                "_source": "imdbapi",
+            }
+            if result.get("title"):
+                log.debug("IMDbAPI.dev hit for %r: %s", title, result["title"])
+                return result
+    except Exception as e:
+        log.debug("IMDbAPI.dev fetch failed for %r: %s", title, e)
+    
+    return {}
+
 # ---------------------------------------------------------------------------
 # YouTube Fallback (Good for Punjabi/Regional movies)
 # ---------------------------------------------------------------------------
@@ -332,7 +411,23 @@ def enrich_title(meta: dict, *,
             except Exception as e:
                 log.debug("omdb enrich failed for %r: %s", title, e)
 
-    # 3. AI fallback — Groq → Gemini → OpenAI → OpenRouter
+    # 3. IMDbAPI.dev — free, no key, excellent for Pakistani/Punjabi content
+    needs_poster  = not (enriched.get("poster") or meta.get("poster") or meta.get("poster_share_url"))
+    needs_plot3   = not (enriched.get("plot") or enriched.get("overview") or meta.get("plot") or meta.get("overview"))
+    if needs_plot3 or needs_poster:
+        try:
+            imdb_data = fetch_imdbapi(title, year, kind)
+            if imdb_data:
+                log.debug("IMDbAPI fallback hit for %r", title)
+                for k, v in imdb_data.items():
+                    if k.startswith("_"):
+                        continue
+                    if k not in enriched or not enriched[k]:
+                        enriched[k] = v
+        except Exception as e:
+            log.debug("IMDbAPI enrich failed for %r: %s", title, e)
+
+    # 4. AI fallback — Groq → Gemini → OpenAI → OpenRouter
     #    Best for Pakistani/Indian/South/Punjabi/Chinese content absent from TMDB+OMDB
     needs_plot   = not (enriched.get("plot") or enriched.get("overview")
                         or meta.get("plot") or meta.get("overview"))
@@ -351,7 +446,7 @@ def enrich_title(meta: dict, *,
         except Exception as e:
             log.debug("AI enrich failed for %r: %s", title, e)
 
-    # 4. YouTube — poster-only last resort (trailer thumbnail)
+    # 5. YouTube — poster-only last resort (trailer thumbnail)
     if not (enriched.get("poster") or meta.get("poster") or meta.get("poster_share_url")):
         try:
             yt_data = fetch_youtube_fallback(title, year)

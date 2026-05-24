@@ -135,6 +135,16 @@
                 border:1px solid var(--border);border-radius:6px;color:var(--muted);
                 display:inline-flex;align-items:center;gap:4px"
          title="Export as CSV">⬇ CSV</a>
+      <a href="/api/catalog/db_update"
+         style="padding:5px 10px;font-size:12px;text-decoration:none;white-space:nowrap;
+                border:1px solid var(--border);border-radius:6px;color:var(--muted);
+                display:inline-flex;align-items:center;gap:4px"
+         title="Download db_update.json for zero-rated JazzDrive sync">⬇ DB Update</a>
+      <button onclick="bulkEnrichOmdb()" id="bulk-enrich-btn"
+         style="padding:5px 10px;font-size:12px;white-space:nowrap;
+                border:1px solid var(--border);border-radius:6px;color:var(--muted);
+                background:transparent;cursor:pointer"
+         title="OMDB enrich titles missing metadata (batch of 10)">⚡ Bulk Enrich</button>
     </div>
   </div>
 </div>
@@ -286,7 +296,14 @@
 
   {% if orphans %}
   <div style="padding:16px; border-top: 1px solid var(--border)">
-    <h3 style="font-size:14px; margin-bottom:12px; color:var(--warn)">⚠️ Unidentified Media ({{ orphans|length }})</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="font-size:14px;margin:0;color:var(--warn)">⚠️ Unidentified Media ({{ orphans|length }})</h3>
+      <button onclick="autoIdentifyOrphans()" id="auto-id-btn"
+              style="padding:4px 12px;font-size:11px;background:var(--accent);
+                     border:none;color:#fff;border-radius:6px;cursor:pointer;white-space:nowrap">
+        🪄 Auto-Identify All
+      </button>
+    </div>
     <div class="muted" style="font-size:12px; margin-bottom:12px">These files were found but could not be matched with movie metadata.</div>
     <div class="table-wrap">
       <table>
@@ -305,11 +322,17 @@
             <td class="muted">{{ (f.size_bytes / 1048576) | round(1) }} MB</td>
             <td><span class="badge b-mut">{{ f.source }}</span></td>
             <td>
-              {% if f.share_url %}
-              <a href="{{ f.share_url }}" target="_blank" style="color:var(--accent)">Open ↗</a>
-              {% else %}
-              <span class="muted">No link</span>
-              {% endif %}
+              <div style="display:flex;gap:6px;align-items:center">
+                {% if f.share_url %}
+                <a href="{{ f.share_url }}" target="_blank" style="color:var(--accent)">Open ↗</a>
+                {% else %}
+                <span class="muted">No link</span>
+                {% endif %}
+                <button onclick="openLinkModal({{ f.id }}, {{ f.filename|tojson }})"
+                        style="font-size:11px;padding:2px 8px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:4px;cursor:pointer;white-space:nowrap">
+                  🔗 Link
+                </button>
+              </div>
             </td>
           </tr>
           {% endfor %}
@@ -376,6 +399,20 @@
             <button id="detail-queue-btn" style="font-size:12px;padding:5px 14px;width:100%"
                     onclick="queueTitle()">+ Add to Queue</button>
           </div>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+            <button id="detail-enrich-btn" style="font-size:11px;padding:4px 10px;width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer"
+                    onclick="enrichOmdb()">⚡ OMDB Enrich</button>
+            <button id="detail-push-poster-btn" style="font-size:11px;padding:4px 10px;width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer;margin-top:4px"
+                    onclick="pushPosterToJd()">☁ Push Poster to JD</button>
+            <button id="detail-free-btn" style="font-size:11px;padding:4px 10px;width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer"
+                    onclick="toggleFree()">🔓 Free</button>
+            <button id="detail-pub-btn" style="font-size:11px;padding:4px 10px;width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer"
+                    onclick="togglePublished()">📺 Published</button>
+            <button style="font-size:11px;padding:4px 10px;width:100%;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;cursor:pointer"
+                    onclick="editTitle()">✏️ Edit</button>
+            <button style="font-size:11px;padding:4px 10px;width:100%;background:transparent;border:1px solid var(--err);color:var(--err);border-radius:6px;cursor:pointer"
+                    onclick="deleteTitle()">🗑 Delete</button>
+          </div>
         </div>
         <div>
           <div id="detail-overview" class="muted" style="font-size:13px;line-height:1.6;margin-bottom:12px"></div>
@@ -390,6 +427,60 @@
       <div id="detail-recs-section" style="margin-top:18px;display:none">
         <h4 style="margin:0 0 8px">You may also like</h4>
         <div id="detail-recs" class="rec-grid"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Title Modal ─────────────────────────────────────────────────── -->
+<div id="edit-modal" class="modal" style="display:none" onclick="if(event.target===this)closeEdit()">
+  <div class="modal-box" style="max-width:540px">
+    <div class="modal-head">
+      <h3>Edit Title</h3>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="closeEdit()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px">
+        <div><label>Title<br><input id="edit-title" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <label>Year<br><input id="edit-year" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+          <label>Type<br>
+            <select id="edit-type" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px">
+              <option value="movie">Movie</option><option value="series">Series</option>
+              <option value="anime">Anime</option><option value="drama">Drama</option>
+            </select>
+          </label>
+        </div>
+        <label>Rating (TMDB)<br><input id="edit-rating" type="number" min="0" max="10" step="0.1" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+        <label>Director<br><input id="edit-director" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+        <label>Cast (comma-separated)<br><input id="edit-cast" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+        <label>Genres (comma-separated)<br><input id="edit-genres" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+        <label>Languages<br><input id="edit-langs" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+        <label>Plot / Description<br><textarea id="edit-plot" rows="4" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px;resize:vertical"></textarea></label>
+        <label>Poster URL<br><input id="edit-poster" style="width:100%;padding:6px 8px;font-size:13px;background:var(--panel2);border:1px solid var(--border);color:var(--text);border-radius:6px"></label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button onclick="saveEdit()" style="flex:1;padding:8px;font-weight:600">Save Changes</button>
+          <button class="ghost" onclick="closeEdit()" style="flex:1;padding:8px">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Link File to Title Modal ──────────────────────────────────────────── -->
+<div id="link-modal" class="modal" style="display:none" onclick="if(event.target===this)closeLinkModal()">
+  <div class="modal-box" style="max-width:480px">
+    <div class="modal-head">
+      <h3>Link File to Title</h3>
+      <button class="ghost" style="padding:4px 10px;font-size:12px" onclick="closeLinkModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px" id="link-filename"></div>
+      <input id="link-search" placeholder="Search titles…" oninput="searchLinkTitles(this.value)"
+             style="width:100%;padding:6px 10px;font-size:13px;background:var(--panel2);
+                    border:1px solid var(--border);color:var(--text);border-radius:6px;margin-bottom:10px">
+      <div id="link-results" style="max-height:300px;overflow-y:auto;font-size:13px">
+        <div class="muted">Type to search titles…</div>
       </div>
     </div>
   </div>
@@ -450,6 +541,7 @@ function openDetail(id){
   loadTitleFiles(id);
   document.getElementById('detail-recs-section').style.display='none';
   if(t.tmdb_id) loadRecs(t.tmdb_id,t.media_type||'movie');
+  _initAdminButtons(id);
   document.getElementById('detail-modal').style.display='flex';
 }
 function closeDetail(){
@@ -505,4 +597,248 @@ function filterByGenre(g){
   url.searchParams.set('genre',g);
   location.href=url.toString();
 }
+// ── Admin actions ───────────────────────────────────────────────────────
+let _editTitleId = null;
+let _linkFileId  = null;
+
+function editTitle() {
+  const t = _currentTitle; if (!t) return;
+  _editTitleId = t.id;
+  document.getElementById('edit-title').value   = t.title || '';
+  document.getElementById('edit-year').value    = t.year  || '';
+  document.getElementById('edit-type').value    = t.media_type || 'movie';
+  document.getElementById('edit-rating').value  = t.rating || '';
+  document.getElementById('edit-director').value= t.director || '';
+  document.getElementById('edit-cast').value    = t.cast_names || '';
+  document.getElementById('edit-genres').value  = t.genres_csv || '';
+  document.getElementById('edit-langs').value   = t.languages_csv || '';
+  document.getElementById('edit-plot').value    = t.overview || '';
+  document.getElementById('edit-poster').value  = t.poster || '';
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+function closeEdit() { document.getElementById('edit-modal').style.display='none'; }
+
+async function saveEdit() {
+  if (!_editTitleId) return;
+  const body = {
+    title:          document.getElementById('edit-title').value,
+    year:           document.getElementById('edit-year').value,
+    media_type:     document.getElementById('edit-type').value,
+    rating:         parseFloat(document.getElementById('edit-rating').value) || null,
+    director:       document.getElementById('edit-director').value,
+    cast_names:     document.getElementById('edit-cast').value,
+    genres_csv:     document.getElementById('edit-genres').value,
+    languages_csv:  document.getElementById('edit-langs').value,
+    plot:           document.getElementById('edit-plot').value,
+    overview:       document.getElementById('edit-plot').value,
+    poster:         document.getElementById('edit-poster').value,
+  };
+  try {
+    const d = await fetch(`/library/api/title/${_editTitleId}`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+    if (d.ok) {
+      toast('Saved!');
+      // Update local cache
+      if (_titles[_editTitleId]) Object.assign(_titles[_editTitleId], {
+        title: body.title, year: body.year, media_type: body.media_type,
+        director: body.director, cast_names: body.cast_names,
+        genres_csv: body.genres_csv, languages_csv: body.languages_csv,
+        overview: body.plot, poster: body.poster,
+      });
+      closeEdit();
+      closeDetail();
+      setTimeout(() => location.reload(), 800);
+    } else { toast('Error: '+(d.error||'?')); }
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+async function enrichOmdb() {
+  if (!_currentTitle) return;
+  const id = _currentTitle.id;
+  const btn = document.getElementById('detail-enrich-btn');
+  if (btn) { btn.textContent = '⏳ Enriching…'; btn.disabled = true; }
+  try {
+    const d = await fetch(`/library/api/title/${id}/enrich-omdb`, {method:'POST'}).then(r=>r.json());
+    if (d.ok) {
+      toast(`OMDB: updated ${d.updated?.join(', ')||'nothing new'} for "${d.omdb_title||''}"`);
+      setTimeout(() => location.reload(), 1200);
+    } else { toast('OMDB error: '+(d.error||'?')); }
+  } catch(e) { toast('Error: '+e.message); }
+  finally {
+    if (btn) { btn.textContent = '⚡ OMDB Enrich'; btn.disabled = false; }
+  }
+}
+
+async function toggleFree() {
+  if (!_currentTitle) return;
+  const id = _currentTitle.id;
+  const btn = document.getElementById('detail-free-btn');
+  // Read current state from DB
+  const curFree = _currentTitle._is_free;
+  const newVal  = curFree ? 0 : 1;
+  try {
+    const d = await fetch(`/library/api/title/${id}/set-free`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({is_free: newVal})
+    }).then(r=>r.json());
+    if (d.ok) {
+      _currentTitle._is_free = newVal;
+      if (btn) btn.textContent = newVal ? '🔒 Mark Paid' : '🔓 Mark Free';
+      toast(newVal ? 'Marked as FREE (guests can play)' : 'Marked as Paid');
+    }
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+async function togglePublished() {
+  if (!_currentTitle) return;
+  const id = _currentTitle.id;
+  const btn = document.getElementById('detail-pub-btn');
+  const curPub = _currentTitle._is_published;
+  const newVal = curPub ? 0 : 1;
+  try {
+    const d = await fetch(`/library/api/title/${id}/set-published`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({is_published: newVal})
+    }).then(r=>r.json());
+    if (d.ok) {
+      _currentTitle._is_published = newVal;
+      if (btn) btn.textContent = newVal ? '📵 Unpublish' : '📺 Publish';
+      toast(newVal ? 'Title published — visible in app' : 'Title unpublished — hidden from app');
+    }
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+async function deleteTitle() {
+  if (!_currentTitle) return;
+  const id = _currentTitle.id;
+  const name = _currentTitle.title;
+  const deleteFiles = confirm(`Delete "${name}" and ALL its files? Click Cancel to keep files (orphan them).`);
+  if (!confirm(`⚠️ Are you sure you want to delete "${name}"? This cannot be undone.`)) return;
+  try {
+    const d = await fetch(`/library/api/title/${id}/delete`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({delete_files: deleteFiles})
+    }).then(r=>r.json());
+    if (d.ok) { toast(`Deleted "${name}"`); closeDetail(); setTimeout(() => location.reload(), 800); }
+    else { toast('Error: '+(d.error||'?')); }
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+async function bulkEnrichOmdb() {
+  const btn = document.getElementById('bulk-enrich-btn');
+  if (btn) { btn.textContent = '⏳ Enriching…'; btn.disabled = true; }
+  try {
+    const d = await fetch('/library/api/titles/bulk-enrich-omdb', {method:'POST'}).then(r=>r.json());
+    if (d.ok) {
+      const ok = d.results?.filter(r=>r.ok).length || 0;
+      toast(`Enriched ${ok}/${d.processed} titles`);
+      if (ok > 0) setTimeout(() => location.reload(), 1500);
+    } else { toast('Error: '+(d.error||'?')); }
+  } catch(e) { toast('Error: '+e.message); }
+  finally { if (btn) { btn.textContent = '⚡ Bulk Enrich'; btn.disabled = false; } }
+}
+
+// ── _initAdminButtons — called by openDetail to refresh free/published labels ─
+function _initAdminButtons(id) {
+  fetch(`/library/api/title/${id}`).then(r=>r.json()).then(d=>{
+    if (d.title) {
+      const t = d.title;
+      if (_currentTitle) {
+        _currentTitle._is_free       = t.is_free || 0;
+        _currentTitle._is_published  = t.is_published || 0;
+      }
+      const fb = document.getElementById('detail-free-btn');
+      const pb = document.getElementById('detail-pub-btn');
+      if (fb) fb.textContent = t.is_free ? '🔒 Mark Paid' : '🔓 Mark Free';
+      if (pb) pb.textContent = t.is_published ? '📵 Unpublish' : '📺 Publish';
+    }
+  }).catch(()=>{});
+}
+
+// ── Link file to title ────────────────────────────────────────────────────
+function openLinkModal(fileId, filename) {
+  _linkFileId = fileId;
+  document.getElementById('link-filename').textContent = 'File: ' + filename;
+  document.getElementById('link-search').value = '';
+  document.getElementById('link-results').innerHTML = '<div class="muted">Type to search titles…</div>';
+  document.getElementById('link-modal').style.display = 'flex';
+}
+function closeLinkModal() { document.getElementById('link-modal').style.display='none'; }
+
+async function searchLinkTitles(q) {
+  if (!q.trim()) {
+    document.getElementById('link-results').innerHTML = '<div class="muted">Type to search titles…</div>';
+    return;
+  }
+  try {
+    const d = await fetch(`/library/api/search?q=${encodeURIComponent(q)}&limit=20`).then(r=>r.json());
+    const results = d.results || [];
+    const el = document.getElementById('link-results');
+    if (!results.length) { el.innerHTML = '<div class="muted">No titles found.</div>'; return; }
+    el.innerHTML = results.map(t => `
+      <div style="padding:8px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;justify-content:space-between;align-items:center"
+           onclick="linkFileTo(${t.id}, ${JSON.stringify(t.title)})">
+        <span>${t.title} ${t.year ? '('+t.year+')':''}</span>
+        <span class="badge b-info">${t.media_type||'?'}</span>
+      </div>`).join('');
+  } catch(e) { document.getElementById('link-results').innerHTML = '<div class="muted">Error loading.</div>'; }
+}
+
+async function linkFileTo(titleId, titleName) {
+  if (!_linkFileId) return;
+  try {
+    const d = await fetch(`/library/api/file/${_linkFileId}/link`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({title_id: titleId})
+    }).then(r=>r.json());
+    if (d.ok) {
+      toast(`Linked to "${titleName}"`);
+      closeLinkModal();
+      setTimeout(() => location.reload(), 800);
+    } else { toast('Error: '+(d.error||'?')); }
+  } catch(e) { toast('Error: '+e.message); }
+}
+
+// ── Auto-identify orphan files ─────────────────────────────────────────────
+async function autoIdentifyOrphans() {
+  const btn = document.getElementById('auto-id-btn');
+  if (btn) { btn.textContent = '⏳ Identifying…'; btn.disabled = true; }
+  try {
+    const d = await fetch('/library/api/files/auto-identify', {method:'POST'}).then(r=>r.json());
+    if (d.ok) {
+      const msg = d.created.length
+        ? 'Created ' + d.created.length + ' title(s), linked ' + d.linked + ' file(s): ' +
+          d.created.map(t => t.title).join(', ')
+        : 'Linked ' + d.linked + ' file(s) to existing titles';
+      toast(msg);
+      if (d.linked > 0) setTimeout(() => location.reload(), 1200);
+    } else { toast('Error: ' + (d.error || '?')); }
+  } catch(e) { toast('Error: ' + e.message); }
+  finally {
+    if (btn) { btn.textContent = '🪄 Auto-Identify All'; btn.disabled = false; }
+  }
+}
+
+// Push poster image to JazzDrive same folder as video
+async function pushPosterToJd() {
+  const btn = document.getElementById('detail-push-poster-btn');
+  if (btn) { btn.textContent = '⏳ Uploading…'; btn.disabled = true; }
+  try {
+    const d = await fetch(`/library/api/title/${currentDetailId}/push-poster-to-jd`,
+                          {method:'POST'}).then(r=>r.json());
+    if (d.ok) {
+      const url = d.poster_share_url || '';
+      toast('Poster uploaded to JazzDrive! ' + (url ? '— view link saved' : '— no view link yet'));
+    } else {
+      toast('Error: ' + (d.error || '?'));
+    }
+  } catch(e) { toast('Error: ' + e.message); }
+  finally {
+    if (btn) { btn.textContent = '☁ Push Poster to JD'; btn.disabled = false; }
+  }
+}
+
 </script>{% endblock %}

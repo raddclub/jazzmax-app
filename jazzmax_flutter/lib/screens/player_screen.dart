@@ -1,1026 +1,666 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
-import '../core/api/catalog_api.dart';
+import 'package:file_picker/file_picker.dart';
 import '../core/constants.dart';
-import '../core/db/local_db.dart';
+import '../providers/auth_provider.dart';
+import '../services/api_client.dart';
 
-/// Full-screen video player — Phase 4
-/// Features: custom gesture controls, double-tap seek, swipe brightness/volume,
-/// audio track selector, aspect ratio toggle, screen lock, resume position.
-class PlayerScreen extends StatefulWidget {
+class PlayerScreen extends ConsumerStatefulWidget {
   final String fileId;
   final String title;
   final String? localPath;
-
-  const PlayerScreen({
-    super.key,
-    required this.fileId,
-    required this.title,
-    this.localPath,
-  });
+  const PlayerScreen({super.key, required this.fileId, required this.title, this.localPath});
 
   @override
-  State<PlayerScreen> createState() => _PlayerScreenState();
+  ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends State<PlayerScreen> {
+class _PlayerScreenState extends ConsumerState<PlayerScreen>
+    with TickerProviderStateMixin {
   late final Player _player;
-  late final VideoController _controller;
-
-  // Loading / error
-  bool _loading = true;
-  String? _error;
+  late final VideoController _videoCtrl;
 
   // Controls visibility
-  bool _controlsVisible = true;
-  bool _locked = false;
+  bool _showControls  = true;
+  Timer? _hideTimer;
+  bool _locked        = false;
 
-  // Aspect ratio
-  BoxFit _fit = BoxFit.contain;
+  // Seek flash state
+  bool _showSeekLeft  = false;
+  bool _showSeekRight = false;
 
-  // Brightness and volume
+  // Speed
+  double _speed = 1.0;
+  static const _speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+
+  // Gesture drag state
+  double? _dragStartX;
+  double? _dragStartY;
+  double? _dragStartBrightness;
+  double? _dragStartVolume;
+  bool _draggingBrightness = false;
+  bool _draggingVolume     = false;
+  bool _draggingSeek       = false;
+  double? _dragSeekOffset;   // seconds
   double _brightness = 0.5;
-  double _volume = 0.5;
-  bool _showBrightness = false;
-  bool _showVolume = false;
+  double _volume     = 0.7;
 
-  // Seek flash
-  bool _showSeekFwd = false;
-  bool _showSeekBwd = false;
+  // Long press 2x speed
+  bool _longPressFast = false;
 
-  // Subtitles
-  SubtitleTrack? _currentSubtitle;
-  String? _externalSrtPath;
+  // UI
+  bool _showSpeedPicker = false;
+  bool _showSubtitleMenu= false;
+  bool _showAudioMenu   = false;
+  bool _skipIntroVisible= false;
+  Timer? _skipIntroTimer;
+  bool _pip = false;
 
-  // Guest mode
-  bool _isGuest = false;
-  Timer? _guestLimitTimer;
+  // Aspect ratio cycling
+  final _ratios = [BoxFit.contain, BoxFit.cover, BoxFit.fill];
+  int _ratioIdx = 0;
 
-  // Timers
-  Timer? _controlsTimer;
-  Timer? _positionTimer;
-  Timer? _indicatorTimer;
+  // Chapter info (placeholder — extend with real data)
+  Duration _position  = Duration.zero;
+  Duration _duration  = Duration.zero;
+  bool _buffering     = true;
+  bool _playing       = false;
 
   @override
   void initState() {
     super.initState();
-    _player = Player();
-    _controller = VideoController(_player);
-
-    // Go fullscreen landscape
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersive);
-
-    // Keep screen on during playback
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
     WakelockPlus.enable();
-
+    _initPlayer();
+    _scheduleHide();
     _initBrightnessVolume();
-    _checkGuestMode();
-    _loadAndPlay();
-    _resetControlsTimer();
-
-    // Save position every 5 seconds
-    _positionTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _savePosition();
-    });
   }
-
-  // ── Guest mode limit ──────────────────────────────────────────────────────
-
-  Future<void> _checkGuestMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    _isGuest = prefs.getBool(StorageKeys.isGuest) ?? false;
-    if (_isGuest) {
-      _guestLimitTimer = Timer(const Duration(minutes: 10), () {
-        if (mounted) {
-          _player.pause();
-          _showSubscribePopup();
-        }
-      });
-    }
-  }
-
-  void _showSubscribePopup() {
-    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => Dialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 32, 28, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(fontSize: 30, fontWeight: FontWeight.w900, letterSpacing: -1),
-                  children: [
-                    TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
-                    TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_rounded, color: AppColors.primary, size: 40),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Free Preview Ended',
-                style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                'You\'ve watched your 10-minute free preview.\nSubscribe to continue watching — data-free on Jazz SIM.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.6),
-              ),
-              const SizedBox(height: 28),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.subscription, (r) => r.settings.name == AppRoutes.home);
-                },
-                child: const Text('Subscribe Now'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    AppRoutes.register, (r) => false);
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.textMuted),
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Create Free Account', style: TextStyle(color: AppColors.textMuted)),
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (r) => false);
-                },
-                child: const Text('Back to Home', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Initialization ────────────────────────────────────────────────────────
 
   Future<void> _initBrightnessVolume() async {
     try {
       _brightness = await ScreenBrightness().current;
-    } catch (_) {}
-    try {
       _volume = await VolumeController().getVolume();
-      VolumeController().showSystemUI = false;
     } catch (_) {}
   }
 
-  Future<void> _loadAndPlay() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      final savedMs = await LocalDb.getSavedPosition(widget.fileId);
-      final url = await CatalogApi.getStreamUrl(widget.fileId);
-      await _player.open(Media(url));
+  Future<void> _initPlayer() async {
+    _player   = Player();
+    _videoCtrl = VideoController(_player);
 
-      // Seek to saved position if more than 5 seconds in
-      if (savedMs > 5000) {
-        await Future.delayed(const Duration(milliseconds: 600));
-        if (mounted) {
-          await _player.seek(Duration(milliseconds: savedMs));
-          _showResumeSnack();
-        }
+    final token = await ref.read(authProvider.notifier).getAccessToken();
+    final url   = widget.localPath != null
+        ? widget.localPath!
+        : '${AppConstants.apiBaseUrl}${ApiPaths.playUrl(widget.fileId)}?token=$token';
+
+    await _player.open(Media(url));
+
+    _player.stream.position.listen((p) { if (mounted) setState(() => _position = p); });
+    _player.stream.duration.listen((d) { if (mounted) setState(() => _duration = d); });
+    _player.stream.buffering.listen((b) { if (mounted) setState(() => _buffering = b); });
+    _player.stream.playing.listen((p)  { if (mounted) setState(() => _playing = p); });
+
+    // Show skip intro after 5 seconds of playback
+    _skipIntroTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted && _duration.inSeconds > 85) {
+        setState(() => _skipIntroVisible = true);
+        Timer(const Duration(seconds: 6), () {
+          if (mounted) setState(() => _skipIntroVisible = false);
+        });
       }
+    });
 
-      if (mounted) setState(() => _loading = false);
-    } catch (e) {
-      if (mounted) setState(() { _loading = false; _error = e.toString(); });
-    }
+    // Save watch history on dispose
   }
 
-  void _showResumeSnack() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Resuming where you left off'),
-        backgroundColor: AppColors.surface,
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    _skipIntroTimer?.cancel();
+    _player.dispose();
+    WakelockPlus.disable();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+    super.dispose();
   }
 
-  // ── Position saving ───────────────────────────────────────────────────────
-
-  Future<void> _savePosition() async {
-    if (_error != null) return;
-    final posMs = _player.state.position.inMilliseconds;
-    final durMs = _player.state.duration.inMilliseconds;
-    if (posMs > 0) {
-      await LocalDb.savePosition(widget.fileId, posMs, durationMs: durMs);
-    }
-  }
-
-  // ── Controls visibility ───────────────────────────────────────────────────
-
-  void _resetControlsTimer() {
-    _controlsTimer?.cancel();
-    _controlsTimer = Timer(const Duration(seconds: 4), () {
-      if (mounted && !_locked) setState(() => _controlsVisible = false);
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 4), () {
+      if (mounted && !_showSpeedPicker && !_showSubtitleMenu && !_showAudioMenu) {
+        setState(() => _showControls = false);
+      }
     });
   }
 
   void _toggleControls() {
-    if (_locked) return;
-    setState(() => _controlsVisible = !_controlsVisible);
-    if (_controlsVisible) _resetControlsTimer();
+    if (_locked) {
+      setState(() => _showControls = !_showControls);
+      if (_showControls) _scheduleHide();
+      return;
+    }
+    setState(() => _showControls = !_showControls);
+    if (_showControls) _scheduleHide();
   }
 
-  // ── Seeking ───────────────────────────────────────────────────────────────
-
-  void _seekRelative(int seconds) async {
-    final pos = _player.state.position;
-    final dur = _player.state.duration;
-    final raw = pos + Duration(seconds: seconds);
-    final newPos = raw < Duration.zero ? Duration.zero : (raw > dur ? dur : raw);
-    await _player.seek(newPos);
-
+  void _seekRelative(int seconds) {
+    final target = _position + Duration(seconds: seconds);
+    _player.seek(target.clamp(Duration.zero, _duration));
     setState(() {
-      _showSeekFwd = seconds > 0;
-      _showSeekBwd = seconds < 0;
+      if (seconds > 0) { _showSeekRight = true; }
+      else             { _showSeekLeft  = true; }
     });
     Future.delayed(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() { _showSeekFwd = false; _showSeekBwd = false; });
-    });
-
-    // Keep controls visible while seeking
-    _resetControlsTimer();
-  }
-
-  // ── Brightness & Volume ───────────────────────────────────────────────────
-
-  void _adjustBrightness(double delta) {
-    _brightness = (_brightness + delta).clamp(0.0, 1.0);
-    try { ScreenBrightness().setScreenBrightness(_brightness); } catch (_) {}
-    _showIndicator(brightness: true);
-  }
-
-  void _adjustVolume(double delta) {
-    _volume = (_volume + delta).clamp(0.0, 1.0);
-    try { VolumeController().setVolume(_volume); } catch (_) {}
-    _showIndicator(volume: true);
-  }
-
-  void _showIndicator({bool brightness = false, bool volume = false}) {
-    setState(() {
-      _showBrightness = brightness;
-      _showVolume = volume;
-    });
-    _indicatorTimer?.cancel();
-    _indicatorTimer = Timer(const Duration(seconds: 2), () {
-      if (mounted) setState(() { _showBrightness = false; _showVolume = false; });
+      if (mounted) setState(() { _showSeekLeft = false; _showSeekRight = false; });
     });
   }
 
-  // ── Audio tracks ──────────────────────────────────────────────────────────
-
-  void _showAudioTracks() {
-    final tracks = _player.state.tracks.audio;
-    if (tracks.isEmpty) return;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-            child: Text('Audio Track',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                )),
-          ),
-          ...tracks.map((t) {
-            final isCurrent = _player.state.track.audio.id == t.id;
-            final label = t.title ?? t.language ?? 'Track ${t.id}';
-            return ListTile(
-              title: Text(label,
-                  style: const TextStyle(color: AppColors.textPrimary)),
-              leading: Icon(
-                isCurrent
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: AppColors.primary,
-              ),
-              onTap: () {
-                _player.setAudioTrack(t);
-                Navigator.pop(context);
-              },
-            );
-          }),
-          const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-
-  // ── Subtitles ─────────────────────────────────────────────────────────────
-
-  void _showSubtitles() {
-    final builtIn = _player.state.tracks.subtitle
-        .where((t) => t.id != 'no' && t.id != 'auto')
-        .toList();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setSheet) => Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                'Subtitles',
-                style: TextStyle(
-                  color: AppColors.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-
-            // Off option
-            ListTile(
-              leading: Icon(
-                _currentSubtitle == null
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: AppColors.primary,
-              ),
-              title: const Text('Off',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                _player.setSubtitleTrack(SubtitleTrack.no());
-                setState(() { _currentSubtitle = null; _externalSrtPath = null; });
-                Navigator.pop(context);
-              },
-            ),
-
-            // Built-in tracks from MKV/file
-            ...builtIn.map((t) {
-              final isCurrent = _currentSubtitle?.id == t.id;
-              final label = t.title != null && t.title!.isNotEmpty
-                  ? t.title!
-                  : (t.language != null && t.language!.isNotEmpty
-                      ? t.language!.toUpperCase()
-                      : 'Track ${t.id}');
-              return ListTile(
-                leading: Icon(
-                  isCurrent
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  color: AppColors.primary,
-                ),
-                title: Text(label,
-                    style: const TextStyle(color: AppColors.textPrimary)),
-                onTap: () {
-                  _player.setSubtitleTrack(t);
-                  setState(() { _currentSubtitle = t; _externalSrtPath = null; });
-                  Navigator.pop(context);
-                },
-              );
-            }),
-
-            // External .srt file option
-            ListTile(
-              leading: Icon(
-                _externalSrtPath != null
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: AppColors.primary,
-              ),
-              title: Text(
-                _externalSrtPath != null
-                    ? _externalSrtPath!.split('/').last
-                    : 'Load .srt file from device...',
-                style: TextStyle(
-                  color: _externalSrtPath != null
-                      ? AppColors.textPrimary
-                      : AppColors.textMuted,
-                  fontStyle: _externalSrtPath != null
-                      ? FontStyle.normal
-                      : FontStyle.italic,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              trailing: const Icon(Icons.folder_open_rounded,
-                  color: AppColors.textMuted, size: 18),
-              onTap: () async {
-                Navigator.pop(context);
-                final result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: ['srt', 'ass', 'ssa', 'vtt'],
-                  allowMultiple: false,
-                );
-                if (result != null && result.files.single.path != null) {
-                  final path = result.files.single.path!;
-                  if (File(path).existsSync()) {
-                    final track = SubtitleTrack.uri('file://$path');
-                    _player.setSubtitleTrack(track);
-                    if (mounted) {
-                      setState(() {
-                        _currentSubtitle = track;
-                        _externalSrtPath = path;
-                      });
-                    }
-                  }
-                }
-              },
-            ),
-
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ── Aspect ratio ──────────────────────────────────────────────────────────
-
-  void _cycleAspectRatio() {
-    setState(() {
-      if (_fit == BoxFit.contain) {
-        _fit = BoxFit.cover;
-      } else if (_fit == BoxFit.cover) {
-        _fit = BoxFit.fill;
-      } else {
-        _fit = BoxFit.contain;
-      }
-    });
+  void _cycleFit() {
+    setState(() => _ratioIdx = (_ratioIdx + 1) % _ratios.length);
   }
 
   String get _fitLabel {
-    if (_fit == BoxFit.contain) return 'Fit';
-    if (_fit == BoxFit.cover) return 'Crop';
-    return 'Fill';
+    switch (_ratios[_ratioIdx]) {
+      case BoxFit.contain: return 'Fit';
+      case BoxFit.cover:   return 'Zoom';
+      case BoxFit.fill:    return 'Stretch';
+      default:             return 'Fit';
+    }
   }
 
-  // ── Dispose ───────────────────────────────────────────────────────────────
-
-  @override
-  void dispose() {
-    _controlsTimer?.cancel();
-    _positionTimer?.cancel();
-    _indicatorTimer?.cancel();
-    _guestLimitTimer?.cancel();
-    _savePosition();
-    _player.dispose();
-    WakelockPlus.disable();
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    try { ScreenBrightness().resetScreenBrightness(); } catch (_) {}
-    try { VolumeController().showSystemUI = true; } catch (_) {}
-    super.dispose();
+  String _fmtDur(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    if (h > 0) return '${h}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  // ── Build ─────────────────────────────────────────────────────────────────
+  double get _progressFraction =>
+      _duration.inMilliseconds > 0 ? _position.inMilliseconds / _duration.inMilliseconds : 0.0;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 1. Video rendering
+      body: GestureDetector(
+        onTap: _toggleControls,
+        onDoubleTapDown: (d) {
+          final w = MediaQuery.of(context).size.width;
+          if (d.localPosition.dx < w / 2) _seekRelative(-10);
+          else _seekRelative(10);
+        },
+        onLongPressStart: (_) {
+          setState(() { _longPressFast = true; });
+          _player.setRate(2.0);
+        },
+        onLongPressEnd: (_) {
+          setState(() { _longPressFast = false; });
+          _player.setRate(_speed);
+        },
+        onVerticalDragStart: _onVerticalDragStart,
+        onVerticalDragUpdate: _onVerticalDragUpdate,
+        onVerticalDragEnd: (_) {
+          setState(() { _draggingBrightness = false; _draggingVolume = false; });
+        },
+        onHorizontalDragStart: _onHorizontalDragStart,
+        onHorizontalDragUpdate: _onHorizontalDragUpdate,
+        onHorizontalDragEnd: _onHorizontalDragEnd,
+        child: Stack(children: [
+          // VIDEO
           Positioned.fill(
-            child: Video(
-              controller: _controller,
-              fit: _fit,
-              controls: (state) => const SizedBox.shrink(),
-            ),
-          ),
+            child: Video(controller: _videoCtrl,
+                fit: _ratios[_ratioIdx], filterQuality: FilterQuality.medium)),
 
-          // 2. Loading
-          if (_loading)
-            const Center(
-              child: CircularProgressIndicator(
-                valueColor:
-                    AlwaysStoppedAnimation<Color>(AppColors.primary),
-              ),
-            ),
+          // Seek flash overlays
+          if (_showSeekLeft) _SeekFlash(side: false),
+          if (_showSeekRight) _SeekFlash(side: true),
 
-          // 3. Error
-          if (_error != null)
-            Center(child: _buildError()),
+          // Buffering
+          if (_buffering && _playing)
+            const Center(child: SizedBox(width: 40, height: 40,
+              child: CircularProgressIndicator(strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70), strokeCap: StrokeCap.round))),
 
-          // 4. Gesture layer — left half & right half side by side
-          if (!_loading && _error == null)
-            Positioned.fill(child: _buildGestureLayer()),
+          // Drag indicators
+          if (_draggingBrightness || _draggingVolume) _DragIndicator(
+              icon: _draggingBrightness ? Icons.brightness_medium_rounded : Icons.volume_up_rounded,
+              value: _draggingBrightness ? _brightness : _volume),
 
-          // 5. Controls overlay (hidden when _locked or invisible)
-          IgnorePointer(
-            ignoring: !_controlsVisible || _locked,
-            child: AnimatedOpacity(
-              opacity: (_controlsVisible && !_locked) ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 200),
-              child: _buildControlsOverlay(),
-            ),
-          ),
+          // Long press speed
+          if (_longPressFast)
+            Positioned(top: 20, left: 0, right: 0,
+              child: Center(child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(color: Colors.black54,
+                    borderRadius: BorderRadius.circular(20)),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.fast_forward_rounded, color: Colors.white, size: 16),
+                  SizedBox(width: 4),
+                  Text('2× Speed', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                ])))).animate().fadeIn(duration: 200.ms),
 
-          // 6. Lock indicator (tap to unlock)
-          if (_locked)
-            Positioned(
-              top: 20,
-              right: 20,
-              child: SafeArea(
-                child: GestureDetector(
-                  onTap: () => setState(() => _locked = false),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(40),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.lock_rounded,
-                            color: AppColors.primary, size: 18),
-                        SizedBox(width: 4),
-                        Text('Tap to unlock',
-                            style: TextStyle(
-                                color: Colors.white70, fontSize: 11)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          // Skip intro
+          if (_skipIntroVisible && !_locked)
+            Positioned(bottom: 80, right: 24,
+              child: GestureDetector(
+                onTap: () {
+                  _player.seek(const Duration(seconds: 85));
+                  setState(() => _skipIntroVisible = false);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(color: Colors.black70,
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(color: Colors.white38)),
+                  child: const Text('Skip Intro →',
+                      style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700)),
+                )).animate().fadeIn(duration: 300.ms)
+                    .slideY(begin: 0.3, end: 0, duration: 300.ms, curve: AppCurves.standard)),
 
-          // 7. Seek flash indicators
-          if (_showSeekBwd)
-            Positioned(
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: MediaQuery.of(context).size.width * 0.5,
-              child: const Center(child: _SeekFlash(forward: false)),
-            ),
-          if (_showSeekFwd)
-            Positioned(
-              right: 0,
-              top: 0,
-              bottom: 0,
-              width: MediaQuery.of(context).size.width * 0.5,
-              child: const Center(child: _SeekFlash(forward: true)),
-            ),
-
-          // 8. Brightness bar (left edge)
-          if (_showBrightness)
-            Positioned(
-              left: 20,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: _VerticalBar(
-                  value: _brightness,
-                  icon: Icons.brightness_6_rounded,
-                  label: '${(_brightness * 100).round()}%',
-                ),
-              ),
-            ),
-
-          // 9. Volume bar (right edge)
-          if (_showVolume)
-            Positioned(
-              right: 20,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: _VerticalBar(
-                  value: _volume,
-                  icon: Icons.volume_up_rounded,
-                  label: '${(_volume * 100).round()}%',
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  // ── Gesture layer ─────────────────────────────────────────────────────────
-
-  Widget _buildGestureLayer() {
-    return Row(
-      children: [
-        // Left half: double-tap → -10s, drag → brightness
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggleControls,
-            onDoubleTap: () => _seekRelative(-10),
-            onVerticalDragUpdate: (d) =>
-                _adjustBrightness(-d.delta.dy / 160),
-            child: const SizedBox.expand(),
-          ),
-        ),
-        // Right half: double-tap → +10s, drag → volume
-        Expanded(
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: _toggleControls,
-            onDoubleTap: () => _seekRelative(10),
-            onVerticalDragUpdate: (d) =>
-                _adjustVolume(-d.delta.dy / 160),
-            child: const SizedBox.expand(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Controls overlay ──────────────────────────────────────────────────────
-
-  Widget _buildControlsOverlay() {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black54,
-            Colors.transparent,
-            Colors.transparent,
-            Colors.black54,
-          ],
-          stops: [0.0, 0.25, 0.75, 1.0],
-        ),
-      ),
-      child: Column(
-        children: [
-          // Top bar
-          _buildTopBar(),
-          // Center play/pause
-          Expanded(child: _buildCenterControls()),
-          // Bottom bar
-          _buildBottomBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBar() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new,
-                  color: Colors.white, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-            Expanded(
-              child: Text(
-                widget.title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            // Audio track picker
-            IconButton(
-              icon: const Icon(Icons.audiotrack_rounded,
-                  color: Colors.white, size: 20),
-              tooltip: 'Audio Track',
-              onPressed: _showAudioTracks,
-            ),
-            // Subtitle selector
-            IconButton(
-              icon: Icon(
-                Icons.subtitles_rounded,
-                color: _currentSubtitle != null
-                    ? AppColors.primary
-                    : Colors.white,
-                size: 20,
-              ),
-              tooltip: 'Subtitles',
-              onPressed: _showSubtitles,
-            ),
-            // Aspect ratio
-            TextButton(
-              onPressed: _cycleAspectRatio,
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                minimumSize: Size.zero,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              ),
-              child: Text(_fitLabel,
-                  style: const TextStyle(fontSize: 12)),
-            ),
-            // Screen lock
-            IconButton(
-              icon: const Icon(Icons.lock_open_rounded,
-                  color: Colors.white, size: 20),
-              tooltip: 'Lock screen',
-              onPressed: () => setState(() => _locked = true),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCenterControls() {
-    return StreamBuilder<bool>(
-      stream: _player.stream.playing,
-      builder: (_, snap) {
-        final playing = snap.data ?? false;
-        return Center(
-          child: GestureDetector(
-            onTap: () {
-              _player.playOrPause();
-              _resetControlsTimer();
-            },
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: Colors.black38,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                playing
-                    ? Icons.pause_rounded
-                    : Icons.play_arrow_rounded,
-                color: Colors.white,
-                size: 40,
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Progress slider
-            StreamBuilder<Duration>(
-              stream: _player.stream.position,
-              builder: (_, posSnap) {
-                return StreamBuilder<Duration>(
-                  stream: _player.stream.duration,
-                  builder: (_, durSnap) {
-                    final pos =
-                        posSnap.data ?? Duration.zero;
-                    final dur =
-                        durSnap.data ?? Duration.zero;
-                    final progress = dur.inMilliseconds > 0
-                        ? (pos.inMilliseconds /
-                                dur.inMilliseconds)
-                            .clamp(0.0, 1.0)
-                        : 0.0;
-
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SliderTheme(
-                          data: SliderThemeData(
-                            trackHeight: 3,
-                            thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 6),
-                            activeTrackColor:
-                                AppColors.primary,
-                            inactiveTrackColor:
-                                Colors.white30,
-                            thumbColor: Colors.white,
-                            overlayShape:
-                                SliderComponentShape.noOverlay,
-                          ),
-                          child: Slider(
-                            value: progress,
-                            onChanged: (v) {
-                              final newPos = Duration(
-                                  milliseconds:
-                                      (v * dur.inMilliseconds)
-                                          .round());
-                              _player.seek(newPos);
-                              _resetControlsTimer();
-                            },
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4),
-                          child: Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                _formatDuration(pos),
-                                style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12),
-                              ),
-                              Text(
-                                _formatDuration(dur),
-                                style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                );
+          // CONTROLS LAYER
+          if (_showControls && !_longPressFast)
+            _ControlsOverlay(
+              title: widget.title,
+              playing: _playing,
+              buffering: _buffering,
+              position: _position,
+              duration: _duration,
+              progress: _progressFraction,
+              speed: _speed,
+              locked: _locked,
+              fitLabel: _fitLabel,
+              onBack: () => Navigator.of(context).pop(),
+              onPlayPause: () => _player.playOrPause(),
+              onSeekTo: (frac) {
+                final ms = (frac * _duration.inMilliseconds).toInt();
+                _player.seek(Duration(milliseconds: ms));
               },
+              onSeekBack: () => _seekRelative(-10),
+              onSeekForward: () => _seekRelative(10),
+              onLock: () { setState(() { _locked = !_locked; _showControls = false; }); },
+              onCycleFit: _cycleFit,
+              onSpeed: () => setState(() { _showSpeedPicker = !_showSpeedPicker; _scheduleHide(); }),
+              onSubtitle: () => _pickSubtitle(),
+              onSubtitleTracks: () => setState(() { _showSubtitleMenu = !_showSubtitleMenu; }),
+              onAudioTracks: () => setState(() { _showAudioMenu = !_showAudioMenu; }),
+              fmtDur: _fmtDur,
             ),
-          ],
-        ),
+
+          // Lock indicator (when locked, show only unlock button)
+          if (_locked && _showControls)
+            Positioned(right: 20, top: 0, bottom: 0,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => setState(() { _locked = false; _showControls = true; _scheduleHide(); }),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black54,
+                        border: Border.all(color: Colors.white30)),
+                    child: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 22)),
+                )).animate().fadeIn(duration: 200.ms)),
+
+          // Speed picker panel
+          if (_showSpeedPicker && !_locked)
+            Positioned(right: 0, top: 0, bottom: 0,
+              child: _SpeedPanel(
+                currentSpeed: _speed,
+                speeds: _speeds,
+                onSelect: (s) {
+                  setState(() { _speed = s; _showSpeedPicker = false; });
+                  _player.setRate(s);
+                  _scheduleHide();
+                },
+              )),
+
+          // Subtitle tracks panel
+          if (_showSubtitleMenu && !_locked)
+            Positioned(right: 0, top: 0, bottom: 0,
+              child: _TracksPanel(
+                title: 'Subtitles',
+                tracks: _player.state.tracks.subtitle
+                    .map((t) => t.language ?? t.id ?? 'Track').toList(),
+                onSelect: (i) {
+                  _player.setSubtitleTrack(_player.state.tracks.subtitle[i]);
+                  setState(() => _showSubtitleMenu = false);
+                },
+              )),
+
+          // Audio tracks panel
+          if (_showAudioMenu && !_locked)
+            Positioned(right: 0, top: 0, bottom: 0,
+              child: _TracksPanel(
+                title: 'Audio',
+                tracks: _player.state.tracks.audio
+                    .map((t) => t.language ?? t.id ?? 'Track').toList(),
+                onSelect: (i) {
+                  _player.setAudioTrack(_player.state.tracks.audio[i]);
+                  setState(() => _showAudioMenu = false);
+                },
+              )),
+        ]),
       ),
     );
   }
 
-  // ── Error ─────────────────────────────────────────────────────────────────
-
-  Widget _buildError() {
-    return Padding(
-      padding: const EdgeInsets.all(32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.error_outline,
-              color: AppColors.error, size: 48),
-          const SizedBox(height: 16),
-          Text(
-            'Could not load stream.\n${_error!}',
-            textAlign: TextAlign.center,
-            style:
-                const TextStyle(color: Colors.white70, fontSize: 14),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _loadAndPlay,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
-          ),
-          const SizedBox(height: 8),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Go Back',
-                style: TextStyle(color: Colors.white60)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _pickSubtitle() async {
+    final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom, allowedExtensions: ['srt', 'ass', 'vtt']);
+    if (result?.files.single.path != null) {
+      _player.setSubtitleTrack(SubtitleTrack.uri('file://${result!.files.single.path!}'));
+    }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Gesture Handlers ──────────────────────────────────────────────────────
+  void _onVerticalDragStart(DragStartDetails d) {
+    _dragStartX = d.localPosition.dx;
+    _dragStartY = d.localPosition.dy;
+    final w = MediaQuery.of(context).size.width;
+    if (d.localPosition.dx < w / 2) {
+      _draggingBrightness = true;
+      _dragStartBrightness = _brightness;
+    } else {
+      _draggingVolume = true;
+      _dragStartVolume = _volume;
+    }
+    setState(() {});
+  }
 
-  String _formatDuration(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  void _onVerticalDragUpdate(DragUpdateDetails d) {
+    final h = MediaQuery.of(context).size.height;
+    final delta = -d.delta.dy / h;
+    if (_draggingBrightness) {
+      _brightness = (_brightness + delta).clamp(0.0, 1.0);
+      ScreenBrightness().setScreenBrightness(_brightness);
+      setState(() {});
+    } else if (_draggingVolume) {
+      _volume = (_volume + delta).clamp(0.0, 1.0);
+      VolumeController().setVolume(_volume);
+      setState(() {});
+    }
+  }
+
+  void _onHorizontalDragStart(DragStartDetails d) {
+    _dragStartX = d.localPosition.dx;
+    _draggingSeek = true;
+    _dragSeekOffset = 0;
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails d) {
+    if (!_draggingSeek) return;
+    final w = MediaQuery.of(context).size.width;
+    final delta = d.delta.dx / w * 120; // 120 seconds across full width
+    _dragSeekOffset = (_dragSeekOffset ?? 0) + delta;
+    setState(() {});
+  }
+
+  void _onHorizontalDragEnd(DragEndDetails _) {
+    if (_draggingSeek && _dragSeekOffset != null) {
+      final target = _position + Duration(seconds: _dragSeekOffset!.round());
+      _player.seek(target.clamp(Duration.zero, _duration));
+    }
+    setState(() { _draggingSeek = false; _dragSeekOffset = null; });
   }
 }
 
-// ── Helper widgets ────────────────────────────────────────────────────────────
+// ── Controls Overlay ──────────────────────────────────────────────────────────
+class _ControlsOverlay extends StatelessWidget {
+  final String title;
+  final bool playing, buffering, locked;
+  final Duration position, duration;
+  final double progress, speed;
+  final String fitLabel;
+  final VoidCallback onBack, onPlayPause, onSeekBack, onSeekForward,
+      onLock, onCycleFit, onSpeed, onSubtitle, onSubtitleTracks, onAudioTracks;
+  final ValueChanged<double> onSeekTo;
+  final String Function(Duration) fmtDur;
 
-class _SeekFlash extends StatelessWidget {
-  final bool forward;
-  const _SeekFlash({required this.forward});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.black38,
-        borderRadius: BorderRadius.circular(40),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            forward
-                ? Icons.fast_forward_rounded
-                : Icons.fast_rewind_rounded,
-            color: Colors.white,
-            size: 32,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            forward ? '+10s' : '-10s',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _VerticalBar extends StatelessWidget {
-  final double value;
-  final IconData icon;
-  final String label;
-  const _VerticalBar(
-      {required this.value, required this.icon, required this.label});
+  const _ControlsOverlay({
+    required this.title, required this.playing, required this.buffering,
+    required this.locked, required this.position, required this.duration,
+    required this.progress, required this.speed, required this.fitLabel,
+    required this.onBack, required this.onPlayPause, required this.onSeekBack,
+    required this.onSeekForward, required this.onLock, required this.onCycleFit,
+    required this.onSpeed, required this.onSubtitle, required this.onSubtitleTracks,
+    required this.onAudioTracks, required this.onSeekTo, required this.fmtDur,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.black54,
-        borderRadius: BorderRadius.circular(40),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white, size: 20),
-          const SizedBox(height: 8),
-          SizedBox(
-            height: 80,
-            child: RotatedBox(
-              quarterTurns: -1,
-              child: LinearProgressIndicator(
-                value: value,
-                backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                    AppColors.primary),
-                minHeight: 4,
+    return Stack(fit: StackFit.expand, children: [
+      // Scrim gradients
+      const Positioned(top: 0, left: 0, right: 0, child: DecoratedBox(
+        decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.topCenter, end: Alignment.bottomCenter,
+          colors: [Color(0xCC000000), Colors.transparent])),
+        child: SizedBox(height: 100))),
+      const Positioned(bottom: 0, left: 0, right: 0, child: DecoratedBox(
+        decoration: BoxDecoration(gradient: LinearGradient(
+          begin: Alignment.bottomCenter, end: Alignment.topCenter,
+          colors: [Color(0xCC000000), Colors.transparent])),
+        child: SizedBox(height: 120))),
+
+      // TOP bar
+      Positioned(top: 0, left: 0, right: 0,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 8, 16, 0),
+          child: Row(children: [
+            IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
+                onPressed: onBack),
+            const SizedBox(width: 4),
+            Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600))),
+            // Fit button
+            _TopBtn(label: fitLabel, onTap: onCycleFit),
+            // Speed button
+            _TopBtn(label: speed == 1.0 ? '1×' : '${speed}×', onTap: onSpeed),
+            // Subtitle
+            IconButton(icon: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 22),
+                onPressed: onSubtitleTracks),
+            // Audio
+            IconButton(icon: const Icon(Icons.audiotrack_rounded, color: Colors.white, size: 22),
+                onPressed: onAudioTracks),
+            // Lock
+            IconButton(icon: const Icon(Icons.lock_outline_rounded, color: Colors.white, size: 22),
+                onPressed: onLock),
+          ]).animate().fadeIn(duration: 200.ms),
+        )),
+
+      // CENTER play controls (not shown when locked)
+      if (!locked)
+        Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+          GestureDetector(onTap: onSeekBack,
+            child: Container(
+              width: 50, height: 50, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
+              child: const Icon(Icons.replay_10_rounded, color: Colors.white, size: 28))),
+          const SizedBox(width: 28),
+          GestureDetector(onTap: onPlayPause,
+            child: Container(
+              width: 64, height: 64,
+              decoration: BoxDecoration(shape: BoxShape.circle,
+                  color: AppColors.primary.withOpacity(0.9), boxShadow: AppShadows.glow),
+              child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: Colors.white, size: 38))),
+          const SizedBox(width: 28),
+          GestureDetector(onTap: onSeekForward,
+            child: Container(
+              width: 50, height: 50, decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
+              child: const Icon(Icons.forward_10_rounded, color: Colors.white, size: 28))),
+        ]).animate().fadeIn(duration: 200.ms)),
+
+      // BOTTOM bar
+      Positioned(bottom: 0, left: 0, right: 0,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Time
+            Row(children: [
+              Text(fmtDur(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              const Spacer(),
+              Text(fmtDur(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ]),
+            const SizedBox(height: 6),
+            // Progress bar
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                activeTrackColor: AppColors.primary,
+                inactiveTrackColor: Colors.white24,
+                thumbColor: AppColors.primary,
+                overlayColor: AppColors.primaryGlow,
               ),
+              child: Slider(value: progress.clamp(0.0, 1.0), onChanged: onSeekTo),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(label,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 11)),
-        ],
+            // Subtitle load hint
+            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton.icon(
+                icon: const Icon(Icons.add_rounded, size: 14, color: Colors.white60),
+                label: const Text('Subtitle File', style: TextStyle(color: Colors.white60, fontSize: 11)),
+                onPressed: onSubtitle,
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              ),
+            ]),
+          ]).animate().fadeIn(duration: 200.ms),
+        )),
+    ]);
+  }
+}
+
+class _TopBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  const _TopBtn({required this.label, required this.onTap});
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(color: Colors.black38,
+            borderRadius: BorderRadius.circular(5)),
+        child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
       ),
     );
+  }
+}
+
+// ── Speed Panel ───────────────────────────────────────────────────────────────
+class _SpeedPanel extends StatelessWidget {
+  final double currentSpeed;
+  final List<double> speeds;
+  final ValueChanged<double> onSelect;
+  const _SpeedPanel({required this.currentSpeed, required this.speeds, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 140,
+      color: Colors.black87,
+      child: Column(children: [
+        const Padding(padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text('Speed', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))),
+        Expanded(child: ListView(children: speeds.map((s) =>
+          ListTile(
+            title: Text('${s}×', style: TextStyle(
+                color: s == currentSpeed ? AppColors.primary : Colors.white,
+                fontWeight: s == currentSpeed ? FontWeight.w700 : FontWeight.normal)),
+            leading: s == currentSpeed ? const Icon(Icons.check_rounded, color: AppColors.primary, size: 18) : null,
+            onTap: () => onSelect(s),
+            dense: true,
+          )).toList())),
+      ]),
+    ).animate().slideX(begin: 1, end: 0, duration: 200.ms, curve: AppCurves.standard);
+  }
+}
+
+// ── Tracks Panel ──────────────────────────────────────────────────────────────
+class _TracksPanel extends StatelessWidget {
+  final String title;
+  final List<String> tracks;
+  final ValueChanged<int> onSelect;
+  const _TracksPanel({required this.title, required this.tracks, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 180,
+      color: Colors.black87,
+      child: Column(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))),
+        Expanded(child: tracks.isEmpty
+          ? const Center(child: Text('No tracks', style: TextStyle(color: Colors.white54, fontSize: 13)))
+          : ListView.builder(itemCount: tracks.length, itemBuilder: (_, i) =>
+              ListTile(title: Text(tracks[i], style: const TextStyle(color: Colors.white)),
+                  dense: true, onTap: () => onSelect(i)))),
+      ]),
+    ).animate().slideX(begin: 1, end: 0, duration: 200.ms, curve: AppCurves.standard);
+  }
+}
+
+// ── Seek Flash ────────────────────────────────────────────────────────────────
+class _SeekFlash extends StatelessWidget {
+  final bool side; // true = right, false = left
+  const _SeekFlash({required this.side});
+  @override
+  Widget build(BuildContext context) {
+    final w = MediaQuery.of(context).size.width;
+    return Positioned(
+      left: side ? w / 2 : 0,
+      right: side ? 0 : w / 2,
+      top: 0, bottom: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: side ? Alignment.centerLeft : Alignment.centerRight,
+            end:   side ? Alignment.centerRight : Alignment.centerLeft,
+            colors: [Colors.white.withOpacity(0.08), Colors.transparent])),
+        child: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(side ? Icons.fast_forward_rounded : Icons.fast_rewind_rounded,
+              color: Colors.white, size: 36),
+          const SizedBox(height: 4),
+          Text(side ? '+10s' : '-10s',
+              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+        ])),
+      ),
+    ).animate().fadeIn(duration: 150.ms).then().fadeOut(duration: 400.ms, delay: 300.ms);
+  }
+}
+
+// ── Drag Indicator ────────────────────────────────────────────────────────────
+class _DragIndicator extends StatelessWidget {
+  final IconData icon;
+  final double value;
+  const _DragIndicator({required this.icon, required this.value});
+  @override
+  Widget build(BuildContext context) {
+    return Center(child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(color: Colors.black70, borderRadius: BorderRadius.circular(12)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: Colors.white, size: 28),
+        const SizedBox(height: 8),
+        SizedBox(width: 100, child: LinearProgressIndicator(
+          value: value,
+          backgroundColor: Colors.white24,
+          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+          minHeight: 3, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(height: 6),
+        Text('${(value * 100).toInt()}%',
+            style: const TextStyle(color: Colors.white, fontSize: 12)),
+      ]),
+    ));
   }
 }

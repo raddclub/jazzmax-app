@@ -1087,11 +1087,68 @@ def jazzdrive_verify_otp(sess: requests.Session, verify_url: str, otp: str,
 
     log.info("token.php OK — raw_at=%s... has_rt=%s", raw_at[:12], bool(raw_rt))
 
-    # ── Step 4b: Silent login — raw_accesstoken → JSESSIONID + validationkey ───
-    # The session carries cookies from the OAuth redirect chain (jazzdrive.com.pk
-    # AND cloud.jazzdrive.com.pk).  Any stale JSESSIONID cookie on the SAPI domain
-    # causes the server to return 401 (same as JazzDrive's SPA when accessed with
-    # a stale direct-link cookie).  Clear cloud.jazzdrive.com.pk cookies first.
+    # ── Step 4b: Extract JSESSIONID from redirect-chain cookies (fastest path) ──
+    # During the hop-by-hop redirect above, the session naturally visits
+    # cloud.jazzdrive.com.pk/clientoauth.html which sets JSESSIONID (and sometimes
+    # validation_key) as cookies.  If they're already here, use them directly —
+    # no SAPI silent-login call needed.
+    _cloud_cookies: dict = {}
+    for c in sess.cookies:
+        if "cloud.jazzdrive" in (c.domain or ""):
+            _cloud_cookies[c.name] = c.value
+
+    _jid_from_chain = (_cloud_cookies.get("JSESSIONID") or
+                       _cloud_cookies.get("jsessionid") or "")
+    _vk_from_chain  = (_cloud_cookies.get("validation_key") or
+                       _cloud_cookies.get("validationkey") or "")
+
+    if _jid_from_chain:
+        log.info(
+            "JSESSIONID obtained directly from OAuth redirect chain (no SAPI call needed) "
+            "jid=%s... vk=%s", _jid_from_chain[:16], bool(_vk_from_chain)
+        )
+        _node = _jid_from_chain.split('.')[-1] if '.' in _jid_from_chain else ''
+        return {
+            'validation_key':  _vk_from_chain,
+            'jsessionid':      _jid_from_chain,
+            'node':            _node,
+            'refresh_token':   raw_rt,
+            'raw_accesstoken': raw_at,
+            'access_token':    raw_at,
+        }
+
+    # Cookies not set yet — try fetching clientoauth.html explicitly.
+    # This is what a real browser does after the OTP redirect; it sets JSESSIONID
+    # on cloud.jazzdrive.com.pk naturally without any geo-restricted SAPI endpoint.
+    if current_url and "cloud.jazzdrive" in current_url and "clientoauth" in current_url:
+        try:
+            log.info("Fetching clientoauth.html to obtain session cookies: %s", current_url[:100])
+            _rc = sess.get(current_url, timeout=20, proxies=proxies)
+            log.info("clientoauth.html → HTTP %d", _rc.status_code)
+            for c in sess.cookies:
+                if "cloud.jazzdrive" in (c.domain or ""):
+                    _cloud_cookies[c.name] = c.value
+            _jid_from_chain = (_cloud_cookies.get("JSESSIONID") or
+                               _cloud_cookies.get("jsessionid") or "")
+            _vk_from_chain  = (_cloud_cookies.get("validation_key") or
+                               _cloud_cookies.get("validationkey") or "")
+            if _jid_from_chain:
+                log.info("JSESSIONID obtained via clientoauth.html fetch: jid=%s...", _jid_from_chain[:16])
+                _node = _jid_from_chain.split('.')[-1] if '.' in _jid_from_chain else ''
+                return {
+                    'validation_key':  _vk_from_chain,
+                    'jsessionid':      _jid_from_chain,
+                    'node':            _node,
+                    'refresh_token':   raw_rt,
+                    'raw_accesstoken': raw_at,
+                    'access_token':    raw_at,
+                }
+        except Exception as _coe:
+            log.debug("clientoauth.html fetch failed: %s", _coe)
+
+    # Last resort: SAPI silent-login using the raw_accesstoken.
+    # This endpoint is geo-restricted by JazzDrive to PK IPs, so it may fail
+    # from non-Pakistani servers.  Clear any stale cloud.jazzdrive cookies first.
     _stale = [
         (c.domain, c.path, c.name)
         for c in sess.cookies
@@ -1103,7 +1160,7 @@ def jazzdrive_verify_otp(sess: requests.Session, verify_url: str, otp: str,
         except Exception:
             pass
     if _stale:
-        log.info("Cleared %d stale cloud.jazzdrive cookie(s) before SAPI login: %s",
+        log.info("Cleared %d stale cloud.jazzdrive cookie(s) before SAPI fallback: %s",
                  len(_stale), [n for _, _, n in _stale])
 
     msisdn_clean = (msisdn or "").replace("+", "").replace(" ", "").replace("-", "")

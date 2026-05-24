@@ -26,209 +26,219 @@ Go to: **Replit sidebar → Secrets (🔒 lock icon) → + Add Secret**
 |---|---|
 | `GITHUB_TOKEN` | Your GitHub Personal Access Token (needs `repo` permission) |
 | `SESSION_SECRET` | The Flask secret key (same value always — check your notes) |
+| `ORACLE_SSH_KEY` | Full private SSH key (including `-----BEGIN...` and `-----END...` lines) |
 
-> ⚠️ If you skip this step, the setup script will fail immediately.
-
----
-
-### STEP 2 — Pull the project from GitHub
-
-**Open Shell** and run this ONE command:
+### STEP 2 — Run Setup Script
 
 ```bash
-curl -fsSL \
-  -H "Authorization: token $GITHUB_TOKEN" \
+curl -fsSL -H "Authorization: token $GITHUB_TOKEN" \
   "https://raw.githubusercontent.com/raddclub/jazzmax-app/main/setup_new_account.sh" \
   | bash
 ```
 
-This takes 1–3 minutes. It will:
-- ✅ Verify your GitHub token works
-- ✅ Download the full project from GitHub
-- ✅ Extract all files including `.replit` (which defines both workflows)
-- ✅ Install all Python packages from `requirements.txt`
-- ✅ Tell you exactly what to do next
+This downloads the project, installs dependencies, and updates `jazzmax_config.json` so installed APKs auto-connect.
 
----
+### STEP 3 — Start Servers
 
-### STEP 3 — Reload Replit so workflows appear
-
-After the script finishes, **click the browser Refresh button (F5)**.
-
-You should now see in the Run button dropdown:
-- **Radd Hub** (port 5000 — admin backend)
-- **Watch Prototype** (port 8000 — app API)
-
-Click **Run** → both start automatically.
-
-> If workflows do NOT appear after refresh, tell the Replit Agent:
-> `"Create a Radd Hub workflow: cd radd-hub && python3 radd_hub.py run --skip-setup (port 5000) and a Watch Prototype workflow: cd _watch_prototype && PORT=8000 python3 run.py (port 8000)"`
-
----
-
-### STEP 4 — Verify both services are running
-
-Open the workflow consoles and confirm:
-- **Radd Hub** → `Running on http://0.0.0.0:5000`
-- **Watch Prototype** → `Running on http://0.0.0.0:8000`
-
-If either fails, see **Troubleshooting** below.
-
----
-
-### STEP 5 — Update the server URL in the Flutter app
-
-The app reads its server URL from a file in GitHub. Edit:
-
-📄 **`jazzmax_config.json`** (in the project root)
-
-```json
-{
-  "_note": "Update api_base_url when moving servers — no app rebuild needed!",
-  "api_base_url": "https://YOUR-NEW-REPLIT-DEV-DOMAIN.replit.dev",
-  "updated_at": "2026-05-23"
-}
-```
-
-To find your dev domain: click the **Open in new tab** icon on the Watch Prototype workflow → copy the URL.
-
-Then push to GitHub:
 ```bash
-bash push_to_github.sh
+# Terminal 1 — Radd Hub admin panel (port 5000)
+cd radd-hub && python run.py
+
+# Terminal 2 — Watch Prototype / API server (port 6000)
+cd _watch_prototype && python run.py
 ```
 
-All installed apps pick up the new URL automatically on next launch — **no APK rebuild needed**.
+Or use the Replit workflow buttons if they're configured.
 
 ---
 
-### STEP 6 — Tell the agent to continue building
+## PROJECT OVERVIEW (May 2026)
 
-Type this as your first message to the Replit Agent:
+JazzMAX is an Android streaming app for Jazz SIM users in Pakistan. Streaming is **zero-rated** via JazzDrive — users watch HD content without using any data bundle.
 
-```
-I am Muhammad Rehan. Read JAZZMAX_MASTER.md Section 14 (Task Checklist),
-find the first unchecked [ ] item, and build it.
-```
+### What's Built
 
----
-
-## TROUBLESHOOTING
-
-### "python3: command not found" or workflow won't start
-
-The `.replit` file includes `modules = ["python-3.11"]` so Python should be available automatically. If not, tell the Agent:
-
-```
-Install Python 3.11 and pip, then restart the Radd Hub and Watch Prototype workflows.
-```
-
-Or in Shell:
-```bash
-pip3 install -r requirements.txt -q
-```
-
-### "Cannot connect to server" in the Flutter app
-
-The app is pointing at the wrong URL. Update `jazzmax_config.json` → push to GitHub (Step 5).
-
-### "GITHUB_TOKEN not set" error
-
-You missed Step 1. Add the secret in Replit sidebar (🔒 lock icon), then re-run the setup command from Step 2.
-
-### Workflows exist but crash immediately on start
-
-Check the workflow console for errors. Common fix:
-```bash
-pip3 install -r requirements.txt -q
-```
-Then click **Restart** on the workflow.
-
-### "Database not found" or SQLite errors
-
-The DB creates itself on first run. Just restart both workflows — first startup initializes everything automatically.
-
-### Setup script fails during extraction
-
-Node.js may not be ready yet. Wait 30 seconds and re-run. Or extract manually:
-```bash
-cd /tmp && npm install adm-zip --save --silent 2>/dev/null
-cd /home/runner/workspace
-node -e "
-const AdmZip = require('/tmp/node_modules/adm-zip');
-const fs = require('fs'), path = require('path');
-const zip = new AdmZip('/tmp/jazzmax_github.zip');
-const entries = zip.getEntries();
-const prefix = entries[0].entryName.split('/')[0] + '/';
-let n = 0;
-for (const e of entries) {
-  const rel = e.entryName.slice(prefix.length);
-  if (!rel || e.isDirectory) continue;
-  const dest = '/home/runner/workspace/' + rel;
-  fs.mkdirSync(path.dirname(dest), {recursive:true});
-  fs.writeFileSync(dest, e.getData());
-  n++;
-}
-console.log('Extracted', n, 'files');
-"
-pip3 install -r requirements.txt -q
-```
-
----
-
-## QUICK REFERENCE
-
-### Workflow Commands
-
-| Workflow | Command | Port |
+| Feature | Status | File |
 |---|---|---|
-| Radd Hub | `cd radd-hub && python3 radd_hub.py run --skip-setup` | 5000 |
-| Watch Prototype | `cd _watch_prototype && PORT=8000 python3 run.py` | 8000 |
+| Full Flutter app (auth, catalog, player, downloads) | ✅ Complete | `jazzmax_flutter/` |
+| MX Player-level video player | ✅ Complete | `screens/player_screen.dart` |
+| - Long-press 2× speed (hold for instant, release to resume) | ✅ | |
+| - Speed selector sheet (0.25× – 4×) | ✅ | |
+| - Background audio (continues when app backgrounded) | ✅ | |
+| - Subtitle font-size slider | ✅ | |
+| - External .srt file picker | ✅ | |
+| - Skip ±10s, brightness/volume gestures, lock screen | ✅ | |
+| - ALL formats: MP4, MKV, AVI, EAC3, DTS, TrueHD, TS | ✅ | |
+| Local Media screen ("My Files" tab) | ✅ Complete | `screens/local_media_screen.dart` |
+| Smart poster system (TMDB→OMDB→JazzDrive fallback) | ✅ Complete | `services/poster_service.dart` |
+| JazzDrive zero-rated DB update service | ✅ Complete | `services/jazzdrive_db_service.dart` |
+| 5-tab bottom nav (Home/Search/Downloads/My Files/Profile) | ✅ Complete | `widgets/bottom_nav.dart` |
+| Local SQLite v7 with all tables | ✅ Complete | `core/db/local_db.dart` |
+| Backend JWT auth, catalog sync, subscription | ✅ Complete | `_watch_prototype/routes/` |
+| JazzDrive DB update API routes | ✅ Complete | `routes/jazzdrive_db.py` |
+| Radd Hub admin panel | ✅ Complete | `radd-hub/` |
 
-### Key Files
+### What Still Needs Doing
 
-| File | Purpose |
+| Task | Notes |
 |---|---|
-| `jazzmax_config.json` | **App server URL** — edit this when switching servers |
-| `JAZZMAX_MASTER.md` | Full spec + Section 14 task checklist |
-| `requirements.txt` | All Python packages |
-| `radd-hub/data/radd_hub.db` | SQLite database (shared by both services) |
-| `push_to_github.sh` | Run at end of every session to save work |
-| `setup_new_account.sh` | Run on any new Replit account to restore everything |
+| Set real OMDB API key | Add via Radd Hub Settings → Key Vault page (plaintext, no encryption needed) |
+| Upload db_update.json to JazzDrive | After adding content via Radd Hub |
+| Set `jd_db_update_url` via API | After upload — see JazzDrive DB Update section below |
+| Build and test APK | `cd jazzmax_flutter && flutter build apk --release` |
 
-### Secrets Required on Every Account
+### Completed This Session (May 2026)
 
-| Secret | Used by |
+| Task | Status |
 |---|---|
-| `GITHUB_TOKEN` | push_to_github.sh, setup_new_account.sh, GitHub Actions APK build |
-| `SESSION_SECRET` | Flask sessions + JWT signing |
-
-### GitHub Actions APK Build
-
-Every push to `main` auto-builds a signed release APK.
-Download: **GitHub → raddclub/jazzmax-app → Actions → latest ✅ run → Artifacts**
-
-The APK reads server URL from `jazzmax_config.json` — **no rebuild needed to switch servers**.
-
-### Guest Mode (live in app)
-
-- "Continue as Guest" button on Login and Register screens
-- Backend issues a 24-hour token via `POST /api/auth/guest`
-- Player pauses at exactly 10 minutes and shows a subscribe popup
-- Popup options: Subscribe Now / Create Account / Back to Home
+| Server-side poster proxy (`/api/poster/search`) | ✅ Working on Replit + Oracle |
+| TMDB keys in vault as plaintext (no encryption) | ✅ 2 keys active |
+| poster_proxy.py — no Fernet encryption, reads DB directly | ✅ Done |
+| Android 13+ `READ_MEDIA_VIDEO` + `READ_MEDIA_AUDIO` permissions | ✅ Added |
+| Oracle sync — all backend files pushed to `/opt/jazzmax` | ✅ Done |
+| GitHub — all files pushed to `raddclub/jazzmax-app` | ✅ Done |
+| push_to_oracle.sh — SSH key reconstruction + pip --break-system-packages | ✅ Fixed |
 
 ---
 
-## MOVING TO ORACLE UBUNTU (future)
+## KEY FILE LOCATIONS
 
-1. On Ubuntu: `sudo apt install python3 python3-pip git`
-2. `git clone https://github.com/raddclub/jazzmax-app.git`
-3. `pip3 install -r requirements.txt`
-4. Start Radd Hub: `cd radd-hub && python3 radd_hub.py run --skip-setup`
-5. Start Watch Prototype: `cd _watch_prototype && PORT=8000 python3 run.py`
-6. Point your domain at the server IP
-7. Edit `jazzmax_config.json` → set `api_base_url` to `https://yourdomain.com` → `bash push_to_github.sh`
-8. All installed apps switch automatically — no APK rebuild ever needed
+```
+jazzmax_flutter/lib/
+├── app.dart                   — routes (all 6 routes including localMedia)
+├── core/constants.dart        — AppRoutes, AppColors, AppConstants
+├── core/db/local_db.dart      — SQLite v7 (7 tables)
+├── screens/player_screen.dart — full MX-level video player
+├── screens/local_media_screen.dart  — user's own video files
+├── screens/home_screen.dart   — 5-tab nav shell
+├── services/poster_service.dart     — smart poster loading
+├── services/jazzdrive_db_service.dart — zero-rated DB updates
+└── widgets/bottom_nav.dart    — 5-tab bottom navigation
+
+_watch_prototype/
+├── run.py                     — Flask app entry point
+└── routes/
+    ├── app_auth.py
+    ├── app_catalog.py
+    ├── app_subscription.py
+    ├── app_history.py
+    ├── app_search.py
+    └── jazzdrive_db.py        — NEW zero-rated DB update routes
+```
 
 ---
 
-*Last updated: 2026-05-23*
+## BOTTOM NAV TAB INDICES
+
+**IMPORTANT — these changed in v1.5.0:**
+
+| Index | Tab | Route |
+|---|---|---|
+| 0 | Home | (inline) |
+| 1 | Search | (inline) |
+| 2 | Downloads | `/downloads` |
+| 3 | My Files | `/local-media` |
+| 4 | Profile | `/profile` ← **was 3 before** |
+
+If you see profile-related code checking index 3, update it to 4.
+
+---
+
+## JAZZDRIVE ZERO-RATED DB UPDATE SYSTEM
+
+This lets users get catalog updates without a data bundle.
+
+**Admin workflow (after adding new content to Radd Hub):**
+
+```bash
+# 1. Generate db_update.json from current catalog
+curl -X POST "https://YOUR_SERVER/api/jazzdrive/generate_db_update?admin_key=YOUR_KEY"
+
+# 2. Upload the generated file to JazzDrive
+#    File saved at: radd-hub/data/db_update.json
+#    Upload manually via JazzDrive web interface
+
+# 3. Set the direct download URL
+curl -X POST "https://YOUR_SERVER/api/jazzdrive/set_db_update_url" \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://JAZZ_DRIVE_DIRECT_LINK/db_update.json"}'
+```
+
+App then downloads this file every 12 hours, zero-rated.
+
+---
+
+## SMART POSTER SYSTEM
+
+Posters load in this priority order:
+1. Local hidden cache (`appSupportDir/.jazzmax_posters/<md5>.jpg`) — instant, no data
+2. TMDB API — best quality, free
+3. OMDB API — fallback
+4. JazzDrive poster URL — zero-rated, last resort
+
+**Poster proxy is server-side** — the Flutter app calls `/api/poster/search?title=...&year=...&media_type=...` on the Watch Prototype server. Keys are stored in the Radd Hub DB (table: `keys`) as **plaintext** (no Fernet encryption).
+
+**To add an OMDB key:** Radd Hub → Settings → Key Vault → Add Key → provider: omdb. OR:
+```bash
+curl -X POST http://localhost:8000/api/poster/add_key \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"omdb","key":"YOUR_OMDB_KEY","label":"omdb-key-1"}'
+```
+
+**TMDB keys already active:** `69dc4008...` and `d078f97b...` (2 keys rotating).
+
+---
+
+## LOCAL MEDIA SCREEN
+
+"My Files" tab (index 3) lets users play their own video files:
+- File picker for any format
+- Auto-scans `/sdcard/Download`, `/sdcard/Movies` etc.
+- Recently played list with swipe-to-remove
+- ALL formats via media_kit
+
+**Android 13+ permission needed:**
+```xml
+<!-- AndroidManifest.xml -->
+<uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+```
+
+---
+
+## PUSH TO GITHUB / ORACLE
+
+```bash
+# GitHub
+bash push_to_github.sh
+
+# Oracle (92.4.95.252)
+bash push_to_oracle.sh
+```
+
+---
+
+## STARTING FRESH NEXT SESSION
+
+Tell the AI agent:
+
+```
+Continue JazzMAX development. Read JAZZMAX_MASTER.md and HANDOFF.md first.
+Current version: 1.5.0
+[Then describe what you want to build next]
+```
+
+The AI will orient itself from these two files.
+
+---
+
+## COMMON ERRORS & FIXES
+
+| Error | Fix |
+|---|---|
+| `flutter: package not found: crypto` | Run `flutter pub get` in `jazzmax_flutter/` |
+| `No such table: local_media_history` | DB version bump was missed — check `local_db.dart` version is 7 |
+| Profile not opening (index 3 used) | Update nav handler — Profile is now index 4 |
+| `jd_db_update_url not configured` | Upload db_update.json to JazzDrive, set URL via API |
+| TMDB posters not loading | Replace `TMDB_API_KEY` placeholder in `poster_service.dart` |
+| file_picker permission denied | Add `READ_MEDIA_VIDEO` permission to AndroidManifest.xml |
+| `media_kit EAC3 not playing` | It works — make sure you have `media_kit_libs_android_video` in pubspec |

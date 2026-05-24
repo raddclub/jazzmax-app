@@ -6,16 +6,27 @@ encrypted SQLite database up to date.
 Endpoints:
   GET /api/catalog/version        — returns current catalog version + count
   GET /api/catalog/sync           — full catalog (JSON) or delta since ?since=<version>
-  GET /api/catalog/posters        — list of poster keys the app should have cached
-
-Version strategy: we use the maximum updated_at timestamp across all published
-titles.  The app stores this number locally and sends it with sync requests to
-get only rows that changed since then.
+  GET /api/catalog/posters        — list of poster URLs for pre-caching
+  GET /api/catalog/db_update      — zero-rated db_update.json for JazzDrive distribution
 """
 from __future__ import annotations
 import json
+import time
+import datetime
 import logging
 from flask import Blueprint, request, jsonify
+
+# External base URL of the watch server — for building poster_jd_url in Flutter clients.
+# Override in admin: Settings -> WATCH_SERVER_EXTERNAL_URL
+def _get_watch_base():
+    try:
+        from hub import db as _db
+        v = (_db.setting("WATCH_SERVER_EXTERNAL_URL") or "").strip()
+        return v.rstrip("/") if v else "http://92.4.95.252"
+    except Exception:
+        return "http://92.4.95.252:6000"
+
+_WATCH_BASE = _get_watch_base()
 from hub import db
 
 log = logging.getLogger("hub.app_catalog")
@@ -41,10 +52,23 @@ def _count_published() -> int:
 
 @bp.route("/version")
 def version():
-    return jsonify({
-        "version": _get_catalog_version(),
-        "count":   _count_published(),
-    })
+    v = _get_catalog_version()
+    c = _count_published()
+    resp = jsonify({"version": v, "count": c})
+    # Set ETag so clients can do conditional GET (If-None-Match)
+    resp.set_etag(str(v))
+    resp.headers["Cache-Control"] = "max-age=60"
+    return resp
+
+
+@bp.route("/db_update/version")
+def db_update_version():
+    """Lightweight version check — call BEFORE downloading full db_update.json.
+    Flutter jazzdrive_db_service checks this first to avoid unnecessary downloads.
+    Returns just the version number and count (< 100 bytes).
+    """
+    v = _get_catalog_version()
+    return jsonify({"version": v, "count": _count_published()})
 
 
 @bp.route("/sync")
@@ -70,10 +94,14 @@ def sync():
             SELECT
                 t.id, t.title, t.year, t.media_type, t.plot, t.overview,
                 t.rating, t.genres, t.language, t.is_free, t.updated_at,
-                t.poster, t.runtime, t.season_count, t.episode_count
+                t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count,
+                f.id AS file_id
             FROM titles t
+            LEFT JOIN files f ON f.title_id = t.id
+              AND (f.season IS NULL OR f.season = 0)
             WHERE t.is_published = 1
               AND (t.updated_at IS NULL OR t.updated_at > ?)
+            GROUP BY t.id
             ORDER BY t.updated_at DESC
             """,
             (since_param,)
@@ -106,7 +134,9 @@ def sync():
             "episode_count": r["episode_count"],
             "poster_key":    f"title_{r['id']}",
             "poster_url":    r["poster"] or "",
+            "poster_jd_url": (_WATCH_BASE + "/watch/poster/" + str(r["id"])) if r["id"] else "",
             "db_version":    int(r["updated_at"] or 0),
+            "file_id":       r["file_id"],
         })
 
     episodes = []
@@ -115,7 +145,7 @@ def sync():
         with db.conn() as c:
             ep_rows = c.execute(
                 f"""
-                SELECT id, title_id, filename, season, episode, is_free
+                SELECT id, title_id, filename, season, episode
                 FROM files
                 WHERE title_id IN ({placeholders})
                   AND season IS NOT NULL AND season > 0
@@ -128,10 +158,11 @@ def sync():
             episodes.append({
                 "id":       r["id"],
                 "title_id": r["title_id"],
+                "file_id":  str(r["id"]),  # files.id IS the file_id used for play links
                 "season":   r["season"],
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
-                "is_free":  bool(r["is_free"]) if r["is_free"] is not None else False,
+                "is_free":  False,  # files table has no is_free column; use title-level is_free instead
             })
 
     return jsonify({
@@ -160,3 +191,110 @@ def posters():
             for r in rows if r["poster"]
         ]
     })
+
+
+@bp.route("/db_update")
+def db_update():
+    """Generate db_update.json for zero-rated JazzDrive catalog distribution.
+
+    This is the same data as /sync but formatted specifically for
+    JazzdriveDbService.dart (Flutter). It uses int 0/1 for is_free (not bool).
+
+    Admin workflow:
+      1. Call this endpoint or use admin panel → "Generate DB Update"
+      2. Download the JSON response
+      3. Upload to JazzDrive at the configured URL
+      4. All Jazz SIM users get catalog update within 12h — zero-rated
+
+    This endpoint is intentionally public (no auth) because the file will
+    be hosted on JazzDrive which is publicly accessible.
+    """
+    now = int(time.time())
+
+    with db.conn() as c:
+        title_rows = c.execute(
+            """
+            SELECT
+                t.id, t.title, t.year, t.media_type, t.plot, t.overview,
+                t.rating, t.genres, t.language, t.is_free, t.updated_at,
+                t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count,
+                f.id AS file_id
+            FROM titles t
+            LEFT JOIN files f ON f.title_id = t.id
+              AND (f.season IS NULL OR f.season = 0)
+            WHERE t.is_published = 1
+            GROUP BY t.id
+            ORDER BY t.id
+            """,
+        ).fetchall()
+
+    title_ids = []
+    titles_out = []
+    for r in title_rows:
+        title_ids.append(r["id"])
+        genres = []
+        try:
+            genres = json.loads(r["genres"] or "[]")
+            if not isinstance(genres, list):
+                genres = [str(genres)]
+        except Exception:
+            pass
+
+        titles_out.append({
+            "id":          r["id"],
+            "title":       r["title"] or "",
+            "year":        r["year"],
+            "media_type":  r["media_type"] or "movie",
+            "description": r["plot"] or r["overview"] or "",
+            "rating":      r["rating"],
+            "genres":      genres,
+            "language":    r["language"] or "",
+            # NOTE: int 0/1, not bool — JazzdriveDbService casts to int
+            "is_free":     1 if r["is_free"] else 0,
+            "runtime":     r["runtime"],
+            "poster_url":  r["poster"] or "",
+            "db_version":  int(r["updated_at"] or 0),
+            "file_id":     r["file_id"],
+        })
+
+    episodes_out = []
+    if title_ids:
+        placeholders = ",".join("?" * len(title_ids))
+        with db.conn() as c:
+            ep_rows = c.execute(
+                f"""
+                SELECT id, title_id, filename, season, episode
+                FROM files
+                WHERE title_id IN ({placeholders})
+                  AND season IS NOT NULL AND season > 0
+                ORDER BY title_id, season, episode
+                """,
+                title_ids
+            ).fetchall()
+
+        for r in ep_rows:
+            episodes_out.append({
+                "id":       r["id"],
+                "title_id": r["title_id"],
+                "file_id":  str(r["id"]),
+                "season":   r["season"],
+                "episode":  r["episode"],
+                "label":    f"S{r['season']:02d}E{r['episode']:02d}",
+                "quality":  None,
+                "is_free":  0,  # files table has no is_free; inherit from parent title
+            })
+
+    catalog_version = _get_catalog_version() or now
+
+    payload = {
+        "version":      catalog_version,
+        "generated_at": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "titles":       titles_out,
+        "episodes":     episodes_out,
+    }
+
+    response = jsonify(payload)
+    # Allow direct download as a file
+    response.headers["Content-Disposition"] = "attachment; filename=db_update.json"
+    response.headers["Cache-Control"] = "no-cache"
+    return response

@@ -344,17 +344,98 @@ def queue_download(url: str, title: str, account_id: int = 0, movie_title_hint: 
     return jid
 
 
+# How long (seconds) a job may show zero progress before the watchdog re-queues it
+_HANG_TIMEOUT_SECS = int(os.environ.get("RADD_HANG_TIMEOUT", "600"))  # 10 min default
+
+# Per-job last-progress timestamps  { job_id: float }
+_job_last_progress: dict[str, float] = {}
+_progress_lock = threading.Lock()
+
+
+def _touch_progress(job_id: str) -> None:
+    """Record that job_id made progress right now."""
+    with _progress_lock:
+        _job_last_progress[job_id] = time.time()
+
+
+def _clear_progress(job_id: str) -> None:
+    with _progress_lock:
+        _job_last_progress.pop(job_id, None)
+
+
 def queue_loop(stop_event: threading.Event) -> None:
-    """Background loop: process 'queued' jobs from the database."""
+    """Background loop: process 'queued' jobs from the database.
+
+    Improvements over v3.0:
+    - Startup recovery: resets any 'processing' jobs left from a previous crash
+      back to 'queued' so they are automatically retried.
+    - Hang watchdog: if an active job reports no progress for RADD_HANG_TIMEOUT
+      seconds (default 600) it is cancelled and re-queued so a fresh attempt
+      can be made (possibly via a different site/CDN mirror).
+    """
     log.info("Downloader queue worker started")
     active_threads: dict[str, threading.Thread] = {}
 
+    # ── Startup recovery ─────────────────────────────────────────────────────
+    try:
+        with db.conn() as c:
+            stuck = c.execute(
+                "SELECT job_id, movie FROM queue WHERE status='processing'"
+            ).fetchall()
+        if stuck:
+            log.warning(
+                "Startup recovery: %d job(s) left in 'processing' state — "
+                "resetting to 'queued'", len(stuck)
+            )
+            with db.conn() as c:
+                c.execute(
+                    "UPDATE queue SET status='queued', message='Resumed after restart', "
+                    "updated_at=? WHERE status='processing'",
+                    (int(time.time()),)
+                )
+            for row in stuck:
+                log.info("  Recovered: %s (%s)", row["job_id"], row["movie"])
+    except Exception as e:
+        log.warning("Startup recovery error: %s", e)
+
     while not stop_event.wait(3):
-        # Clean up finished threads
+        # ── Reap finished threads ────────────────────────────────────────────
         for jid in list(active_threads):
             if not active_threads[jid].is_alive():
                 del active_threads[jid]
                 _unregister_job(jid)
+                _clear_progress(jid)
+
+        # ── Hang watchdog ────────────────────────────────────────────────────
+        now = time.time()
+        with _progress_lock:
+            stale = [
+                jid for jid, ts in _job_last_progress.items()
+                if now - ts > _HANG_TIMEOUT_SECS and jid in active_threads
+            ]
+        for jid in stale:
+            log.warning(
+                "Hang watchdog: job %s has not progressed in %ds — "
+                "cancelling and re-queuing", jid, _HANG_TIMEOUT_SECS
+            )
+            job_obj = get_active_job(jid)
+            if job_obj:
+                job_obj["cancel_event"].set()
+                job_obj["pause_event"].set()
+            # Give the thread a moment to exit, then force-requeue in DB
+            t = active_threads.get(jid)
+            if t:
+                t.join(timeout=5)
+            with db.conn() as c:
+                c.execute(
+                    "UPDATE queue SET status='queued', message='Re-queued by hang watchdog', "
+                    "progress=0, updated_at=? WHERE job_id=? AND status='processing'",
+                    (int(time.time()), jid)
+                )
+            _clear_progress(jid)
+            if jid in active_threads:
+                del active_threads[jid]
+            _unregister_job(jid)
 
         if len(active_threads) >= _max_parallel():
             continue
@@ -372,7 +453,8 @@ def queue_loop(stop_event: threading.Event) -> None:
             job_id  = job_row["job_id"]
 
             # Mark as processing immediately to prevent double-pickup
-            _update_db(job_id, status="processing")
+            _update_db(job_id, status="processing", message="Starting…")
+            _touch_progress(job_id)
 
             t = threading.Thread(target=_process_job, args=(job_row,), daemon=True,
                                  name=f"job-{job_id}")
@@ -487,6 +569,8 @@ def _process_job(job_row: dict) -> None:
             message=msg,
             log="\n".join(log_lines[-500:]),
         )
+        # Touch hang watchdog on every log so the watchdog knows we're alive
+        _touch_progress(job_id)
 
     try:
         hints_str = ""
@@ -912,6 +996,12 @@ def _download_aria2(url, dest_dir, job, log, check_control, referer=None):
                 except Exception:
                     pass
             log(f"Progress: {pct:.1f}%  {done_s}/{total_s}  Speed: {speed}/s  ETA: {eta or '—'}")
+            # Touch hang watchdog on each progress tick
+            if job:
+                try:
+                    _touch_progress(job.get("job_id", ""))
+                except Exception:
+                    pass
         elif "[#" in line:
             log(f"aria2: {line}")
         if "Download complete" in line or "saved" in line.lower():
@@ -1015,6 +1105,10 @@ def _download_urllib(url, dest_dir, job, log, check_control, referer=None):
                             except Exception: pass
                         log(f"Progress: {pct:.1f}%  {_fmt(downloaded)}/{_fmt(total)}"
                             f"  Speed: {_fmt(int(speed))}/s  ETA: {_eta((total-downloaded)/max(1,speed))}")
+                        try:
+                            _touch_progress(job.get("job_id", "") if job else "")
+                        except Exception:
+                            pass
                     else:
                         log(f"Downloaded: {_fmt(downloaded)}  Speed: {_fmt(int(speed))}/s")
                     last_log   = now

@@ -347,27 +347,111 @@ def run_job(job: dict, config: dict, plugin, log_fn):
             try: page.close()
             except: pass
 
+# Per-site timeout in seconds (how long to try one site before moving on)
+_PER_SITE_TIMEOUT = int(__import__("os").environ.get("RADD_SITE_TIMEOUT", "300"))
+
+
 def run_job_ai(job: dict, config: dict, log_fn):
+    """Smart multi-site downloader with per-site timeout and full fallback.
+
+    Improvements over v3.0:
+    - Tries EVERY real site (not just AI-prioritized subset) before giving up.
+    - Per-site timeout (RADD_SITE_TIMEOUT, default 300s / 5 min).  If a site
+      hangs on CDN resolution or Playwright, we move on instead of blocking.
+    - Clears stale per-site state (movie_url, result_url) between attempts so
+      a bad URL from site A does not poison site B.
+    - Non-existent site names (e.g. PikaHD, GokuHD) are silently skipped.
+    - Accumulates per-site errors and surfaces them all in the final error msg.
+    - Touch the hang-watchdog progress timer on each site transition.
+    """
     from . import sites as site_registry
     _set_progress(job, "ai")
+
+    # Build ordered site list from AI router; fall back to all real sites
     try:
         from .ai_router import get_prioritised_sites
         site_names = get_prioritised_sites(job["movie"])
-    except ImportError:
-        site_names = [p.name for p in site_registry.get_plugins_in_order([])]
-    
-    for name in site_names:
-        if job["cancel_event"].is_set(): break
+    except Exception:
+        try:
+            from .ai_router import get_all_sites
+            site_names = get_all_sites()
+        except Exception:
+            site_names = [p.name for p in site_registry.get_plugins_in_order([])]
+
+    # Deduplicate while keeping priority order
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for n in site_names:
+        if n not in seen:
+            seen.add(n)
+            ordered.append(n)
+
+    errors: dict[str, str] = {}
+
+    for name in ordered:
+        if job["cancel_event"].is_set():
+            break
+
+        # Load plugin — skip silently if it does not exist
         try:
             plugin = site_registry.get_plugin(name)
-            run_job(job, config, plugin, log_fn)
-            if job["status"] == "done": return
         except Exception as e:
-            log_fn(f"[{name}] Failed: {e}")
-    
-    if job["status"] != "done":
+            log_fn(f"[Auto] Skipping {name}: {e}")
+            continue
+
+        # Clear per-site artifacts so the next plugin starts fresh
+        for key in ("movie_url", "result_url", "site_used", "error"):
+            job.pop(key, None)
+
+        log_fn(f"[Auto] Trying {name} ({ordered.index(name)+1}/{len(ordered)})…")
+        job["status"] = "processing"
+
+        # Touch the hang watchdog so this transition counts as "progress"
+        try:
+            from .downloader import _touch_progress
+            _touch_progress(job["job_id"])
+        except Exception:
+            pass
+
+        # Run with a per-site hard timeout using a daemon thread
+        site_exc: list[Exception | None] = [None]
+        finished = threading.Event()
+
+        def _try(p=plugin, exc_box=site_exc, done=finished):
+            try:
+                run_job(job, config, p, log_fn)
+            except Exception as e:
+                exc_box[0] = e
+            finally:
+                done.set()
+
+        t = threading.Thread(target=_try, daemon=True, name=f"site-{name}-{job['job_id'][:6]}")
+        t.start()
+        finished.wait(timeout=_PER_SITE_TIMEOUT)
+
+        if job.get("status") == "done":
+            log_fn(f"[Auto] ✓ {name} succeeded!")
+            return
+
+        if not finished.is_set():
+            # Timed out — thread is still running in background
+            err_msg = f"timed out after {_PER_SITE_TIMEOUT}s"
+            log_fn(f"[{name}] {err_msg} — moving to next site")
+        else:
+            exc = site_exc[0]
+            err_msg = str(exc) if exc else (job.get("error") or "unknown error")
+            log_fn(f"[{name}] Failed: {err_msg}")
+
+        errors[name] = err_msg
+        # Reset status so the next site attempt isn't short-circuited
+        job["status"] = "processing"
+        job.pop("error", None)
+
+    if job.get("status") != "done":
+        summary = "; ".join(f"{k}: {v[:80]}" for k, v in errors.items()) or "no sites available"
         job["status"] = "error"
-        job["error"] = "All sites failed"
+        job["error"] = f"All sites failed — {summary}"
+        log_fn(f"[Auto] All {len(errors)} site(s) exhausted. {job['error']}")
 
 def _do_download(job: dict, config: dict, url: str, log_fn):
     from . import downloader, db as _db

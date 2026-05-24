@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../core/remote_config.dart';
@@ -7,170 +8,167 @@ import '../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
-
   @override
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _fadeAnim;
+    with TickerProviderStateMixin {
+  late AnimationController _pulseCtrl;
+  bool _started = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 800));
-    _fadeAnim =
-        CurvedAnimation(parent: _controller, curve: Curves.easeIn);
-    _controller.forward();
-    _start();
+    _pulseCtrl = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 1200))
+      ..repeat(reverse: true);
+    Future.delayed(const Duration(milliseconds: 600), _start);
   }
 
   Future<void> _start() async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    // Fetch remote config (updates server URL without needing an APK rebuild)
     await RemoteConfig.fetch();
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
 
-    // Check if onboarding has been seen
     final prefs = await SharedPreferences.getInstance();
-    final onboardingSeen =
-        prefs.getBool(AppConstants.onboardingSeenKey) ?? false;
+    final seen = prefs.getBool(AppConstants.onboardingSeenKey) ?? false;
 
-    if (!onboardingSeen) {
-      if (mounted) {
-        Navigator.of(context)
-            .pushReplacementNamed(AppRoutes.onboarding);
-      }
+    if (!seen) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
       return;
     }
-
-    // Check auth
     await ref.read(authProvider.notifier).checkAuth();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pulseCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthState>(authProvider, (_, next) {
+      if (!mounted || _started) return;
       if (next.status == AuthStatus.authenticated) {
-        Navigator.of(context)
-            .pushReplacementNamed(AppRoutes.home);
+        _started = true;
+        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
       } else if (next.status == AuthStatus.unauthenticated) {
-        Navigator.of(context)
-            .pushReplacementNamed(AppRoutes.login);
+        _started = true;
+        Navigator.of(context).pushReplacementNamed(AppRoutes.login);
       }
     });
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: FadeTransition(
-        opacity: _fadeAnim,
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Logo
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(
-                    fontSize: 48,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -2,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: 'Jazz',
-                      style: TextStyle(color: AppColors.textPrimary),
-                    ),
-                    TextSpan(
-                      text: 'MAX',
-                      style: TextStyle(color: AppColors.primary),
-                    ),
+      body: Stack(
+        children: [
+          // Background radial glow
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  center: Alignment.center,
+                  radius: 0.8,
+                  colors: [
+                    AppColors.primary.withOpacity(0.12),
+                    AppColors.background,
                   ],
                 ),
               ),
-
-              // Red pulsing dot
-              const SizedBox(height: 6),
-              const _PulsingDot(),
-
-              const SizedBox(height: 24),
-              Text(
-                AppConstants.tagline,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13,
-                  letterSpacing: 0.2,
-                ),
-              ),
-
-              const SizedBox(height: 64),
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logo
+                _buildLogo(),
+                const SizedBox(height: 8),
+                // Tagline
+                Text(
+                  AppConstants.tagline,
+                  style: const TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 13,
+                    letterSpacing: 0.3,
+                  ),
+                )
+                    .animate(delay: 600.ms)
+                    .fadeIn(duration: 500.ms)
+                    .slideY(begin: 0.3, end: 0, duration: 500.ms, curve: AppCurves.standard),
+                const SizedBox(height: 80),
+                // Spinner
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.primary.withOpacity(0.8)),
+                    strokeCap: StrokeCap.round,
+                  ),
+                )
+                    .animate(delay: 800.ms)
+                    .fadeIn(duration: 400.ms),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
-class _PulsingDot extends StatefulWidget {
-  const _PulsingDot();
-
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 900));
-    _scale = Tween<double>(begin: 0.7, end: 1.3).animate(
-        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-    _ctrl.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scale,
-      child: Container(
-        width: 8,
-        height: 8,
-        decoration: const BoxDecoration(
-          color: AppColors.primary,
-          shape: BoxShape.circle,
-        ),
-      ),
+  Widget _buildLogo() {
+    return Column(
+      children: [
+        // J icon with glow
+        Container(
+          width: 80,
+          height: 80,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const RadialGradient(
+              colors: [Color(0xFFE8002D), Color(0xFF8B0000)],
+            ),
+            boxShadow: AppShadows.glow,
+          ),
+          child: const Center(
+            child: Text(
+              'J',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 42,
+                fontWeight: FontWeight.w900,
+                letterSpacing: -2,
+              ),
+            ),
+          ),
+        )
+            .animate()
+            .scale(begin: const Offset(0.5, 0.5), end: const Offset(1, 1),
+                duration: 600.ms, curve: AppCurves.enter)
+            .fadeIn(duration: 400.ms),
+        const SizedBox(height: 20),
+        RichText(
+          text: const TextSpan(
+            style: TextStyle(
+              fontSize: 44,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -2,
+              height: 1,
+            ),
+            children: [
+              TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
+              TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
+            ],
+          ),
+        )
+            .animate(delay: 300.ms)
+            .fadeIn(duration: 500.ms)
+            .slideY(begin: 0.2, end: 0, duration: 500.ms, curve: AppCurves.standard),
+      ],
     );
   }
 }

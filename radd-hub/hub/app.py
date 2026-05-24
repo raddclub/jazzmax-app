@@ -51,14 +51,29 @@ def create_app() -> Flask:
         static_folder=str(config.HUB_DIR / "static"),
     )
     CORS(app)
-    app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or "dev"
+    _flask_secret = os.environ.get("FLASK_SECRET_KEY") or os.environ.get("SESSION_SECRET")
+    if not _flask_secret or len(_flask_secret) < 16:
+        # Generate and persist key to DB so sessions survive restarts
+        try:
+            import secrets as _sec
+            _gen = _sec.token_hex(32)
+            with db.conn() as _dc:
+                _dc.execute("INSERT OR IGNORE INTO settings(k,v) VALUES('flask_secret_key',?)", (_gen,))
+                _row = _dc.execute("SELECT v FROM settings WHERE k='flask_secret_key'").fetchone()
+                _flask_secret = _row["v"] if _row else _gen
+        except Exception:
+            import secrets as _sec
+            _flask_secret = _sec.token_hex(32)
+            log.warning("Could not persist flask_secret_key to DB")
+    app.config["SECRET_KEY"] = _flask_secret
     app.config["JSON_SORT_KEYS"] = False
     app.config["MAX_CONTENT_LENGTH"] = 50 * 1024**3  # 50GB
 
     # ----- blueprints --------------------------------------------------
     from .routes import home, settings as settings_route, library, scan, upload, \
                         stream, admin, bots, api, db_mgmt, organizer as organizer_route, \
-                        tid_panel
+                        tid_panel, app_users_panel, analytics, subscriptions, broadcast, zero_rating, \
+                        plans_panel, payment_gateway
     app.register_blueprint(auth.bp,                    url_prefix="/auth")
     app.register_blueprint(home.bp)
     app.register_blueprint(settings_route.bp,          url_prefix="/settings")
@@ -72,6 +87,13 @@ def create_app() -> Flask:
     app.register_blueprint(db_mgmt.bp,                 url_prefix="/api/db_mgmt")
     app.register_blueprint(organizer_route.bp,         url_prefix="/organizer")
     app.register_blueprint(tid_panel.bp,               url_prefix="/tid")
+    app.register_blueprint(app_users_panel.bp,        url_prefix="/app-users")
+    app.register_blueprint(analytics.bp,               url_prefix="/analytics")
+    app.register_blueprint(subscriptions.bp,           url_prefix="/subscriptions")
+    app.register_blueprint(broadcast.bp,               url_prefix="/broadcast")
+    app.register_blueprint(zero_rating.bp,             url_prefix="/zero-rating")
+    app.register_blueprint(plans_panel.bp,            url_prefix="/plans")
+    app.register_blueprint(payment_gateway.bp,        url_prefix="/billing")
 
     # ------------------------------------------------------------------
     # Download proxy — /d/<remote_id>
@@ -292,4 +314,38 @@ def create_app() -> Flask:
                                   (_BG_STOP,), _BG_STOP)
 
     log.info("Radd Hub v3.0 ready")
+
+    # ── Security headers ─────────────────────────────────────────────────────
+    @app.after_request
+    def _security_headers(resp):
+        resp.headers.setdefault("X-Frame-Options",        "SAMEORIGIN")  # SAMEORIGIN allows admin in iframe if needed
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-XSS-Protection",       "1; mode=block")
+        resp.headers.setdefault("Referrer-Policy",         "strict-origin-when-cross-origin")
+        resp.headers.pop("Server", None)
+        return resp
+
+
+    # Expose csrf_token() as Jinja2 global (used in templates for CSRF protection)
+    from .auth import get_csrf_token
+    app.jinja_env.globals["csrf_token"] = get_csrf_token
+
+
+    # Generic error handlers: no stack traces
+    from flask import jsonify as _ej
+    @app.errorhandler(400)
+    def _e400(e): return _ej({'error': 'bad request'}), 400
+    @app.errorhandler(403)
+    def _e403(e): return _ej({'error': 'forbidden'}), 403
+    @app.errorhandler(404)
+    def _e404(e): return _ej({'error': 'not found'}), 404
+    @app.errorhandler(500)
+    def _e500(e):
+        app.logger.error('500: %s', e)
+        return _ej({'error': 'internal server error'}), 500
+    @app.errorhandler(Exception)
+    def _eAny(e):
+        app.logger.error('Exception: %s', type(e).__name__)
+        return _ej({'error': 'internal error'}), 500
+
     return app

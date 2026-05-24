@@ -16,6 +16,15 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="29"/>
 
+    <!-- Android 13+ (API 33+): read user video files via file_picker (My Files tab) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <!-- Android 13+: read audio files (for local media playback) -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+
+    <!-- WorkManager — background downloads that survive app kill -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+
     <application
         android:label="JazzMAX"
         android:name="${applicationName}"
@@ -52,6 +61,22 @@
                 <action android:name="android.media.browse.MediaBrowserService"/>
             </intent-filter>
         </service>
+
+        <!-- WorkManager: background download worker -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false"/>
+
+        <!-- WorkManager: reschedule on device boot -->
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
+            android:exported="false"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
 
         <meta-data
             android:name="flutterEmbedding"

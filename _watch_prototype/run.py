@@ -28,6 +28,11 @@ from routes.app_catalog import bp as app_catalog_bp
 from routes.app_subscription import bp as app_subscription_bp
 from routes.app_history import bp as app_history_bp
 from routes.app_search import bp as app_search_bp
+from routes.jazzdrive_db import jazzdrive_db_bp
+from routes.poster_proxy import poster_proxy_bp
+from routes.sms_gateway import sms_bp as sms_gateway_bp
+from routes.app_version import bp as app_version_bp, version_gate_middleware
+from routes.app_plans import bp as app_plans_bp
 
 # Read PORT before load_env() — radd-hub .env may override it otherwise
 _port = int(os.environ.get("PORT", 6000))
@@ -40,21 +45,102 @@ app = Flask(
     __name__,
     template_folder=str(Path(__file__).parent / "templates"),
 )
-CORS(app)
-app.config["SECRET_KEY"] = "watch-prototype-dev"
+# Restrict CORS to known app origins (Flutter app + admin)
+_allowed_origins = [
+    "http://92.4.95.252",
+    "https://92.4.95.252",
+    # Add your custom domain here when you get one, e.g.:
+    # "https://jazzmax.pk",
+]
+# In development/emulator, allow all — controlled by env var
+_cors_origins = "*" if os.environ.get("CORS_ALLOW_ALL") else _allowed_origins
+CORS(app,
+     origins=_cors_origins,
+     supports_credentials=True,
+     allow_headers=["Authorization", "Content-Type", "X-Device-ID"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     max_age=600)
+app.config["SECRET_KEY"] = (
+    os.environ.get("SESSION_SECRET") or
+    os.environ.get("FLASK_SECRET_KEY") or
+    os.environ.get("SECRET_KEY")
+)
+if not app.config["SECRET_KEY"] or len(app.config["SECRET_KEY"]) < 16:
+    import secrets as _sec
+    _gen = _sec.token_hex(32)
+    app.config["SECRET_KEY"] = _gen
+    # Persist generated key so restarts don't invalidate sessions
+    try:
+        from hub import db as _hdb
+        with _hdb.conn() as _c:
+            _c.execute("INSERT OR IGNORE INTO settings(k,v) VALUES('flask_secret_key',?)", (_gen,))
+            _row = _c.execute("SELECT v FROM settings WHERE k='flask_secret_key'").fetchone()
+            app.config["SECRET_KEY"] = _row["v"] if _row else _gen
+    except Exception:
+        pass
 
+app.register_blueprint(app_version_bp)
 app.register_blueprint(watch_bp)
 app.register_blueprint(app_auth_bp)
 app.register_blueprint(app_catalog_bp)
 app.register_blueprint(app_subscription_bp)
 app.register_blueprint(app_history_bp)
 app.register_blueprint(app_search_bp)
+app.register_blueprint(jazzdrive_db_bp)
+app.register_blueprint(poster_proxy_bp)
+app.register_blueprint(sms_gateway_bp)
+app.register_blueprint(app_plans_bp)
 
 @app.route("/")
 def root():
     return redirect("/watch")
 
+# ── APK version + tamper gate (before every request) ─────────────────────────
+@app.before_request
+def _version_gate():
+    return version_gate_middleware()
 
-if __name__ == "__main__":
-    print(f"\n  Watch Prototype  →  http://localhost:{_port}/watch\n")
-    app.run(host="0.0.0.0", port=_port, debug=False)
+
+@app.after_request
+def _security_headers(resp):
+    # Flask adds Server header (nginx sets the rest globally)
+    resp.headers["Server"]  = "JazzMAX"
+    # Remove X-Powered-By if Flask adds it
+    resp.headers.pop("X-Powered-By", None)
+    return resp
+
+
+# ── Generic error handlers: no stack traces exposed ──────────────────────────
+from flask import jsonify as _fj
+
+@app.errorhandler(400)
+def _e400(e): return _fj({"error": "bad request"}), 400
+
+@app.errorhandler(401)
+def _e401(e): return _fj({"error": "unauthorized"}), 401
+
+@app.errorhandler(403)
+def _e403(e): return _fj({"error": "forbidden"}), 403
+
+@app.errorhandler(404)
+def _e404(e): return _fj({"error": "not found"}), 404
+
+@app.errorhandler(429)
+def _e429(e): return _fj({"error": "too many requests", "retry_after": 60}), 429
+
+@app.errorhandler(500)
+def _e500(e):
+    import logging
+    logging.getLogger("hub.app").error("Unhandled 500: %s", e)
+    return _fj({"error": "internal server error"}), 500
+
+@app.errorhandler(Exception)
+def _eAny(e):
+    import logging
+    logging.getLogger("hub.app").error("Unhandled exception: %s", type(e).__name__)
+    return _fj({"error": "internal error"}), 500
+
+
+if __name__ == '__main__':
+    print(f'  Watch Prototype  →  http://localhost:{_port}/watch')
+    app.run(host='0.0.0.0', port=_port, debug=False)

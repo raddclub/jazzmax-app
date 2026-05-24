@@ -482,6 +482,7 @@ def init_db() -> None:
             "ALTER TABLE titles ADD COLUMN is_ongoing INTEGER DEFAULT 0",
             "ALTER TABLE titles ADD COLUMN poster_url TEXT",
             "ALTER TABLE queue ADD COLUMN poster_url TEXT",
+            "ALTER TABLE titles ADD COLUMN is_free INTEGER DEFAULT 0",
             "ALTER TABLE queue ADD COLUMN is_ongoing INTEGER DEFAULT 0",
             # indexes for new columns (IF NOT EXISTS handles re-runs)
             "CREATE INDEX IF NOT EXISTS idx_titles_slug ON titles(slug)",

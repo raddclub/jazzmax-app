@@ -17,6 +17,8 @@ GROUPS = [
      "doc": "Paste the full service-account JSON. Multiple supported - auto-rotation."},
     {"id": "telegram","title": "Telegram bot",                "providers": ["telegram"]},
     {"id": "omdb",    "title": "OMDB (alt metadata)",         "providers": ["omdb"]},
+    {"id": "fcm",     "title": "FCM Push Notifications",         "providers": ["fcm"],
+     "doc": "Firebase Cloud Messaging server key. Get from Firebase Console → Project Settings → Cloud Messaging → Server key. Required for push notifications (TID approved/rejected alerts)."},
 ]
 
 NON_VAULT_SETTINGS = [
@@ -49,6 +51,8 @@ UPLOAD_TOGGLE_SETTINGS = [
      "Delete the local copy once the file is successfully uploaded and a share link is created. "
      "Disable to keep local copies. (default: on)"),
 ]
+
+
 
 # JazzDrive / bot env settings stored in the settings k/v table
 # (not the key vault — these are plain config, not secrets)
@@ -167,7 +171,9 @@ def api_settings_save():
     for k, _, _ in NON_VAULT_SETTINGS:
         if k in data:
             db.set_setting(k, str(data.get(k) or ""))
-    # JazzDrive / bot env settings
+    
+
+# JazzDrive / bot env settings
     for env_key, _, _, _ in JD_BOT_SETTINGS:
         if env_key in data:
             db.set_setting(env_key, str(data.get(env_key) or ""))
@@ -290,3 +296,79 @@ def api_proxy_test():
         })
     except Exception as e:
         return jsonify({"ok": False, "message": str(e)})
+
+
+# ── App Version Control API ────────────────────────────────────────────────────
+
+APP_VERSION_KEYS = [
+    "app_min_version_code",
+    "app_current_version",
+    "app_update_url",
+    "app_check_signature",
+    "app_force_update_at",
+    "app_block_on_tamper",
+    "app_crack_message",
+]
+
+@bp.route("/api/app-version")
+@auth.login_required
+def get_app_version():
+    result = {}
+    for k in APP_VERSION_KEYS:
+        result[k] = db.setting(k, "") or ""
+    # Also return signatures list
+    try:
+        with db.conn() as c:
+            sigs = c.execute(
+                "SELECT id, sig_hash, label, is_allowed, note, created_at FROM app_signatures ORDER BY created_at DESC"
+            ).fetchall()
+        result["signatures"] = [dict(s) for s in sigs]
+    except Exception:
+        result["signatures"] = []
+    return jsonify(result)
+
+
+@bp.route("/api/app-version", methods=["POST"])
+@auth.login_required
+def save_app_version():
+    data = request.get_json(force=True, silent=True) or request.form.to_dict()
+    saved = []
+    for k in APP_VERSION_KEYS:
+        if k in data:
+            v = str(data[k]).strip()
+            db.set_setting(k, v)
+            saved.append(k)
+    return jsonify({"ok": True, "saved": saved})
+
+
+@bp.route("/api/app-signatures", methods=["POST"])
+@auth.login_required
+def add_signature():
+    data = request.get_json(force=True, silent=True) or {}
+    sig_hash  = str(data.get("sig_hash",  "")).strip().upper().replace(":", "").replace(" ", "")
+    label     = str(data.get("label",     "")).strip()[:80]
+    is_allowed = int(data.get("is_allowed", 1))
+    note      = str(data.get("note",      "")).strip()[:200]
+    if len(sig_hash) < 8:
+        return jsonify({"error": "sig_hash required (min 8 chars)"}), 400
+    try:
+        with db.conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO app_signatures(sig_hash,label,is_allowed,note) VALUES(?,?,?,?)",
+                (sig_hash, label, is_allowed, note)
+            )
+            row_id = c.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        return jsonify({"ok": True, "id": row_id})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/api/app-signatures/<int:sig_id>", methods=["DELETE"])
+@auth.login_required
+def delete_signature(sig_id):
+    try:
+        with db.conn() as c:
+            c.execute("DELETE FROM app_signatures WHERE id=?", (sig_id,))
+        return jsonify({"ok": True})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

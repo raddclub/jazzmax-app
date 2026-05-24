@@ -9,13 +9,20 @@
   .home-mirror-grid{grid-template-columns:1fr !important}
   .home-health-grid.grid-4{grid-template-columns:repeat(2,1fr) !important}
 }
+.mirror-notcfg{opacity:.6;font-style:italic}
+.health-item{display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--border)}
+.health-item:last-child{border-bottom:none}
+.health-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.health-dot.ok{background:var(--ok);box-shadow:0 0 5px var(--ok)}
+.health-dot.warn{background:var(--warn)}
+.health-dot.err{background:var(--err)}
+.health-dot.mut{background:var(--muted);opacity:.5}
 </style>
 
 <div class="h-row">
   <h2>Dashboard</h2>
   <div class="row" style="gap:8px">
     <button class="ghost" style="font-size:12px;padding:5px 12px" onclick="refreshAll()">↺ Refresh</button>
-    <button class="ghost" onclick="pushAll()">Sync mirrors</button>
   </div>
 </div>
 
@@ -24,22 +31,24 @@
   <div class="stat"><div class="k">Titles</div><div class="v" id="st-titles">{{ stats.titles }}</div></div>
   <div class="stat"><div class="k">Files</div><div class="v" id="st-files">{{ stats.files }}</div></div>
   <div class="stat"><div class="k">Total size</div><div class="v" id="st-size">…</div></div>
-  <div class="stat"><div class="k">Accounts</div><div class="v" id="st-accounts">{{ accounts|length }}</div></div>
+  <div class="stat"><div class="k">JD Accounts</div><div class="v" id="st-accounts">{{ accounts|length }}</div></div>
 </div>
 
 <div class="grid grid-3" style="margin-top:14px">
   <div class="stat">
-    <div class="k">From scan</div>
-    <div class="v" id="st-scans">{{ stats.scans }}</div>
+    <div class="k">App Users</div>
+    <div class="v" id="st-app-users">…</div>
+    <div class="muted" style="margin-top:4px;font-size:12px">total registered</div>
   </div>
   <div class="stat">
-    <div class="k">From upload</div>
-    <div class="v" id="st-uploads">{{ stats.uploads }}</div>
+    <div class="k">Active Subs</div>
+    <div class="v" id="st-active-subs">…</div>
+    <div class="muted" style="margin-top:4px;font-size:12px">paying subscribers</div>
   </div>
   <div class="stat">
-    <div class="k">Mirrored</div>
-    <div class="v" id="st-mirrored">{{ stats.github_synced }} / {{ stats.gsheets_synced }}</div>
-    <div class="muted" style="margin-top:4px;font-size:12px">GitHub / Sheets</div>
+    <div class="k">Pending TIDs</div>
+    <div class="v" id="st-pending-tids">…</div>
+    <div class="muted" style="margin-top:4px;font-size:12px">awaiting approval</div>
   </div>
 </div>
 
@@ -68,11 +77,11 @@
         <div class="muted" style="font-size:11px;margin-top:4px">{{ stats.titles }} titles available</div>
       </div>
     </a>
-    <a href="/bots/" style="text-decoration:none">
+    <a href="/app-users/" style="text-decoration:none">
       <div class="card qa-card" style="text-align:center;padding:18px 12px;cursor:pointer;border:1px solid var(--border)">
-        <div style="font-size:28px;margin-bottom:8px">🤖</div>
-        <div style="font-weight:600;font-size:13px">Bot Control</div>
-        <div class="muted" style="font-size:11px;margin-top:4px">WhatsApp &amp; Telegram</div>
+        <div style="font-size:28px;margin-bottom:8px">👤</div>
+        <div style="font-weight:600;font-size:13px">App Users</div>
+        <div class="muted" style="font-size:11px;margin-top:4px">Manage subscriptions</div>
       </div>
     </a>
   </div>
@@ -90,62 +99,63 @@
 </div>
 
 <!-- ── System health ─────────────────────────────────────────────────── -->
-<div class="card" style="margin-top:18px">
-  <div class="row" style="justify-content:space-between;margin-bottom:12px">
-    <h3 style="margin:0">System Health</h3>
-    <button class="ghost" style="font-size:12px;padding:4px 10px" onclick="loadHealth()">↺ Check</button>
+<div class="grid grid-2" style="margin-top:18px;gap:16px">
+  <div class="card" style="margin:0">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <h3 style="margin:0">System Health</h3>
+      <button class="ghost" style="font-size:12px;padding:4px 10px" onclick="loadHealth()">↺ Check</button>
+    </div>
+    <div id="health-list">
+      <div class="health-item">
+        <div class="health-dot ok"></div>
+        <div style="flex:1"><strong>Server</strong></div>
+        <span class="badge b-ok">online</span>
+      </div>
+      <div class="health-item">
+        <div class="health-dot mut" id="dot-watch"></div>
+        <div style="flex:1"><strong>Watch Service</strong> <span class="muted" style="font-size:11px">(port 6000)</span></div>
+        <span class="badge b-mut" id="h-watch">checking…</span>
+      </div>
+      <div class="health-item">
+        <div class="health-dot mut" id="dot-db"></div>
+        <div style="flex:1"><strong>Database</strong></div>
+        <span class="badge b-mut" id="h-db">checking…</span>
+      </div>
+      <div class="health-item">
+        <div class="health-dot mut" id="dot-keys"></div>
+        <div style="flex:1"><strong>API Keys</strong></div>
+        <span class="badge b-mut" id="h-keys">checking…</span>
+      </div>
+    </div>
   </div>
-  <div id="health-grid" class="grid grid-4 home-health-grid">
-    <div class="stat"><div class="k">Server</div>
-      <div class="v"><span class="badge b-ok">online</span></div></div>
-    <div class="stat"><div class="k">aria2</div>
-      <div class="v" id="h-aria2"><span class="badge b-mut">checking…</span></div></div>
-    <div class="stat"><div class="k">AI Router</div>
-      <div class="v" id="h-ai"><span class="badge b-mut">checking…</span></div></div>
-    <div class="stat"><div class="k">Chromium</div>
-      <div class="v" id="h-chromium"><span class="badge b-mut">checking…</span></div></div>
-  </div>
-  <!-- JazzDrive keepalive per-account row -->
-  <div id="jd-keepalive-row" style="margin-top:14px;display:none">
-    <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">JazzDrive Sessions</div>
-    <div id="jd-keepalive-cards" class="grid grid-4 home-health-grid"></div>
+
+  <!-- JazzDrive sessions -->
+  <div class="card" style="margin:0">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <h3 style="margin:0">JazzDrive Sessions</h3>
+      <a href="/scan/" style="font-size:12px;color:var(--accent);text-decoration:none">Manage →</a>
+    </div>
+    <div id="jd-session-list">
+      <div class="muted" style="font-size:13px">Loading…</div>
+    </div>
   </div>
 </div>
 
-<!-- ── Mirror status ─────────────────────────────────────────────────── -->
-<div class="grid grid-2 home-mirror-grid" style="margin-top:18px;gap:16px">
-  <div class="card" style="margin:0">
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
-      <h3 style="margin:0">GitHub Mirror</h3>
-      <span class="badge" id="gh-badge">checking…</span>
-    </div>
-    <div class="muted" style="font-size:12px" id="gh-info">
-      Repo: <code>{{ stats.github_repo if stats.github_repo else '(not configured)' }}</code>
-    </div>
-    <div style="margin-top:10px">
-      <button class="ghost" style="font-size:12px;padding:4px 10px"
-              onclick="pushMirror('github')">Push unsynced →</button>
-    </div>
+<!-- ── Recent TID payments ────────────────────────────────────────────── -->
+<div class="card" style="margin-top:18px">
+  <div class="row" style="justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">Recent TID Payments</h3>
+    <a href="/tid/" style="font-size:12px;color:var(--accent);text-decoration:none;flex-shrink:0">Review all →</a>
   </div>
-  <div class="card" style="margin:0">
-    <div class="row" style="justify-content:space-between;margin-bottom:10px">
-      <h3 style="margin:0">Google Sheets Mirror</h3>
-      <span class="badge" id="sh-badge">checking…</span>
-    </div>
-    <div class="muted" style="font-size:12px" id="sh-info">
-      Sheet ID: <code>{{ stats.gsheet_id if stats.gsheet_id else '(not configured)' }}</code>
-    </div>
-    <div style="margin-top:10px">
-      <button class="ghost" style="font-size:12px;padding:4px 10px"
-              onclick="pushMirror('sheets')">Push unsynced →</button>
-    </div>
+  <div id="recent-tids">
+    <div class="muted" style="font-size:13px">Loading…</div>
   </div>
 </div>
 
 <!-- ── Recent files ──────────────────────────────────────────────────── -->
 <div class="card" style="margin-top:18px">
   <div class="row" style="justify-content:space-between;margin-bottom:12px">
-    <h3 style="margin:0">Recently Added</h3>
+    <h3 style="margin:0">Recently Added Files</h3>
     <a href="/library/" style="font-size:12px;color:var(--accent);text-decoration:none;flex-shrink:0">View library →</a>
   </div>
   {% if recent_files %}
@@ -155,22 +165,15 @@
       <th>File</th>
       <th style="width:70px">Source</th>
       <th style="width:80px">Size</th>
-      <th style="width:80px">Mirror</th>
       <th style="width:130px">Added</th>
     </tr></thead>
     <tbody>
     {% for f in recent_files %}
       <tr>
-        <td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        <td style="max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
           {{ f.filename }}</td>
         <td><span class="badge {{ 'b-info' if f.source=='scan' else 'b-ok' }}">{{ f.source }}</span></td>
         <td class="muted">{{ '%0.1f MB' % ((f.size_bytes or 0) / 1048576) if f.size_bytes else '—' }}</td>
-        <td>
-          <span class="badge {{ 'b-ok' if f.github_status=='ok' else 'b-mut' if not f.github_status else 'b-err' }}"
-                title="GitHub">GH</span>
-          <span class="badge {{ 'b-ok' if f.gsheets_status=='ok' else 'b-mut' if not f.gsheets_status else 'b-err' }}"
-                title="Sheets">SH</span>
-        </td>
         <td class="muted" style="font-size:12px">
           <span data-ts="{{ f.scanned_at or f.uploaded_at or '' }}">
             {{ f.scanned_at or f.uploaded_at or '—' }}
@@ -198,21 +201,6 @@ document.querySelectorAll('[data-ts]').forEach(el=>{
   if(ts > 1000000000) el.textContent = fmtTime(ts);
 });
 
-async function pushAll(){
-  if(!confirm('Push every unsynced file to GitHub + Sheets now?')) return;
-  try {
-    const d = await api('/api/mirror/push-all', {method:'POST'});
-    toast('Pushed '+d.pushed+' files');
-    refreshStats();
-  } catch(e){ toast('Failed: '+e.message); }
-}
-async function pushMirror(target){
-  try {
-    const d = await api('/api/mirror/push-all', {method:'POST'});
-    toast('Mirror sync: '+d.pushed+' files pushed');
-  } catch(e){ toast('Failed: '+e.message); }
-}
-
 async function refreshStats(){
   try {
     const d = await api('/api/status');
@@ -222,9 +210,6 @@ async function refreshStats(){
     setTxt('st-files', s.files ?? '—');
     setTxt('st-size', fmtSize(s.total_size || 0));
     setTxt('st-accounts', d.accounts ?? '—');
-    setTxt('st-scans', s.scans ?? '—');
-    setTxt('st-uploads', s.uploads ?? '—');
-    setTxt('st-mirrored', (s.github_synced||0) + ' / ' + (s.gsheets_synced||0));
   } catch(e){}
 }
 
@@ -274,71 +259,117 @@ async function refreshJobs(){
 async function loadHealth(){
   try {
     const d = await api('/api/health');
-    const setH = (id, ok, label) => {
-      const el = document.getElementById(id);
-      if(el) el.innerHTML = `<span class="badge ${ok ? 'b-ok' : 'b-err'}">${label||(ok?'ok':'missing')}</span>`;
+
+    const setH = (dotId, badgeId, ok, label) => {
+      const dot = document.getElementById(dotId);
+      const badge = document.getElementById(badgeId);
+      if(dot) dot.className = 'health-dot ' + (ok ? 'ok' : 'err');
+      if(badge){ badge.textContent = label; badge.className = 'badge ' + (ok ? 'b-ok' : 'b-err'); }
     };
-    setH('h-chromium', d.chromium, d.chromium ? 'ready' : 'not found');
-    setH('h-aria2', d.aria2, d.aria2 ? 'ready' : 'not found');
+
+    setH('dot-watch', 'h-watch', true, 'running');
+
+    const dbOk = d.db_ok !== false;
+    const dbSz = d.db_size_mb ? d.db_size_mb + ' MB' : 'ok';
+    setH('dot-db', 'h-db', dbOk, dbOk ? dbSz : 'error');
+
     const ai = d.ai_providers || {};
     const aiOk = Object.values(ai).some(Boolean);
-    setH('h-ai', aiOk, aiOk ? 'configured' : 'no keys');
-    const ghEl = document.getElementById('gh-badge');
-    if(ghEl){ ghEl.textContent='connected'; ghEl.className='badge b-ok'; }
-    const shEl = document.getElementById('sh-badge');
-    if(shEl){ shEl.textContent='configured'; shEl.className='badge b-ok'; }
+    const keyCount = Object.values(ai).filter(Boolean).length;
+    setH('dot-keys', 'h-keys', aiOk, aiOk ? keyCount + ' configured' : 'no keys');
+
   } catch(e){
-    ['h-chromium','h-aria2','h-ai'].forEach(id=>{
-      const el=document.getElementById(id);
-      if(el) el.innerHTML='<span class="badge b-mut">offline</span>';
-    });
-    ['gh-badge','sh-badge'].forEach(id=>{
+    ['h-watch','h-db','h-keys'].forEach(id=>{
       const el=document.getElementById(id);
       if(el){ el.textContent='unknown'; el.className='badge b-mut'; }
     });
   }
 }
 
-async function loadKeepalive(){
+async function loadUserStats(){
+  try {
+    const d = await api('/app-users/api/stats');
+    const setTxt = (id, v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+    setTxt('st-app-users', d.total ?? '—');
+    setTxt('st-active-subs', d.active_subs ?? '—');
+    setTxt('st-pending-tids', d.pending_tids ?? '—');
+  } catch(e){
+    ['st-app-users','st-active-subs','st-pending-tids'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.textContent='—';
+    });
+  }
+}
+
+async function loadJdSessions(){
   try {
     const d = await api('/api/keepalive/status');
     const accounts = d.accounts || {};
     const ids = Object.keys(accounts);
-    const row = document.getElementById('jd-keepalive-row');
-    const cards = document.getElementById('jd-keepalive-cards');
-    if(!ids.length){ if(row) row.style.display='none'; return; }
-    if(row) row.style.display='';
+    const el = document.getElementById('jd-session-list');
+    if(!el) return;
+    if(!ids.length){
+      el.innerHTML = '<div class="muted" style="font-size:13px">No JazzDrive accounts added. <a href="/scan/">Add account →</a></div>';
+      return;
+    }
     const STATUS_MAP = {
-      ok:            ['b-ok',   'live'],
-      expiring_soon: ['b-warn', 'expiring'],
-      expired:       ['b-err',  'expired'],
-      dead:          ['b-err',  'dead'],
-      unknown:       ['b-mut',  'unknown'],
+      ok:['b-ok','live'], refreshing:['b-warn','refreshing'], expired:['b-err','expired'],
+      error:['b-err','error'], unknown:['b-mut','unknown']
     };
-    cards.innerHTML = ids.map(aid => {
-      const v = accounts[aid];
-      const [cls, label] = STATUS_MAP[v.status] || ['b-mut', v.status||'?'];
-      const lastOk = v.last_ok_at ? fmtTime(v.last_ok_at) : '—';
-      const expiry = v.token_expires_at
-        ? (v.token_expires_at > Date.now()/1000
-            ? 'exp ' + fmtTime(v.token_expires_at)
-            : 'expired')
-        : '';
-      return `<div class="stat">
-        <div class="k" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${v.msisdn||aid}">${v.msisdn||aid}</div>
-        <div class="v"><span class="badge ${cls}">${label}</span></div>
-        <div class="muted" style="font-size:11px;margin-top:4px">last ok: ${lastOk}</div>
-        ${expiry ? `<div class="muted" style="font-size:10px">${expiry}</div>` : ''}
+    el.innerHTML = ids.map(id=>{
+      const a = accounts[id];
+      const st = a.status || 'unknown';
+      const [cls, lbl] = STATUS_MAP[st] || ['b-mut','unknown'];
+      const name = a.label || a.username || id;
+      return `<div class="health-item">
+        <div class="health-dot ${st==='ok'?'ok':st==='error'||st==='expired'?'err':'warn'}"></div>
+        <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
+        <span class="badge ${cls}">${lbl}</span>
       </div>`;
     }).join('');
-  } catch(e){}
+  } catch(e){
+    const el=document.getElementById('jd-session-list');
+    if(el) el.innerHTML='<div class="muted" style="font-size:13px">Could not load sessions.</div>';
+  }
 }
 
-function refreshAll(){ refreshStats(); refreshJobs(); loadHealth(); loadKeepalive(); }
-refreshJobs();
-loadHealth();
-loadKeepalive();
-setInterval(refreshJobs, 8000);
-setInterval(refreshStats, 30000);
-setInterval(loadKeepalive, 60000);
+async function loadRecentTids(){
+  try {
+    const d = await api('/api/tid/list?status=pending&limit=5');
+    const el = document.getElementById('recent-tids');
+    if(!el) return;
+    const rows = d.rows || d.tids || d || [];
+    if(!rows.length){
+      el.innerHTML = '<div class="muted" style="font-size:13px">No pending TID payments. <a href="/tid/">View history →</a></div>';
+      return;
+    }
+    el.innerHTML = '<div class="table-wrap"><table><thead><tr><th>TID</th><th>User</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>' +
+      rows.slice(0,5).map(r=>`<tr>
+        <td style="font-family:monospace;font-size:12px">${r.tid||r.id||'—'}</td>
+        <td>${r.phone||r.username||'—'}</td>
+        <td>${r.amount ? 'PKR '+r.amount : '—'}</td>
+        <td><span class="badge b-warn">pending</span></td>
+        <td><a href="/tid/" style="font-size:12px;color:var(--accent)">Review →</a></td>
+      </tr>`).join('') +
+      '</tbody></table></div>';
+  } catch(e){
+    const el=document.getElementById('recent-tids');
+    if(el) el.innerHTML='<div class="muted" style="font-size:13px">No pending TID payments. <a href="/tid/">View history →</a></div>';
+  }
+}
+
+async function refreshAll(){
+  refreshStats(); refreshJobs(); loadHealth(); loadUserStats(); loadJdSessions(); loadRecentTids();
+}
+
+// Boot sequence
+refreshStats();
+setTimeout(refreshJobs, 500);
+setTimeout(loadHealth, 800);
+setTimeout(loadUserStats, 1000);
+setTimeout(loadJdSessions, 1200);
+setTimeout(loadRecentTids, 1400);
+setInterval(refreshJobs, 30000);
+setInterval(loadHealth, 60000);
+setInterval(loadUserStats, 60000);
 </script>{% endblock %}

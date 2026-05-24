@@ -1,191 +1,166 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:shimmer/shimmer.dart';
 import '../core/constants.dart';
 import '../models/catalog_item.dart';
 
 class ContentCard extends StatelessWidget {
   final CatalogItem item;
   final VoidCallback? onTap;
+  final bool showProgress;
+  final double? progress;
 
-  const ContentCard({super.key, required this.item, this.onTap});
+  const ContentCard({super.key, required this.item, this.onTap,
+    this.showProgress = false, this.progress});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap ?? () => _onTap(context),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // ── Poster image ───────────────────────────────────────────
-            item.posterUrl != null && item.posterUrl!.isNotEmpty
-                ? CachedNetworkImage(
-                    imageUrl: item.posterUrl!,
-                    fit: BoxFit.cover,
-                    placeholder: (_, __) => Container(
-                      color: AppColors.surface,
-                      child: const Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 1.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                AppColors.textMuted),
-                          ),
-                        ),
-                      ),
-                    ),
-                    errorWidget: (_, __, ___) => _PosterFallback(item: item),
-                  )
-                : _PosterFallback(item: item),
-
-            // ── Gradient overlay at bottom ─────────────────────────────
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          boxShadow: AppShadows.soft,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Stack(fit: StackFit.expand, children: [
+            // Poster
+            _buildPoster(),
+            // Gradient overlay
+            Positioned(bottom: 0, left: 0, right: 0,
               child: Container(
-                padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                padding: const EdgeInsets.fromLTRB(8, 32, 8, 8),
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black87],
+                    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Color(0xDD000000)],
+                    stops: [0.0, 1.0],
                   ),
                 ),
-                child: Text(
-                  item.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    shadows: [
-                      Shadow(color: Colors.black, blurRadius: 4),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Free badge ─────────────────────────────────────────────
-            if (item.isFree)
-              Positioned(
-                top: 6,
-                left: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.success,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'FREE',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ),
-
-            // ── Rating badge ───────────────────────────────────────────
-            if (item.rating != null && item.rating! > 0)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 5, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.star_rounded,
-                          color: Colors.amber, size: 10),
-                      const SizedBox(width: 2),
-                      Text(
-                        item.displayRating,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 9,
+                child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(item.title, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 11,
                           fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
+                          shadows: [Shadow(color: Colors.black, blurRadius: 8)])),
+                  if (showProgress && progress != null) ...[
+                    const SizedBox(height: 4),
+                    LinearProgressIndicator(value: progress,
+                        backgroundColor: Colors.white24,
+                        valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                        minHeight: 2),
+                  ],
+                ]),
+              )),
+            // Top badges
+            Positioned(top: 6, left: 6, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (item.isFree) _Badge(label: 'FREE', color: AppColors.success),
+              if (item.isNew == true) ...[
+                const SizedBox(height: 4),
+                _Badge(label: 'NEW', color: AppColors.primary),
+              ],
+            ])),
+            if (item.rating != null && item.rating! > 0)
+              Positioned(top: 6, right: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 10),
+                    const SizedBox(width: 2),
+                    Text(item.displayRating,
+                        style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600)),
+                  ]),
+                )),
+          ]),
         ),
       ),
     );
   }
 
-  void _onTap(BuildContext context) {
-    if (item.isMovie && item.fileId != null) {
-      Navigator.of(context).pushNamed(
-        AppRoutes.player,
-        arguments: {
-          'file_id': item.fileId!,
-          'title': item.title,
-        },
-      );
-    } else {
-      // Show detail bottom sheet for movies without fileId or for shows
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: AppColors.surface,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  Widget _buildPoster() {
+    if (item.posterUrl != null && item.posterUrl!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: item.posterUrl!,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => Shimmer.fromColors(
+          baseColor: AppColors.card,
+          highlightColor: AppColors.surfaceHigh,
+          child: Container(color: AppColors.card),
         ),
-        builder: (_) => _DetailSheet(item: item),
+        errorWidget: (_, __, ___) => _Fallback(item: item),
       );
     }
+    return _Fallback(item: item);
+  }
+
+  void _onTap(BuildContext context) {
+    if (item.isMovie && item.fileId != null) {
+      Navigator.of(context).pushNamed(AppRoutes.player,
+          arguments: {'file_id': item.fileId!, 'title': item.title});
+    } else {
+      _showDetail(context);
+    }
+  }
+
+  void _showDetail(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DetailSheet(item: item),
+    );
   }
 }
 
-class _PosterFallback extends StatelessWidget {
-  final CatalogItem item;
-  const _PosterFallback({required this.item});
+// ── Shimmer Placeholder Card ──────────────────────────────────────────────────
+class ShimmerCard extends StatelessWidget {
+  const ShimmerCard({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Shimmer.fromColors(
+        baseColor: AppColors.surface,
+        highlightColor: AppColors.surfaceHigh,
+        child: Container(color: AppColors.surface),
+      ),
+    );
+  }
+}
 
+class _Badge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _Badge({required this.label, required this.color});
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.surface,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            item.isShow ? Icons.tv_outlined : Icons.movie_outlined,
-            color: AppColors.textMuted,
-            size: 32,
-          ),
-          const SizedBox(height: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Text(
-              item.title,
-              textAlign: TextAlign.center,
-              maxLines: 3,
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(3)),
+      child: Text(label, style: const TextStyle(
+          color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+    );
+  }
+}
+
+class _Fallback extends StatelessWidget {
+  final CatalogItem item;
+  const _Fallback({required this.item});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.card,
+      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(item.isShow ? Icons.tv_outlined : Icons.movie_outlined,
+            color: AppColors.textMuted, size: 28),
+        const SizedBox(height: 6),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Text(item.title, textAlign: TextAlign.center, maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.textMuted,
-                fontSize: 11,
-              ),
-            ),
-          ),
-        ],
-      ),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 10))),
+      ]),
     );
   }
 }
@@ -193,75 +168,77 @@ class _PosterFallback extends StatelessWidget {
 class _DetailSheet extends StatelessWidget {
   final CatalogItem item;
   const _DetailSheet({required this.item});
-
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            item.title,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              if (item.displayYear.isNotEmpty)
-                Text(item.displayYear,
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 13)),
-              if (item.displayYear.isNotEmpty && item.displayRating.isNotEmpty)
-                const Text(' · ',
-                    style: TextStyle(color: AppColors.textMuted)),
-              if (item.displayRating.isNotEmpty)
-                Row(
-                  children: [
-                    const Icon(Icons.star_rounded,
-                        color: Colors.amber, size: 14),
-                    Text(item.displayRating,
-                        style: const TextStyle(
-                            color: AppColors.textMuted, fontSize: 13)),
-                  ],
-                ),
-            ],
-          ),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Handle
+        Container(width: 36, height: 4, margin: const EdgeInsets.only(top: 12, bottom: 16),
+            decoration: BoxDecoration(color: AppColors.textMuted.withOpacity(0.4),
+                borderRadius: BorderRadius.circular(2))),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 24), child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // Mini poster
+            if (item.posterUrl != null)
+              ClipRRect(borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: SizedBox(width: 64, height: 96,
+                  child: CachedNetworkImage(imageUrl: item.posterUrl!, fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(color: AppColors.card)))),
+            const SizedBox(width: 14),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(item.title, style: const TextStyle(color: AppColors.textPrimary,
+                  fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+              const SizedBox(height: 6),
+              Row(children: [
+                if (item.displayYear.isNotEmpty)
+                  Text(item.displayYear, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                if (item.displayYear.isNotEmpty && item.displayRating.isNotEmpty)
+                  const Text(' · ', style: TextStyle(color: AppColors.textMuted)),
+                if (item.displayRating.isNotEmpty)
+                  Row(children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
+                    Text(item.displayRating, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+                  ]),
+              ]),
+              const SizedBox(height: 8),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(item.isShow ? 'TV Show' : 'Movie',
+                    style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600))),
+            ])),
+          ]),
           if (item.description != null && item.description!.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              item.description!,
-              style: const TextStyle(
-                  color: AppColors.textMuted, fontSize: 13, height: 1.5),
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-            ),
+            const SizedBox(height: 16),
+            Text(item.description!, maxLines: 4, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.6)),
           ],
           const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: item.fileId != null
-                ? () {
-                    Navigator.pop(context);
-                    Navigator.of(context).pushNamed(
-                      AppRoutes.player,
-                      arguments: {
-                        'file_id': item.fileId!,
-                        'title': item.title,
-                      },
-                    );
-                  }
-                : null,
-            icon: const Icon(Icons.play_arrow_rounded),
-            label: const Text('Watch Now'),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
+          Container(height: 50,
+            decoration: BoxDecoration(gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(AppRadius.md), boxShadow: AppShadows.primary),
+            child: Material(color: Colors.transparent,
+              child: InkWell(borderRadius: BorderRadius.circular(AppRadius.md),
+                onTap: item.fileId != null ? () {
+                  Navigator.pop(context);
+                  Navigator.of(context).pushNamed(AppRoutes.player,
+                      arguments: {'file_id': item.fileId!, 'title': item.title});
+                } : null,
+                child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                  SizedBox(width: 6),
+                  Text('Watch Now', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                ])))),
+        ]),
+        ),
+      ]),
     );
   }
 }

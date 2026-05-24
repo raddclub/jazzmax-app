@@ -64,6 +64,73 @@ def page():
 
 # ── Serve locally-cached poster images ───────────────────────────────────────
 
+
+@bp.route("/poster/<int:title_id>")
+def poster_by_id(title_id: int):
+    """Serve poster binary with 6-layer fallback. Cached to disk permanently."""
+    from flask import send_file, Response
+    import base64
+
+    local_path = POSTERS_DIR / ("title_" + str(title_id) + ".jpg")
+
+    if not local_path.exists():
+        with db.conn() as c:
+            row = c.execute(
+                "SELECT id, title, year, media_type, poster, "
+                "folder_share_url, poster_share_url FROM titles WHERE id=?",
+                (title_id,)
+            ).fetchone()
+
+        if row:
+            mt = (row["media_type"] or "").lower()
+            done = False
+
+            if not done and row["poster"]:
+                done = _download_and_save(row["poster"], local_path)
+
+            if not done:
+                url = _tvmaze_poster(row["title"])
+                if url:
+                    done = _download_and_save(url, local_path)
+
+            if not done:
+                url = _wikipedia_poster(row["title"], row["year"])
+                if url:
+                    done = _download_and_save(url, local_path)
+
+            if not done:
+                if mt in ("tv", "series", "show", "anime", "drama"):
+                    url = _tmdb_tv_poster(_extract_show_name(row["title"]))
+                else:
+                    url = _tmdb_movie_poster(row["title"], row["year"])
+                if url:
+                    done = _download_and_save(url, local_path)
+
+            if not done:
+                share_url = row["folder_share_url"] or row["poster_share_url"]
+                if share_url:
+                    try:
+                        from hub import jazzdrive as _jd
+                        res = _jd.generate_folder_image_link(
+                            share_url, filename_hint="poster"
+                        )
+                        if res.get("ok") and res.get("url"):
+                            _download_and_save(res["url"], local_path)
+                    except Exception:
+                        pass
+
+    if not local_path.exists():
+        placeholder = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk"
+            "YPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+        )
+        return Response(placeholder, mimetype="image/png",
+                        headers={"Cache-Control": "no-store"})
+
+    return send_file(str(local_path), mimetype="image/jpeg",
+                     max_age=86400, conditional=True)
+
+
 @bp.route("/poster-img/<key>")
 def poster_img(key: str):
     """Serve a permanently cached poster image from disk.
@@ -525,4 +592,40 @@ def _tmdb_tv_poster(show_name: str) -> str | None:
                 return f"https://image.tmdb.org/t/p/w500{results[0]['poster_path']}"
         except Exception:
             continue
+    return None
+
+
+def _tvmaze_poster(title: str):
+    try:
+        import requests as _req, urllib.parse as _up
+        q = _up.quote(title)
+        r = _req.get("https://api.tvmaze.com/singlesearch/shows?q=" + q, timeout=8)
+        if r.status_code == 200:
+            img = r.json().get("image") or {}
+            return img.get("original") or img.get("medium")
+    except Exception:
+        pass
+    return None
+
+
+def _wikipedia_poster(title: str, year=None):
+    try:
+        import requests as _req, urllib.parse as _up
+        base = title.replace(" ", "_")
+        yr = str(year) if year else ""
+        suffixes = (["_(" + yr + "_film)"] if yr else []) + [
+            "_(film)", "_(TV_series)", "_(American_TV_series)", "_(television_series)", ""
+        ]
+        for suf in suffixes:
+            slug = _up.quote(base + suf)
+            r = _req.get(
+                "https://en.wikipedia.org/api/rest_v1/page/summary/" + slug,
+                timeout=8
+            )
+            if r.status_code == 200:
+                th = r.json().get("thumbnail") or {}
+                if th.get("source"):
+                    return th["source"]
+    except Exception:
+        pass
     return None

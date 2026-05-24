@@ -1,107 +1,93 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../core/constants.dart';
 
 class JazzMaxBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
+  const JazzMaxBottomNav({super.key, required this.currentIndex, required this.onTap});
 
-  const JazzMaxBottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-  });
+  static const _items = [
+    _NavItem(icon: Icons.home_outlined, active: Icons.home_rounded, label: 'Home'),
+    _NavItem(icon: Icons.search_outlined, active: Icons.search_rounded, label: 'Search'),
+    _NavItem(icon: Icons.download_outlined, active: Icons.download_rounded, label: 'Downloads'),
+    _NavItem(icon: Icons.person_outline_rounded, active: Icons.person_rounded, label: 'Profile'),
+  ];
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          top: BorderSide(color: AppColors.divider, width: 0.5),
-        ),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.surface : Colors.white,
+        border: Border(top: BorderSide(
+          color: isDark ? AppColors.glassBorder : AppColors.lightBorder, width: 0.5)),
+        boxShadow: [BoxShadow(
+          color: Colors.black.withOpacity(isDark ? 0.4 : 0.08),
+          blurRadius: 20, offset: const Offset(0, -4))],
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.home_outlined,
-              activeIcon: Icons.home_rounded,
-              label: 'Home',
-              isActive: currentIndex == 0,
-              onTap: () => onTap(0),
-            ),
-            _NavItem(
-              icon: Icons.search_outlined,
-              activeIcon: Icons.search_rounded,
-              label: 'Search',
-              isActive: currentIndex == 1,
-              onTap: () => onTap(1),
-            ),
-            _NavItem(
-              icon: Icons.download_outlined,
-              activeIcon: Icons.download_rounded,
-              label: 'Downloads',
-              isActive: currentIndex == 2,
-              onTap: () => onTap(2),
-            ),
-            _NavItem(
-              icon: Icons.person_outline_rounded,
-              activeIcon: Icons.person_rounded,
-              label: 'Profile',
-              isActive: currentIndex == 3,
-              onTap: () => onTap(3),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(_items.length, (i) => _NavButton(
+              item: _items[i],
+              isActive: currentIndex == i,
+              onTap: () => onTap(i),
+            )),
+          ),
         ),
       ),
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
+class _NavButton extends StatelessWidget {
+  final _NavItem item;
   final bool isActive;
   final VoidCallback onTap;
-
-  const _NavItem({
-    required this.icon,
-    required this.activeIcon,
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
+  const _NavButton({required this.item, required this.isActive, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              isActive ? activeIcon : icon,
+      child: SizedBox(
+        width: 72,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 44, height: 30,
+            decoration: BoxDecoration(
+              color: isActive ? AppColors.primary.withOpacity(0.15) : Colors.transparent,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: Icon(
+              isActive ? item.active : item.icon,
               color: isActive ? AppColors.primary : AppColors.textMuted,
-              size: 24,
+              size: 22,
             ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? AppColors.primary : AppColors.textMuted,
-                fontSize: 10,
-                fontWeight:
-                    isActive ? FontWeight.w600 : FontWeight.normal,
-              ),
+          ),
+          const SizedBox(height: 3),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 200),
+            style: TextStyle(
+              color: isActive ? AppColors.primary : AppColors.textMuted,
+              fontSize: 10,
+              fontWeight: isActive ? FontWeight.w700 : FontWeight.normal,
             ),
-          ],
-        ),
+            child: Text(item.label),
+          ),
+        ]),
       ),
     );
   }
+}
+
+class _NavItem {
+  final IconData icon, active;
+  final String label;
+  const _NavItem({required this.icon, required this.active, required this.label});
 }

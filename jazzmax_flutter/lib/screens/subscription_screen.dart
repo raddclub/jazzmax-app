@@ -1,489 +1,397 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
 import '../providers/subscription_provider.dart';
-import '../providers/auth_provider.dart';
-import '../models/subscription.dart';
 import '../widgets/loading_overlay.dart';
+import '../widgets/jazz_text_field.dart';
 
 class SubscriptionScreen extends ConsumerStatefulWidget {
   const SubscriptionScreen({super.key});
-
   @override
-  ConsumerState<SubscriptionScreen> createState() =>
-      _SubscriptionScreenState();
+  ConsumerState<SubscriptionScreen> createState() => _SubscriptionScreenState();
 }
 
 class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
-  String? _selectedPlan;
-  bool _showTidForm = false;
   final _tidCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  String _paymentMethod = 'jazzcash';
+  bool _submitting = false;
+  String? _tidError;
+  String? _tidSuccess;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(subscriptionProvider.notifier).loadPlans();
-      ref.read(subscriptionProvider.notifier).loadStatus();
+      ref.read(subscriptionProvider.notifier).load();
     });
-    // Pre-fill phone from logged-in user
-    final user = ref.read(authProvider).user;
-    if (user != null) _phoneCtrl.text = user.phone;
   }
 
   @override
-  void dispose() {
-    _tidCtrl.dispose();
-    _phoneCtrl.dispose();
-    super.dispose();
+  void dispose() { _tidCtrl.dispose(); super.dispose(); }
+
+  Future<void> _submitTid() async {
+    final tid = _tidCtrl.text.trim();
+    if (tid.length < 6) {
+      setState(() => _tidError = 'Enter a valid Transaction ID');
+      return;
+    }
+    setState(() { _submitting = true; _tidError = null; _tidSuccess = null; });
+    try {
+      final msg = await ref.read(subscriptionProvider.notifier).submitTid(tid);
+      setState(() { _tidSuccess = msg; _submitting = false; _tidCtrl.clear(); });
+    } catch (e) {
+      setState(() {
+        _tidError = e.toString().replaceFirst('Exception: ', '');
+        _submitting = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final sub = ref.watch(subscriptionProvider);
-    final user = ref.watch(authProvider).user;
-
+    final state = ref.watch(subscriptionProvider);
     return LoadingOverlay(
-      loading: sub.loading,
+      loading: _submitting,
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
-          title: const Text('Subscription'),
-          backgroundColor: AppColors.background,
+          title: const Text('Subscription', style: TextStyle(fontWeight: FontWeight.w800)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
         ),
-        body: sub.loading && sub.plans.isEmpty
-            ? const Center(
-                child: CircularProgressIndicator(
-                  valueColor:
-                      AlwaysStoppedAnimation<Color>(AppColors.primary),
+        body: state.loading
+            ? const Center(child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(AppColors.primary), strokeCap: StrokeCap.round))
+            : _buildBody(state),
+      ),
+    );
+  }
+
+  Widget _buildBody(SubscriptionState state) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      physics: const BouncingScrollPhysics(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Active subscription status
+        if (state.activeSubscription != null) _buildActiveCard(state.activeSubscription!),
+
+        // Plans
+        const Text('Choose a Plan', style: TextStyle(
+            color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3))
+            .animate().fadeIn(duration: 400.ms),
+        const SizedBox(height: 6),
+        const Text('Zero-rated streaming on Jazz network · Premium quality · All content',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13))
+            .animate(delay: 80.ms).fadeIn(duration: 300.ms),
+        const SizedBox(height: 20),
+
+        if (state.plans.isEmpty)
+          _buildPlansShimmer()
+        else
+          ...state.plans.asMap().entries.map((e) => _PlanCard(
+            plan: e.value,
+            isPopular: e.key == 1,
+            isSelected: state.selectedPlanId == e.value.id,
+            onSelect: () => ref.read(subscriptionProvider.notifier).selectPlan(e.value.id),
+          ).animate(delay: (e.key * 80).ms).fadeIn(duration: 350.ms)
+              .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard)),
+
+        const SizedBox(height: 24),
+
+        // Payment methods
+        if (state.selectedPlanId != null) ...[
+          const Text('Pay With', style: TextStyle(
+              color: AppColors.textPrimary, fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3))
+              .animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 14),
+          ...state.methods.where((m) => m.enabled).map((m) =>
+              _PaymentMethodCard(method: m)
+                  .animate().fadeIn(duration: 300.ms)
+                  .slideY(begin: 0.15, end: 0, duration: 300.ms, curve: AppCurves.standard)),
+          const SizedBox(height: 20),
+
+          // TID submission
+          const Text('Enter Transaction ID', style: TextStyle(
+              color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 6),
+          const Text('After sending payment, paste the Transaction ID here for verification.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5)),
+          const SizedBox(height: 14),
+          JazzTextField(
+            controller: _tidCtrl,
+            label: 'Transaction ID',
+            hint: 'e.g. JAZ123456789',
+            keyboardType: TextInputType.text,
+            prefixIcon: Icons.receipt_long_outlined,
+          ).animate().fadeIn(duration: 300.ms),
+          if (_tidError != null) ...[
+            const SizedBox(height: 8),
+            Text(_tidError!, style: const TextStyle(color: AppColors.error, fontSize: 12))
+                .animate().fadeIn(duration: 200.ms).shakeX(hz: 3, amount: 4),
+          ],
+          if (_tidSuccess != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(color: AppColors.success.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: AppColors.success.withOpacity(0.3))),
+              child: Row(children: [
+                const Icon(Icons.check_circle_outline_rounded, color: AppColors.success, size: 16),
+                const SizedBox(width: 8),
+                Expanded(child: Text(_tidSuccess!, style: const TextStyle(
+                    color: AppColors.success, fontSize: 12))),
+              ]),
+            ).animate().fadeIn(duration: 300.ms),
+          ],
+          const SizedBox(height: 14),
+          Container(
+            height: 52,
+            decoration: BoxDecoration(gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(AppRadius.md), boxShadow: AppShadows.primary),
+            child: Material(color: Colors.transparent,
+              child: InkWell(borderRadius: BorderRadius.circular(AppRadius.md),
+                onTap: _submitting ? null : _submitTid,
+                child: const Center(child: Text('Submit Transaction',
+                    style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700))))),
+          ).animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 32),
+        ],
+
+        // Feature comparison table
+        const _FeatureTable(),
+        const SizedBox(height: 40),
+      ]),
+    );
+  }
+
+  Widget _buildActiveCard(ActiveSubscription sub) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.success.withOpacity(0.15), AppColors.success.withOpacity(0.05)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.success.withOpacity(0.3)),
+      ),
+      child: Row(children: [
+        Container(width: 44, height: 44,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.success.withOpacity(0.15)),
+          child: const Center(child: Icon(Icons.check_circle_rounded, color: AppColors.success, size: 24))),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Active: ${sub.planName}', style: const TextStyle(
+              color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+          if (sub.expiresAt != null)
+            Text('Expires ${sub.expiresAt}', style: const TextStyle(
+                color: AppColors.textMuted, fontSize: 12)),
+        ])),
+      ]),
+    ).animate().fadeIn(duration: 400.ms)
+        .slideY(begin: -0.2, end: 0, duration: 400.ms, curve: AppCurves.standard);
+  }
+
+  Widget _buildPlansShimmer() {
+    return Column(children: List.generate(3, (_) => Container(
+      height: 110, margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md)),
+    )));
+  }
+}
+
+// ── Plan Card ─────────────────────────────────────────────────────────────────
+class _PlanCard extends StatelessWidget {
+  final SubscriptionPlan plan;
+  final bool isPopular, isSelected;
+  final VoidCallback onSelect;
+  const _PlanCard({required this.plan, required this.isPopular,
+      required this.isSelected, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onSelect,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withOpacity(0.1) : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+              color: isSelected ? AppColors.primary : AppColors.glassBorder,
+              width: isSelected ? 1.5 : 0.5),
+          boxShadow: isSelected ? AppShadows.primary : null,
+        ),
+        child: Row(children: [
+          // Radio
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 20, height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected ? AppColors.primary : Colors.transparent,
+              border: Border.all(
+                  color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2)),
+            child: isSelected ? const Center(
+                child: Icon(Icons.check_rounded, size: 12, color: Colors.white)) : null,
+          ),
+          const SizedBox(width: 14),
+          // Info
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Text(plan.name, style: TextStyle(
+                  color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                  fontSize: 16, fontWeight: FontWeight.w700)),
+              if (isPopular) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: AppColors.warning.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(4)),
+                  child: const Text('POPULAR', style: TextStyle(
+                      color: AppColors.warning, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
                 ),
-              )
-            : ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  // ── Current plan banner ──────────────────────────────
-                  if (sub.status != null)
-                    _CurrentPlanBanner(status: sub.status!),
-                  const SizedBox(height: 20),
-
-                  // ── Plans ────────────────────────────────────────────
-                  const Text(
-                    'Choose a Plan',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  ...sub.plans.map(
-                    (plan) => _PlanCard(
-                      plan: plan,
-                      isSelected: _selectedPlan == plan.id,
-                      onTap: () => setState(() {
-                        _selectedPlan = plan.id;
-                        _showTidForm = false;
-                      }),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  if (_selectedPlan != null && _selectedPlan != 'free') ...[
-                    // ── Payment Instructions ──────────────────────────
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                            color: AppColors.primary.withOpacity(0.3)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'How to Pay',
-                            style: TextStyle(
-                              color: AppColors.textPrimary,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _PayStep(
-                            step: '1',
-                            text:
-                                'Send payment via JazzCash or Easypaisa to:',
-                          ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: const [
-                                    Text(
-                                      '03286839827',
-                                      style: TextStyle(
-                                        color: AppColors.textPrimary,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 1,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Muhammad Rehan',
-                                      style: TextStyle(
-                                        color: AppColors.textMuted,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const Icon(Icons.copy_outlined,
-                                    color: AppColors.textMuted, size: 18),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _PayStep(
-                            step: '2',
-                            text:
-                                'Note the Transaction ID (TID) from your payment receipt',
-                          ),
-                          const SizedBox(height: 10),
-                          _PayStep(
-                            step: '3',
-                            text: 'Enter the TID below — we verify within minutes',
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () =>
-                          setState(() => _showTidForm = !_showTidForm),
-                      child: Text(
-                        _showTidForm ? 'Hide TID Form' : 'I have paid — Enter TID',
-                      ),
-                    ),
-                  ],
-
-                  // ── TID Form ─────────────────────────────────────────
-                  if (_showTidForm) ...[
-                    const SizedBox(height: 16),
-                    _TidForm(
-                      tidCtrl: _tidCtrl,
-                      phoneCtrl: _phoneCtrl,
-                      paymentMethod: _paymentMethod,
-                      onPaymentMethodChanged: (v) =>
-                          setState(() => _paymentMethod = v),
-                      onSubmit: () async {
-                        final ok = await ref
-                            .read(subscriptionProvider.notifier)
-                            .submitTid(
-                              phone: _phoneCtrl.text.trim(),
-                              tid: _tidCtrl.text.trim(),
-                              plan: _selectedPlan!,
-                              paymentMethod: _paymentMethod,
-                            );
-                        if (ok && mounted) {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AlertDialog(
-                              backgroundColor: AppColors.surface,
-                              title: const Text('TID Submitted',
-                                  style:
-                                      TextStyle(color: AppColors.textPrimary)),
-                              content: const Text(
-                                'Your payment is being verified.\nSubscription will be activated within minutes.',
-                                style: TextStyle(color: AppColors.textMuted),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    Navigator.pop(context);
-                                  },
-                                  child: const Text('OK'),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-
-                  if (sub.error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      sub.error!,
-                      style: const TextStyle(
-                          color: AppColors.error, fontSize: 13),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-                ],
-              ),
+              ],
+            ]),
+            const SizedBox(height: 4),
+            Text(plan.features.join(' · '), style: const TextStyle(
+                color: AppColors.textMuted, fontSize: 11), maxLines: 2),
+          ])),
+          // Price
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('Rs. ${plan.priceStr}', style: TextStyle(
+                color: isSelected ? AppColors.primary : AppColors.textPrimary,
+                fontSize: 17, fontWeight: FontWeight.w800)),
+            Text('/${plan.period}', style: const TextStyle(
+                color: AppColors.textMuted, fontSize: 11)),
+          ]),
+        ]),
       ),
     );
   }
 }
 
-class _CurrentPlanBanner extends StatelessWidget {
-  final dynamic status;
-  const _CurrentPlanBanner({required this.status});
+// ── Payment Method Card ────────────────────────────────────────────────────────
+class _PaymentMethodCard extends StatelessWidget {
+  final PaymentMethod method;
+  const _PaymentMethodCard({required this.method});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.primary.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.glassBorder),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.star_rounded,
-              color: AppColors.primary, size: 20),
-          const SizedBox(width: 8),
-          Text(
-            'Current plan: ${status.plan.toUpperCase()}',
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(method.name, style: const TextStyle(
+            color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
+        if (method.accountNumber != null)
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.xs),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.2))),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.account_balance_wallet_outlined,
+                    size: 16, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text(method.accountNumber!, style: const TextStyle(
+                    color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5)),
+                const SizedBox(width: 10),
+                GestureDetector(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: method.accountNumber!));
+                    HapticFeedback.lightImpact();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Copied to clipboard'), duration: Duration(seconds: 2)));
+                  },
+                  child: const Icon(Icons.copy_rounded, size: 16, color: AppColors.primary),
+                ),
+              ]),
             ),
-          ),
+          ]),
+        if (method.instructions != null) ...[
+          const SizedBox(height: 8),
+          Text(method.instructions!, style: const TextStyle(
+              color: AppColors.textMuted, fontSize: 12, height: 1.5)),
         ],
-      ),
+      ]),
     );
   }
 }
 
-class _PlanCard extends StatelessWidget {
-  final SubscriptionPlan plan;
-  final bool isSelected;
-  final VoidCallback onTap;
+// ── Feature Table ─────────────────────────────────────────────────────────────
+class _FeatureTable extends StatelessWidget {
+  const _FeatureTable();
 
-  const _PlanCard({
-    required this.plan,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppColors.primary.withOpacity(0.12)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.divider,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Radio<String>(
-              value: plan.id,
-              groupValue: isSelected ? plan.id : null,
-              onChanged: (_) => onTap(),
-              activeColor: AppColors.primary,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    plan.name,
-                    style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  Text(
-                    plan.description,
-                    style: const TextStyle(
-                        color: AppColors.textMuted, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-            Text(
-              plan.displayPrice,
-              style: TextStyle(
-                color: plan.priceMonthly == 0
-                    ? AppColors.success
-                    : AppColors.primary,
-                fontWeight: FontWeight.w700,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PayStep extends StatelessWidget {
-  final String step;
-  final String text;
-  const _PayStep({required this.step, required this.text});
+  static const _rows = [
+    ('Zero-data streaming',   true, true, true),
+    ('Offline catalog',       true, true, true),
+    ('HD 720p quality',       false, true, true),
+    ('Full HD 1080p',         false, false, true),
+    ('All content',           false, true, true),
+    ('Free content',          true, true, true),
+    ('Multiple devices',      false, false, true),
+  ];
+  static const _heads = ['Basic', 'Standard', 'Premium'];
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        CircleAvatar(
-          radius: 10,
-          backgroundColor: AppColors.primary,
-          child: Text(step,
-              style: const TextStyle(color: Colors.white, fontSize: 10)),
+    return Container(
+      decoration: BoxDecoration(color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: AppColors.glassBorder)),
+      child: Column(children: [
+        // Header
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(children: [
+            const Expanded(flex: 3, child: Padding(
+              padding: EdgeInsets.only(left: 16),
+              child: Text('Feature', style: TextStyle(color: AppColors.textMuted,
+                  fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.8)))),
+            ...List.generate(3, (i) => Expanded(
+              child: Center(child: Text(_heads[i], style: const TextStyle(
+                  color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700))),
+            )),
+          ]),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text,
-              style: const TextStyle(
-                  color: AppColors.textMuted, fontSize: 13)),
-        ),
-      ],
-    );
-  }
-}
-
-class _TidForm extends StatelessWidget {
-  final TextEditingController tidCtrl;
-  final TextEditingController phoneCtrl;
-  final String paymentMethod;
-  final ValueChanged<String> onPaymentMethodChanged;
-  final VoidCallback onSubmit;
-
-  const _TidForm({
-    required this.tidCtrl,
-    required this.phoneCtrl,
-    required this.paymentMethod,
-    required this.onPaymentMethodChanged,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Submit Your TID',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: phoneCtrl,
-          keyboardType: TextInputType.phone,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            labelText: 'Your Phone Number',
-            prefixIcon:
-                Icon(Icons.phone_outlined, color: AppColors.textMuted),
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: tidCtrl,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(
-            labelText: 'Transaction ID (TID)',
-            hintText: 'e.g. TXN123456789',
-            prefixIcon: Icon(Icons.receipt_outlined, color: AppColors.textMuted),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            _PayMethodChip(
-              label: 'JazzCash',
-              selected: paymentMethod == 'jazzcash',
-              onTap: () => onPaymentMethodChanged('jazzcash'),
+        const Divider(height: 1),
+        ..._rows.asMap().entries.map((e) {
+          final row = e.value;
+          return Column(children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                Expanded(flex: 3, child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: Text(row.$1, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13)))),
+                _cell(row.$2), _cell(row.$3), _cell(row.$4),
+              ]),
             ),
-            const SizedBox(width: 8),
-            _PayMethodChip(
-              label: 'Easypaisa',
-              selected: paymentMethod == 'easypaisa',
-              onTap: () => onPaymentMethodChanged('easypaisa'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        ElevatedButton(
-          onPressed: onSubmit,
-          child: const Text('Submit TID for Verification'),
-        ),
-      ],
+            if (e.key < _rows.length - 1) const Divider(height: 1, indent: 16),
+          ]);
+        }),
+      ]),
     );
   }
-}
 
-class _PayMethodChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _PayMethodChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? AppColors.primary : AppColors.divider,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : AppColors.textMuted,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
+  Widget _cell(bool yes) => Expanded(child: Center(child: Icon(
+    yes ? Icons.check_circle_rounded : Icons.remove_rounded,
+    size: 18,
+    color: yes ? AppColors.success : AppColors.textDisabled)));
 }
