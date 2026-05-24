@@ -1,7 +1,7 @@
 name: jazzmax
 description: JazzMAX - Pakistan ka entertainment, data-free
 publish_to: 'none'
-version: 1.4.0+9999
+version: 1.5.0+200
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -30,12 +30,14 @@ dependencies:
 
   # AES-256 encryption for downloaded files
   encrypt: ^5.0.3
-  # pointycastle is a transitive dependency of encrypt — no direct import needed
+
+  # MD5 for poster cache filenames
+  crypto: ^3.0.3
 
   # Background download that survives app kill
   workmanager: ^0.7.0
 
-  # Video player (handles MKV, EAC3, multiple audio tracks)
+  # Video player (handles MKV, EAC3, DTS, all formats)
   media_kit: ^1.1.10
   media_kit_video: ^1.2.4
   media_kit_libs_android_video: ^1.3.2
@@ -46,11 +48,9 @@ dependencies:
   # Unique Android device ID
   device_info_plus: ^9.1.2
 
-  # Pin to old Gradle-compatible version (9.x uses new declarative plugin block
-  # that conflicts with our imperative settings.gradle setup)
   package_info_plus: ^8.1.3
 
-  # Network connectivity check
+  # Network connectivity check (for smart poster loading)
   connectivity_plus: ^6.0.2
 
   # Screen brightness control (for player gesture)
@@ -62,10 +62,10 @@ dependencies:
   # Keep screen awake during playback
   wakelock_plus: ^1.1.4
 
-  # First-run onboarding flag
+  # First-run onboarding flag / misc prefs
   shared_preferences: ^2.2.2
 
-  # External subtitle / file picker (.srt files)
+  # External subtitle / file picker (.srt files + user media browsing)
   file_picker: ^8.0.0
 
   # Fonts
