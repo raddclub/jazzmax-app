@@ -22,6 +22,7 @@ v3.0 adds every missing endpoint from v2.0's gui_app.py that was not ported yet:
   - /api/bot/status            — read/write the bot_status_index table
 """
 from __future__ import annotations
+import json
 import os
 import shutil
 import time
