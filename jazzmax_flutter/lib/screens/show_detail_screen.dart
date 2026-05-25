@@ -218,6 +218,10 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                                 ),
                               ),
                             ),
+                            if (item.statusLabel.isNotEmpty) ...[
+                              const _Dot(),
+                              _StatusPill(label: item.statusLabel, status: item.status ?? ''),
+                            ],
                             if (item.isFree) ...[
                               const _Dot(),
                               Container(
@@ -651,4 +655,35 @@ class _Dot extends StatelessWidget {
     padding: const EdgeInsets.symmetric(horizontal: 6),
     child: Text('·', style: TextStyle(color: AppColors.textSecondary)),
   );
+}
+
+class _StatusPill extends StatelessWidget {
+  final String label;
+  final String status;
+  const _StatusPill({required this.label, required this.status});
+
+  Color get _color {
+    switch (status) {
+      case 'ongoing':   return const Color(0xFF22C55E);
+      case 'completed': return const Color(0xFF3B82F6);
+      case 'cancelled': return const Color(0xFFEF4444);
+      default:          return const Color(0xFF888899);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = _color;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: c.withOpacity(0.18),
+        border: Border.all(color: c.withOpacity(0.55)),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label,
+        style: TextStyle(color: c, fontSize: 10,
+            fontWeight: FontWeight.w700, letterSpacing: 1)),
+    );
+  }
 }

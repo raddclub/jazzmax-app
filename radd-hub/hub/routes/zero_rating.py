@@ -247,6 +247,30 @@ def index():
         titles=[dict(t) for t in titles],
     )
 
+def _infer_status(row) -> str:
+    """Infer status when DB field is NULL — heuristic for regional content.
+    
+    Sources used in order: DB status field → is_ongoing flag → year heuristic.
+    Movies are always 'released'.  Shows from the last 2 years default to
+    'ongoing'; older shows default to 'completed'.
+    """
+    if row.get("status"):
+        return row["status"]
+    if row.get("is_ongoing"):
+        return "ongoing"
+    mt = (row.get("media_type") or "movie").lower()
+    if mt == "movie":
+        return "released"
+    try:
+        yr = int(row.get("year") or 0)
+        current_year = 2026
+        if yr >= current_year - 1:
+            return "ongoing"
+        return "completed"
+    except Exception:
+        return "released"
+
+
 @bp.route("/generate", methods=["POST"])
 @login_required
 def generate():
@@ -255,6 +279,7 @@ def generate():
             SELECT t.id, t.title, t.year, t.media_type, t.plot, t.overview,
                    t.rating, t.genres, t.language, t.is_free, t.updated_at,
                    t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count,
+                   t.status, t.is_ongoing,
                    f.id AS file_id
             FROM titles t
             LEFT JOIN files f ON f.title_id = t.id
@@ -285,6 +310,8 @@ def generate():
             "poster_share_url": r["poster_share_url"] or "",
             "db_version": int(r["updated_at"] or 0),
             "file_id": str(r["file_id"]) if r["file_id"] else None,
+            "status": r["status"] or _infer_status(r),
+            "is_ongoing": 1 if (r["is_ongoing"] or (r["status"] or "").lower() == "ongoing") else 0,
         })
 
     episodes_out = []

@@ -767,3 +767,32 @@ def api_auto_identify():
             linked += 1
     return jsonify({"ok": True, "created": created, "linked": linked,
                     "message": f"Created {len(created)} titles, linked {linked} files"})
+
+
+@bp.route("/set-status", methods=["POST"])
+@auth.login_required
+def set_status():
+    """Manually set status + is_ongoing for a title.
+
+    Body: {title_id: int, status: "ongoing"|"completed"|"released"|"cancelled"}
+    """
+    data      = request.get_json(force=True, silent=True) or {}
+    title_id  = data.get("title_id")
+    status    = (data.get("status") or "").strip().lower()
+    if not title_id or status not in ("ongoing", "completed", "released", "cancelled"):
+        return jsonify({"ok": False,
+                        "error": "title_id required; status must be ongoing/completed/released/cancelled"}), 400
+    is_ongoing = 1 if status == "ongoing" else 0
+    now = int(_time.time())
+    with db.conn() as c:
+        c.execute(
+            "UPDATE titles SET status=?, is_ongoing=?, updated_at=? WHERE id=?",
+            (status, is_ongoing, now, int(title_id))
+        )
+        if c.rowcount == 0:
+            return jsonify({"ok": False, "error": "Title not found"}), 404
+    # Regenerate db_update.json in background so app gets updated catalog
+    import threading as _thr
+    _thr.Thread(target=_regen_db_update_bg, daemon=True).start()
+    return jsonify({"ok": True, "title_id": title_id, "status": status, "is_ongoing": is_ongoing})
+

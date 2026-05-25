@@ -23,7 +23,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -41,7 +41,10 @@ class LocalDb {
         genres      TEXT,
         poster_url  TEXT,
         is_free     INTEGER DEFAULT 0,
-        db_version  INTEGER DEFAULT 0
+        db_version  INTEGER DEFAULT 0,
+        language    TEXT,
+        status      TEXT,
+        is_ongoing  INTEGER DEFAULT 0
       )
     ''');
     await db.execute('''
@@ -112,6 +115,18 @@ class LocalDb {
         )
       ''');
     }
+    if (oldV < 4) {
+      // Add status, is_ongoing, language columns to titles
+      for (final col in [
+        'language TEXT',
+        'status TEXT',
+        'is_ongoing INTEGER DEFAULT 0',
+      ]) {
+        try {
+          await db.execute('ALTER TABLE titles ADD COLUMN $col');
+        } catch (_) {}
+      }
+    }
   }
 
   // ── Titles ────────────────────────────────────────────────────────────────
@@ -155,6 +170,9 @@ class LocalDb {
         'poster_url': item.posterUrl,
         'is_free': item.isFree ? 1 : 0,
         'db_version': item.dbVersion,
+        'language': item.language,
+        'status': item.status,
+        'is_ongoing': (item.isOngoing ?? false) ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -341,6 +359,9 @@ class LocalDb {
       posterUrl: row['poster_url'] as String?,
       isFree: (row['is_free'] as int? ?? 0) == 1,
       dbVersion: row['db_version'] as int? ?? 0,
+      language: row['language'] as String?,
+      status: row['status'] as String?,
+      isOngoing: (row['is_ongoing'] as int? ?? 0) == 1,
     );
   }
 }

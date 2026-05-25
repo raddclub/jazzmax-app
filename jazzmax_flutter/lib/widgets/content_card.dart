@@ -63,6 +63,13 @@ class ContentCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 _UploadingBadge(),
               ],
+              if (item.isOngoingNow) ...[
+                const SizedBox(height: 4),
+                _StatusBadge(label: 'ONGOING', color: const Color(0xFF22C55E)),
+              ] else if (item.isCompleted && !item.isMovie) ...[
+                const SizedBox(height: 4),
+                _StatusBadge(label: 'COMPLETED', color: const Color(0xFF3B82F6)),
+              ],
             ])),
             // Language badge (bottom-left, above title text)
             if (item.language != null && item.language!.isNotEmpty)
@@ -256,6 +263,25 @@ String _langLabel(String lang) {
   final words = lang.trim().split(RegExp(r'[_\s]+'));
   final label = words.map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}').join(' ');
   return label.length > 12 ? label.substring(0, 12) : label;
+}
+
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _StatusBadge({required this.label, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Text(label,
+        style: const TextStyle(color: Colors.white, fontSize: 7,
+            fontWeight: FontWeight.w800, letterSpacing: 0.3)),
+    );
+  }
 }
 
 class _UploadingBadge extends StatefulWidget {

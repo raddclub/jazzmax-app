@@ -1649,6 +1649,84 @@ def queue_add_alias():
         )
     return jsonify({"ok": True, "job_id": jid, "skipped": []})
 
+
+# ---------------------------------------------------------------------------
+# Catalog sync  (consumed by Flutter app — no auth required for zero-rating)
+# ---------------------------------------------------------------------------
+
+_CATALOG_JSON_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "data", "db_update.json"
+)
+
+
+def _load_catalog():
+    """Load db_update.json; return (version, titles, episodes) or raise."""
+    if not os.path.exists(_CATALOG_JSON_PATH):
+        return 0, [], []
+    with open(_CATALOG_JSON_PATH, encoding="utf-8") as fh:
+        data = json.load(fh)
+    return (
+        int(data.get("version") or 0),
+        data.get("titles") or [],
+        data.get("episodes") or [],
+    )
+
+
+@bp.route("/catalog/version")
+def catalog_version():
+    """Return current catalog version + item count.
+    Used by Flutter app to decide whether a sync is needed.
+    No auth required — zero-rated users must be able to hit this.
+    """
+    try:
+        version, titles, _ = _load_catalog()
+        return jsonify({"ok": True, "version": version, "count": len(titles)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "version": 0, "count": 0}), 500
+
+
+@bp.route("/catalog/sync")
+def catalog_sync():
+    """Return catalog titles (+ episodes) for the Flutter app to store locally.
+
+    Optional query param:
+      since=<unix_ts>  — return only titles with db_version > since (delta sync).
+                         If omitted, returns all titles (full sync).
+    """
+    try:
+        since_raw = request.args.get("since")
+        since = int(since_raw) if since_raw else 0
+
+        version, titles, episodes = _load_catalog()
+
+        if since:
+            titles    = [t for t in titles   if int(t.get("db_version") or 0) > since]
+            title_ids = {t["id"] for t in titles}
+            episodes  = [e for e in episodes if e.get("title_id") in title_ids]
+
+        return jsonify({
+            "ok":       True,
+            "version":  version,
+            "count":    len(titles),
+            "titles":   titles,
+            "episodes": episodes,
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e), "titles": [], "episodes": []}), 500
+
+
+@bp.route("/catalog/db_update")
+def catalog_db_update():
+    """Serve raw db_update.json — used by JazzDrive zero-rating link and admin."""
+    try:
+        from flask import send_file as _sf
+        if not os.path.exists(_CATALOG_JSON_PATH):
+            return jsonify({"ok": False, "error": "db_update.json not generated yet"}), 404
+        return _sf(_CATALOG_JSON_PATH, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/status")
 @auth.login_required
 def status():

@@ -494,6 +494,51 @@ def enrich_title(meta: dict, *,
     if t:
         result["slug"] = slug_from(t, y)
 
+
+    # ── Status normalisation + multi-source determination ─────────────────
+    # Map TMDB raw status → our canonical values
+    _status_map = {
+        "released": "released",
+        "returning_series": "ongoing",
+        "in_production": "ongoing",
+        "planned": "ongoing",
+        "ended": "completed",
+        "canceled": "cancelled",
+        "cancelled": "cancelled",
+        "post_production": "released",
+    }
+    raw_st = (result.get("status") or "").lower().replace(" ", "_")
+    if raw_st in _status_map:
+        result["status"] = _status_map[raw_st]
+
+    # If still no status, use OMDB keywords in plot
+    if not result.get("status"):
+        plot_lower = (result.get("plot") or result.get("overview") or "").lower()
+        if any(kw in plot_lower for kw in ("ongoing", "currently airing", "new episodes", "season ongoing")):
+            result["status"] = "ongoing"
+        elif any(kw in plot_lower for kw in ("final episode", "series finale", "ended", "concluded")):
+            result["status"] = "completed"
+
+    # Year-based heuristic for regional shows (Pakistani/Bollywood/dramas) where
+    # TMDB+OMDB have no data and AI didn't return a status.
+    if not result.get("status"):
+        mt = (result.get("media_type") or meta.get("media_type") or "movie").lower()
+        if mt == "movie":
+            result["status"] = "released"
+        else:
+            try:
+                yr = int(result.get("year") or meta.get("year") or 0)
+                current_year = 2026
+                if yr >= current_year - 1:
+                    result["status"] = "ongoing"
+                else:
+                    result["status"] = "completed"
+            except Exception:
+                result["status"] = "released"
+
+    # Sync is_ongoing flag with status
+    result["is_ongoing"] = 1 if result.get("status") == "ongoing" else 0
+
     result["confidence"] = confidence_score(result)
     return result
 

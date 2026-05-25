@@ -16,6 +16,8 @@ class CatalogItem {
   final bool? isNew;
   final double? watchProgress; // 0.0 - 1.0
   final bool? isUploading;    // admin: currently being uploaded to JazzDrive
+  final String? status;       // 'released' | 'ongoing' | 'completed' | 'cancelled'
+  final bool? isOngoing;      // convenience flag synced with status=='ongoing'
 
   const CatalogItem({
     required this.id,
@@ -34,10 +36,22 @@ class CatalogItem {
     this.isNew,
     this.watchProgress,
     this.isUploading,
+    this.status,
+    this.isOngoing,
   });
 
-  bool get isMovie => mediaType == 'movie';
-  bool get isShow  => mediaType == 'show';
+  bool get isMovie      => mediaType == 'movie';
+  bool get isShow       => mediaType == 'show';
+  bool get isOngoingNow => isOngoing == true || status == 'ongoing';
+  bool get isCompleted  => status == 'completed';
+  String get statusLabel {
+    switch (status) {
+      case 'ongoing':   return 'ONGOING';
+      case 'completed': return 'COMPLETED';
+      case 'cancelled': return 'CANCELLED';
+      default:          return '';
+    }
+  }
 
   String get displayYear   => year != null ? year.toString() : '';
   String get displayRating => rating != null ? rating!.toStringAsFixed(1) : '';
@@ -63,16 +77,20 @@ class CatalogItem {
       isNew:       json['is_new'] as bool?,
       watchProgress: (json['watch_progress'] as num?)?.toDouble(),
       isUploading: json['is_uploading'] as bool?,
+      status:      json['status'] as String?,
+      isOngoing:   (json['is_ongoing'] == 1 || json['is_ongoing'] == true || json['status'] == 'ongoing'),
     );
   }
 
-  CatalogItem copyWith({double? watchProgress, bool? isUploading}) => CatalogItem(
+  CatalogItem copyWith({double? watchProgress, bool? isUploading, String? status, bool? isOngoing}) => CatalogItem(
     id: id, title: title, year: year, mediaType: mediaType,
     description: description, rating: rating, genres: genres,
     posterUrl: posterUrl, isFree: isFree, dbVersion: dbVersion,
     episodes: episodes, fileId: fileId, language: language, isNew: isNew,
     watchProgress: watchProgress ?? this.watchProgress,
     isUploading: isUploading ?? this.isUploading,
+    status: status ?? this.status,
+    isOngoing: isOngoing ?? this.isOngoing,
   );
 
   /// Returns a new CatalogItem with episodes replaced (used by CatalogNotifier).
@@ -83,5 +101,7 @@ class CatalogItem {
     episodes: eps, fileId: fileId, language: language, isNew: isNew,
     watchProgress: watchProgress,
     isUploading: isUploading,
+    status: status,
+    isOngoing: isOngoing,
   );
 }
