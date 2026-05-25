@@ -1,3 +1,4 @@
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -22,7 +23,7 @@ void main() async {
   };
 
   // Capture all uncaught Dart async / platform errors
-  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+  ui.PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
     DebugLogger.logCrash('PlatformDispatcher', error, stack);
     return true;
   };
