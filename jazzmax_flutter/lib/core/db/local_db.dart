@@ -127,7 +127,7 @@ class LocalDb {
         } catch (_) {}
       }
     }
-    if (oldV < 5) {
+    if (oldV < 8) {
       // Add content_type column to downloads for reliable folder categorisation
       try {
         await db.execute('ALTER TABLE downloads ADD COLUMN content_type TEXT');
