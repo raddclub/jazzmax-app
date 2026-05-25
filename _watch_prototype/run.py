@@ -91,6 +91,19 @@ app.register_blueprint(poster_proxy_bp)
 app.register_blueprint(sms_gateway_bp)
 app.register_blueprint(app_plans_bp)
 
+
+@app.route("/api/queue/status")
+def _proxy_queue_status():
+    """Proxy the download queue status from radd-hub for the Flutter admin screen."""
+    import urllib.request as _urllib
+    try:
+        with _urllib.urlopen("http://127.0.0.1:5000/api/queue/status", timeout=5) as r:
+            from flask import Response
+            return Response(r.read(), status=r.status, mimetype="application/json")
+    except Exception as e:
+        from flask import jsonify as _fj2
+        return _fj2({"ok": False, "jobs": [], "error": str(e)}), 200
+
 @app.route("/")
 def root():
     return redirect("/watch")

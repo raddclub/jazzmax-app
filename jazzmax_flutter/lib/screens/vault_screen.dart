@@ -421,22 +421,26 @@ class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
       final result = await FilePicker.platform.pickFiles(
         type: type,
         allowMultiple: true,
-        withData: false,
+        withData: true,
         withReadStream: false,
       );
       if (result == null || result.files.isEmpty) return;
 
       int imported = 0;
       for (final file in result.files) {
-        final src = file.path;
-        if (src == null) continue;
-        await VaultService.moveFileToVault(
-          src,
-          folder: widget.folderPath != null
-              ? widget.folderPath!.split('/').last
-              : null,
-        );
-        imported++;
+        final bytes = file.bytes;
+        final src   = file.path;
+        final folder = widget.folderPath != null
+            ? widget.folderPath!.split('/').last
+            : null;
+        if (bytes != null) {
+          // Android 11+ scoped storage returns content URI — use bytes directly
+          await VaultService.importFileBytes(bytes, file.name, folder: folder);
+          imported++;
+        } else if (src != null) {
+          await VaultService.moveFileToVault(src, folder: folder);
+          imported++;
+        }
       }
 
       if (mounted && imported > 0) {

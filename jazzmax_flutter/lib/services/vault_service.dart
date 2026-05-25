@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -260,6 +261,14 @@ class VaultService {
     final dest = File(p.join(targetDir.path, name));
     await src.copy(dest.path);
     await src.delete();
+  }
+
+  static Future<void> importFileBytes(Uint8List bytes, String name, {String? folder}) async {
+    final targetDir = folder != null
+        ? await getVaultFolder(folder)
+        : await getVaultDir();
+    final dest = File(p.join(targetDir.path, name));
+    await dest.writeAsBytes(bytes);
   }
 
   static Future<void> restoreFile(String vaultPath, String destDir) async {

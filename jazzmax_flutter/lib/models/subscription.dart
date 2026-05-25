@@ -22,7 +22,7 @@ class SubscriptionPlan {
     return SubscriptionPlan(
       id: json['id'] as String? ?? json['plan_id'] as String? ?? '',
       name: json['name'] as String? ?? '',
-      priceMonthly: json['price'] as int? ?? json['price_monthly'] as int? ?? 0,
+      priceMonthly: json['price_pkr'] as int? ?? json['price'] as int? ?? json['price_monthly'] as int? ?? 0,
       description: json['description'] as String? ?? '',
       downloadsPerDay: json['downloads_per_day'] as int? ?? 0,
       hdAccess: (json['hd_access'] as int? ?? 0) == 1,
