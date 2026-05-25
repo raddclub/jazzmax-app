@@ -77,6 +77,8 @@ def plans():
 def status():
     from flask import g
     user_id = g.app_user_id
+    if getattr(g, "is_guest", False) or user_id == 0:
+        return jsonify({"plan": "free", "is_active": True, "expires_at": None})
     now     = int(time.time())
 
     with db.conn() as c:
@@ -191,6 +193,8 @@ def tid_status():
     """Check if user's TID payment was approved."""
     from flask import g
     user_id = g.app_user_id
+    if getattr(g, 'is_guest', False) or user_id == 0:
+        return jsonify({"payments": []})
 
     with db.conn() as c:
         rows = c.execute(

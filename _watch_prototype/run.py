@@ -129,6 +129,9 @@ from flask import jsonify as _fj
 @app.errorhandler(400)
 def _e400(e): return _fj({"error": "bad request"}), 400
 
+@app.errorhandler(405)
+def _e405(e): return _fj({"error": "method not allowed"}), 405
+
 @app.errorhandler(401)
 def _e401(e): return _fj({"error": "unauthorized"}), 401
 

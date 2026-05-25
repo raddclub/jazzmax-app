@@ -120,7 +120,8 @@ def require_app_auth(fn):
         payload = _verify_access_token(token)
         if not payload or payload.get("type") != "access":
             return jsonify({"error": "invalid or expired token"}), 401
-        g.app_user_id = int(payload["sub"])
+        _sub = payload["sub"]
+        g.app_user_id = 0 if _sub == "guest" else int(_sub)
         g.app_phone   = payload.get("phone", "")
         g.is_guest    = payload.get("is_guest", False)
         return fn(*a, **kw)
