@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../constants.dart';
 import '../security/keystore.dart';
+import '../debug/debug_logger.dart';
 
 /// Singleton Dio HTTP client.
 /// Automatically attaches Bearer token to every request.
@@ -20,6 +21,7 @@ class ApiClient {
       ),
     );
 
+    _dio.interceptors.add(_LoggingInterceptor());
     _dio.interceptors.add(_AuthInterceptor(_dio));
   }
 
@@ -48,6 +50,64 @@ class ApiClient {
       _dio.put(path, data: data);
 }
 
+// ── Logging Interceptor ───────────────────────────────────────────────────────
+/// Records every HTTP request and response to the debug log file.
+class _LoggingInterceptor extends Interceptor {
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.extra['_req_start_ms'] = DateTime.now().millisecondsSinceEpoch;
+    final bodyPreview = options.data != null
+        ? options.data.toString().length > 200
+            ? options.data.toString().substring(0, 200) + '…'
+            : options.data.toString()
+        : null;
+    DebugLogger.logApi(
+      method: options.method,
+      url: '${options.baseUrl}${options.path}',
+      requestBody: bodyPreview,
+    );
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final start =
+        response.requestOptions.extra['_req_start_ms'] as int? ?? 0;
+    final dur =
+        start > 0 ? DateTime.now().millisecondsSinceEpoch - start : null;
+    final rawBody = response.data?.toString() ?? '';
+    DebugLogger.logApi(
+      method: response.requestOptions.method,
+      url:
+          '${response.requestOptions.baseUrl}${response.requestOptions.path}',
+      statusCode: response.statusCode,
+      responsePreview: rawBody,
+      durationMs: dur,
+    );
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    final start = err.requestOptions.extra['_req_start_ms'] as int? ?? 0;
+    final dur =
+        start > 0 ? DateTime.now().millisecondsSinceEpoch - start : null;
+    final respBody = err.response?.data?.toString() ?? '';
+    final respPreview = respBody.length > 300
+        ? respBody.substring(0, 300) + '…'
+        : respBody;
+    DebugLogger.logApi(
+      method: err.requestOptions.method,
+      url:
+          '${err.requestOptions.baseUrl}${err.requestOptions.path}',
+      error:
+          '${err.type.name}: ${err.message}  HTTP ${err.response?.statusCode}  Body: $respPreview',
+      durationMs: dur,
+    );
+    handler.next(err);
+  }
+}
+
 /// Interceptor: attaches auth header + handles 401 token refresh.
 class _AuthInterceptor extends Interceptor {
   final Dio _dio;
@@ -66,6 +126,9 @@ class _AuthInterceptor extends Interceptor {
     final token = await Keystore.getAccessToken();
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
+      DebugLogger.log('AUTH', 'Attaching Bearer token to ${options.path}');
+    } else {
+      DebugLogger.logWarn('AUTH', 'No access token for ${options.path}');
     }
     handler.next(options);
   }
@@ -73,6 +136,7 @@ class _AuthInterceptor extends Interceptor {
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     if (err.response?.statusCode == 401 && !_isRefreshing) {
+      DebugLogger.logWarn('AUTH', '401 received on ${err.requestOptions.path} — attempting token refresh');
       _isRefreshing = true;
       try {
         final refreshed = await _tryRefresh();
@@ -81,12 +145,16 @@ class _AuthInterceptor extends Interceptor {
           final newToken = await Keystore.getAccessToken();
           final opts = err.requestOptions;
           opts.headers['Authorization'] = 'Bearer $newToken';
+          DebugLogger.log('AUTH', 'Token refreshed — retrying ${opts.path}');
           final response = await _dio.fetch(opts);
           _isRefreshing = false;
           return handler.resolve(response);
         }
-      } catch (_) {}
+      } catch (e) {
+        DebugLogger.logError('AUTH', 'Token refresh threw exception', e);
+      }
       _isRefreshing = false;
+      DebugLogger.logError('AUTH', 'Refresh failed — clearing tokens, user must log in');
       // Refresh failed — clear tokens so app goes to login
       await Keystore.clearAll();
     }
@@ -95,7 +163,10 @@ class _AuthInterceptor extends Interceptor {
 
   Future<bool> _tryRefresh() async {
     final refreshToken = await Keystore.getRefreshToken();
-    if (refreshToken == null || refreshToken.isEmpty) return false;
+    if (refreshToken == null || refreshToken.isEmpty) {
+      DebugLogger.logWarn('AUTH', 'No refresh token available');
+      return false;
+    }
 
     try {
       // Use a fresh Dio instance (no interceptors) to avoid infinite loop
@@ -114,10 +185,13 @@ class _AuthInterceptor extends Interceptor {
           if (newRefresh != null && newRefresh.isNotEmpty) {
             await Keystore.saveRefreshToken(newRefresh);
           }
+          DebugLogger.log('AUTH', 'Token refresh successful');
           return true;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      DebugLogger.logError('AUTH', '_tryRefresh network error', e);
+    }
     return false;
   }
 }
