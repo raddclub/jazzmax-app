@@ -53,7 +53,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
         _lockedUntil = info.lockedUntil;
       });
     }
-    if (!widget.isSetup && biAvail && biEnabled) {
+    if (!widget.isSetup && biAvail) {
       await Future.delayed(const Duration(milliseconds: 400));
       if (mounted) _tryBiometric();
     }
@@ -285,7 +285,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: row.map((k) {
                             if (k == 'bio') {
-                              return _biometricAvailable && _biometricEnabled && !widget.isSetup
+                              return _biometricAvailable && !widget.isSetup
                                   ? _NumKey(
                                       child: const Icon(Icons.fingerprint_rounded,
                                           color: Colors.white, size: 28),

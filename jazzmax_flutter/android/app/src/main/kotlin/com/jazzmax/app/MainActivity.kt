@@ -1,6 +1,7 @@
 package com.jazzmax.app
 
 import android.app.PictureInPictureParams
+import android.media.MediaScannerConnection
 import android.content.Intent
 import android.os.Build
 import android.util.Rational
@@ -20,7 +21,8 @@ import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
 
-    private val PIP_CHANNEL  = "com.jazzmax.app/pip"
+    private val PIP_CHANNEL   = "com.jazzmax.app/pip"
+    private val MEDIA_CHANNEL = "com.jazzmax.app/media"
     private val CAST_CHANNEL = "com.jazzmax.app/cast"
 
     private var castContext: CastContext? = null
@@ -49,6 +51,21 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+
+        // ── Media Scanner Channel ────────────────────────────────────
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    scanFile -> {
+                        val scanPath = call.argument<String>(path)
+                        if (scanPath != null) {
+                            MediaScannerConnection.scanFile(this, arrayOf(scanPath), null, null)
+                        }
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         // ── Cast Channel ─────────────────────────────────────────────────
         try {
             castContext = CastContext.getSharedInstance(this)

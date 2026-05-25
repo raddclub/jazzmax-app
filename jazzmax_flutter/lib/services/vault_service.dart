@@ -8,9 +8,15 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
+import 'package:flutter/services.dart';
 
 class VaultService {
-  static const _storage = FlutterSecureStorage();
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(
+      encryptedSharedPreferences: true,
+      resetOnError: true,
+    ),
+  );
   static const _pinKey       = 'vault_pin_hash';
   static const _fakePinKey   = 'vault_fake_pin_hash';
   static const _autoLockKey  = 'vault_auto_lock_seconds';
@@ -19,6 +25,14 @@ class VaultService {
   static const _lockUntilKey = 'vault_locked_until';
 
   static final _auth = LocalAuthentication();
+  static const _mediaChannel = MethodChannel('com.jazzmax.app/media');
+
+  /// Notify Android MediaStore that [path] was deleted so other apps stop seeing it.
+  static Future<void> _removefromMediaStore(String path) async {
+    try {
+      await _mediaChannel.invokeMethod('scanFile', {'path': path});
+    } catch (_) {}
+  }
   static bool _unlocked = false;
   static DateTime? _unlockedAt;
   static bool _isFakeVault = false;
@@ -181,7 +195,7 @@ class VaultService {
 
   static Future<bool> isBiometricEnabled() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_biometricKey) ?? false;
+    return prefs.getBool(_biometricKey) ?? true;
   }
 
   static Future<void> setBiometricEnabled(bool v) async {
@@ -261,6 +275,8 @@ class VaultService {
     final dest = File(p.join(targetDir.path, name));
     await src.copy(dest.path);
     await src.delete();
+    // Tell Android MediaStore the source file is gone so it disappears from gallery/other apps
+    await _removefromMediaStore(sourcePath);
   }
 
   static Future<void> importFileBytes(Uint8List bytes, String name, {String? folder}) async {

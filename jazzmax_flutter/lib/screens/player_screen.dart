@@ -106,6 +106,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool _playing = false;
   bool _ended = false;
 
+  // Position notifier — updates slider/time WITHOUT rebuilding full tree
+  final _positionNotifier = ValueNotifier<Duration>(Duration.zero);
+  final _durationNotifier = ValueNotifier<Duration>(Duration.zero);
+
   // Sleep timer
   int? _sleepRemainingSeconds;
   Timer? _sleepTimer;
@@ -168,7 +172,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     _player.stream.position.listen((p) {
       if (!mounted) return;
-      setState(() => _position = p);
+      _position = p;
+      _positionNotifier.value = p;
       if (p.inSeconds % 10 == 0 && _duration.inMilliseconds > 0) {
         LocalDb.saveWatchPosition(
             fileId: widget.fileId,
@@ -184,7 +189,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     });
     _player.stream.duration.listen((d) {
       if (!mounted) return;
-      setState(() => _duration = d);
+      _duration = d;
+      _durationNotifier.value = d;
     });
     _player.stream.buffering.listen((b) {
       if (!mounted) return;
@@ -494,6 +500,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           positionMs: _position.inMilliseconds,
           durationMs: _duration.inMilliseconds);
     }
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
     _player.dispose();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -504,7 +512,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 4), () {
+    _hideTimer = Timer(const Duration(seconds: 3), () {
       if (mounted &&
           !_showSpeedPicker &&
           !_showSubtitleMenu &&
@@ -601,7 +609,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             setState(() { _scale = 1.0; });
             return;
           }
-          _seekRelative(d.localPosition.dx < w / 2 ? -10 : 10);
+          HapticFeedback.selectionClick();
+          _seekRelative(d.localPosition.dx < w / 2 ? -15 : 15);
         },
         onLongPressStart: (_) {
           setState(() => _longPressFast = true);
@@ -623,6 +632,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 controller: _videoCtrl,
                 fit: _ratios[_ratioIdx],
                 filterQuality: FilterQuality.medium,
+                controls: NoVideoControls,
+                subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
               ),
             ),
           ),
@@ -708,7 +719,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                             fontWeight: FontWeight.w600)),
                   ]),
                 ),
-              ).animate().fadeIn(duration: 200.ms),
+              ).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
             ),
 
           // ── Sleep timer badge ──
@@ -874,7 +885,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     child: const Icon(Icons.lock_open_rounded,
                         color: Colors.white, size: 22)),
                 ),
-              ).animate().fadeIn(duration: 200.ms),
+              ).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
             ),
 
           // ── Speed Panel ──
@@ -1070,11 +1081,11 @@ class _ControlsOverlay extends StatelessWidget {
           GestureDetector(
             onTap: onPlayPause,
             child: Container(
-              width: 64, height: 64,
+              width: 76, height: 76,
               decoration: BoxDecoration(shape: BoxShape.circle,
-                  color: AppColors.primary.withOpacity(0.9), boxShadow: AppShadows.glow),
+                  color: AppColors.primary, boxShadow: AppShadows.glow),
               child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: Colors.white, size: 38)),
+                  color: Colors.white, size: 42)),
           ),
           const SizedBox(width: 24),
           _SeekBtn(icon: Icons.forward_10_rounded, onTap: onSeekForward),
@@ -1094,7 +1105,7 @@ class _ControlsOverlay extends StatelessWidget {
                 ])),
             ),
           ],
-        ]).animate().fadeIn(duration: 200.ms)),
+        ]).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut)),
 
       // ── BOTTOM BAR ──
       Positioned(
@@ -1130,10 +1141,10 @@ class _ControlsOverlay extends StatelessWidget {
 
             SliderTheme(
               data: SliderTheme.of(context).copyWith(
-                trackHeight: sliderDragging ? 4 : 3,
+                trackHeight: sliderDragging ? 5 : 3,
                 thumbShape: RoundSliderThumbShape(
-                    enabledThumbRadius: sliderDragging ? 8 : 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                    enabledThumbRadius: sliderDragging ? 10 : 5),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
                 activeTrackColor: AppColors.primary,
                 inactiveTrackColor: Colors.white24,
                 thumbColor: AppColors.primary,
@@ -1159,7 +1170,7 @@ class _ControlsOverlay extends StatelessWidget {
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap),
               ),
             ]),
-          ]).animate().fadeIn(duration: 200.ms),
+          ]).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
         ),
       ),
     ]);
@@ -1215,10 +1226,10 @@ class _SeekBtn extends StatelessWidget {
   const _SeekBtn({required this.icon, required this.onTap});
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(width: 50, height: 50,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.black26),
-        child: Icon(icon, color: Colors.white, size: 28)));
+    onTap: () { HapticFeedback.selectionClick(); onTap(); },
+    child: Container(width: 68, height: 68,
+        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.08)),
+        child: Icon(icon, color: Colors.white, size: 36)));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

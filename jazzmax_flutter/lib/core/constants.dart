@@ -159,19 +159,20 @@ class AppShadows {
 
 // ── Durations ─────────────────────────────────────────────────────────────────
 class AppDurations {
-  static const Duration fast   = Duration(milliseconds: 150);
-  static const Duration normal = Duration(milliseconds: 250);
-  static const Duration slow   = Duration(milliseconds: 400);
-  static const Duration xslow  = Duration(milliseconds: 600);
+  static const Duration fast   = Duration(milliseconds: 100);
+  static const Duration normal = Duration(milliseconds: 180);
+  static const Duration slow   = Duration(milliseconds: 280);
+  static const Duration xslow  = Duration(milliseconds: 420);
 }
 
 // ── Curves ────────────────────────────────────────────────────────────────────
 class AppCurves {
   static const Curve standard = Curves.easeOutCubic;
-  static const Curve enter    = Curves.easeOutBack;
-  static const Curve exit     = Curves.easeInCubic;
-  static const Curve spring   = Curves.elasticOut;
+  static const Curve enter    = Curves.easeOutExpo;
+  static const Curve exit     = Curves.easeInQuart;
+  static const Curve spring   = Curves.easeOutBack;
   static const Curve bounce   = Curves.bounceOut;
+  static const Curve snap     = Curves.easeOutCirc;
 }
 
 // ── Border Radius ─────────────────────────────────────────────────────────────
