@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../core/constants.dart';
 import '../core/theme/jazz_colors.dart';
+import '../core/debug/debug_logger.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../models/catalog_item.dart';
@@ -25,16 +27,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scroll = ScrollController();
   bool _scrolled = false;
 
+  // Hidden debug panel — tap JazzMAX logo 5 times quickly
+  int _debugTaps = 0;
+  DateTime? _lastDebugTap;
+
   static const _categories = ['All', 'Movies', 'Shows', 'Dramas', 'Urdu', 'Punjabi', 'English'];
 
   @override
   void initState() {
     super.initState();
+    DebugLogger.log('HOME', 'HomeScreen initState');
     _scroll.addListener(() {
       final now = _scroll.offset > 50;
       if (now != _scrolled) setState(() => _scrolled = now);
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      DebugLogger.log('HOME', 'Post-frame: calling catalogProvider.initialize()');
       ref.read(catalogProvider.notifier).initialize();
       NotificationService.instance.fetch();
     });
@@ -42,6 +50,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() { _scroll.dispose(); super.dispose(); }
+
+  void _onLogoTap() {
+    final now = DateTime.now();
+    if (_lastDebugTap != null && now.difference(_lastDebugTap!).inSeconds > 2) {
+      _debugTaps = 0;
+    }
+    _lastDebugTap = now;
+    _debugTaps++;
+    if (_debugTaps >= 5) {
+      _debugTaps = 0;
+      DebugLogger.log('DEBUG', 'Debug panel opened by user');
+      _showDebugPanel();
+    }
+  }
+
+  void _showDebugPanel() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _DebugPanel(),
+    );
+  }
 
   List<CatalogItem> _filtered(CatalogState s) {
     final all = [...s.movies, ...s.shows];
@@ -60,6 +91,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final catalog = ref.watch(catalogProvider);
     final user    = ref.watch(authProvider).user;
+
+    // Log each rebuild state so we can track what the UI saw
+    DebugLogger.log('HOME',
+        'build — status=${catalog.status.name}  movies=${catalog.movies.length}  shows=${catalog.shows.length}  error=${catalog.error}');
 
     return Scaffold(
       backgroundColor: null,
@@ -97,13 +132,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   begin: Alignment.topCenter, end: Alignment.bottomCenter,
                   colors: [AppColors.background, Colors.transparent]),
               )),
-      title: RichText(
-        text: const TextSpan(
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
-          children: [
-            TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
-            TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
-          ],
+      // Wrap logo with GestureDetector — tap 5 times to open debug panel
+      title: GestureDetector(
+        onTap: _onLogoTap,
+        behavior: HitTestBehavior.opaque,
+        child: RichText(
+          text: const TextSpan(
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+            children: [
+              TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
+              TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -140,10 +180,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       controller: _scroll,
       physics: const BouncingScrollPhysics(),
       slivers: [
-        // Spacing for AppBar
         const SliverToBoxAdapter(child: SizedBox(height: 96)),
 
-        // Sync banner
         if (catalog.status == CatalogStatus.syncing)
           SliverToBoxAdapter(
             child: Container(
@@ -164,13 +202,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
 
-        // Hero spotlight (first 5 items)
         if (catalog.movies.isNotEmpty || catalog.shows.isNotEmpty)
           SliverToBoxAdapter(child: _HeroSpotlight(
             items: (catalog.movies.isNotEmpty ? catalog.movies : catalog.shows).take(5).toList(),
           ).animate().fadeIn(duration: 500.ms)),
 
-        // Category chips
         SliverToBoxAdapter(
           child: SizedBox(
             height: 48,
@@ -190,7 +226,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
         const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
-        // Continue Watching (from history)
         if (catalog.recentlyWatched.isNotEmpty)
           SliverToBoxAdapter(child: _ContentSection(
             title: 'Continue Watching',
@@ -198,7 +233,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             showProgress: true,
           )),
 
-        // Main content grid or rows
         if (_selectedCategory == 'All') ...[
           if (catalog.movies.isNotEmpty)
             SliverToBoxAdapter(child: _ContentSection(
@@ -212,6 +246,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               count: catalog.shows.length,
               items: catalog.shows,
             )),
+          // Show empty state with debug hint if nothing loaded
+          if (catalog.movies.isEmpty && catalog.shows.isEmpty &&
+              catalog.status == CatalogStatus.ready)
+            SliverToBoxAdapter(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 60),
+                  child: Column(children: [
+                    const Icon(Icons.movie_filter_outlined,
+                        color: AppColors.textMuted, size: 56),
+                    const SizedBox(height: 16),
+                    const Text('No content yet',
+                        style: TextStyle(color: AppColors.textPrimary,
+                            fontSize: 18, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Text(catalog.error ?? 'Pull down to retry sync',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 24),
+                    const Text('Tap JazzMAX logo 5× for debug info',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  ]),
+                ),
+              ),
+            ),
         ] else
           SliverPadding(
             padding: const EdgeInsets.all(16),
@@ -247,14 +306,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildShimmer() {
     return ListView(physics: const NeverScrollableScrollPhysics(), children: [
       const SizedBox(height: 96),
-      // Hero shimmer
       Shimmer.fromColors(
         baseColor: AppColors.surface, highlightColor: AppColors.surfaceHigh,
         child: Container(height: 220, margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(color: AppColors.surface,
                 borderRadius: BorderRadius.circular(AppRadius.lg)))),
       const SizedBox(height: 16),
-      // Row shimmer
       SizedBox(height: 180,
         child: ListView.builder(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: 5, itemBuilder: (_, __) =>
@@ -264,6 +321,131 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: Container(width: 120, decoration: BoxDecoration(color: AppColors.surface,
                       borderRadius: BorderRadius.circular(AppRadius.sm))))))),
     ]);
+  }
+}
+
+// ── Debug Panel ───────────────────────────────────────────────────────────────
+class _DebugPanel extends StatefulWidget {
+  const _DebugPanel();
+  @override
+  State<_DebugPanel> createState() => _DebugPanelState();
+}
+
+class _DebugPanelState extends State<_DebugPanel> {
+  bool _sharing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final logPath = DebugLogger.getLogPath();
+    final lastLines = DebugLogger.getLastLines(80);
+
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A0A14),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(top: BorderSide(color: Color(0xFFE8002D), width: 2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
+            child: Row(children: [
+              const Icon(Icons.bug_report_rounded, color: Color(0xFFE8002D), size: 22),
+              const SizedBox(width: 10),
+              const Text('JazzMAX Debug Log',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
+              const Spacer(),
+              // Copy path button
+              IconButton(
+                icon: const Icon(Icons.copy_rounded, color: Color(0xFF9090B0), size: 20),
+                tooltip: 'Copy log path',
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: logPath));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Log path copied to clipboard'),
+                        duration: Duration(seconds: 2)));
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, color: Color(0xFF9090B0), size: 22),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ]),
+          ),
+          // File path
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+            child: Text('📁 $logPath',
+                style: const TextStyle(color: Color(0xFF6060A0), fontSize: 10),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const Divider(color: Color(0xFF1A1A2E), height: 1),
+          // Log content
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(
+                lastLines,
+                style: const TextStyle(
+                    color: Color(0xFFB0B0D0),
+                    fontFamily: 'monospace',
+                    fontSize: 10,
+                    height: 1.5),
+              ),
+            ),
+          ),
+          const Divider(color: Color(0xFF1A1A2E), height: 1),
+          // Action buttons
+          Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16,
+                12 + MediaQuery.of(context).padding.bottom),
+            child: Row(children: [
+              // Copy logs button
+              Expanded(
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.copy_all_rounded, size: 16),
+                  label: const Text('Copy Logs'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    side: const BorderSide(color: Color(0xFF303050)),
+                  ),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: lastLines));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Log copied to clipboard'),
+                          duration: Duration(seconds: 2)));
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Share button
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: _sharing
+                      ? const SizedBox(width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2,
+                              color: Colors.white))
+                      : const Icon(Icons.share_rounded, size: 16),
+                  label: Text(_sharing ? 'Sharing…' : 'Share File'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFE8002D),
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _sharing ? null : () async {
+                    setState(() => _sharing = true);
+                    await DebugLogger.shareLogs();
+                    if (mounted) setState(() => _sharing = false);
+                  },
+                ),
+              ),
+            ]),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -334,6 +516,7 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () {
+        DebugLogger.logUi('HeroCard', 'Tapped: ${item.title} (id=${item.id})');
         Navigator.of(context).pushNamed(AppRoutes.showDetail, arguments: item);
       },
       child: Container(
@@ -345,15 +528,12 @@ class _HeroCard extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: Stack(fit: StackFit.expand, children: [
-            // Background image
             item.posterUrl != null
                 ? CachedNetworkImage(imageUrl: item.posterUrl!, fit: BoxFit.cover,
                     errorWidget: (_, __, ___) => Container(color: AppColors.card,
                         child: const Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 48)))
                 : Container(color: AppColors.card),
-            // Gradient
             Builder(builder: (ctx) => DecoratedBox(decoration: BoxDecoration(gradient: ctx.jazzHeroGradient))),
-            // Content
             Positioned(bottom: 0, left: 0, right: 0,
               child: Padding(
                 padding: const EdgeInsets.all(16),
