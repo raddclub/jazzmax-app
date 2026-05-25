@@ -44,9 +44,9 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
     final progList = await LocalDb.getWatchPositions();
     final prog = <String, double>{};
     for (final p in progList) {
-      if (p['file_id'] != null && p['duration'] != null && (p['duration'] as int) > 0) {
-        final pos = (p['position'] as int? ?? 0);
-        final dur = (p['duration'] as int);
+      if (p['file_id'] != null && p['duration_ms'] != null && (p['duration_ms'] as int) > 0) {
+        final pos = (p['position_ms'] as int? ?? 0);
+        final dur = (p['duration_ms'] as int);
         prog[p['file_id'].toString()] = (pos / dur).clamp(0.0, 1.0);
       }
     }

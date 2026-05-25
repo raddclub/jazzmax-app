@@ -20,11 +20,20 @@ class CatalogApi {
   static Future<List<CatalogItem>> syncFull() async {
     final response = await _client.get(ApiPaths.catalogSync);
     final data = response.data as Map<String, dynamic>;
-    // Server returns key "titles" (not "items")
-    final items = data['titles'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final rawTitles = data['titles'] as List<dynamic>? ?? [];
+    final rawEpisodes = data['episodes'] as List<dynamic>? ?? [];
+    // Build episode lookup: titleId → list of episode maps
+    final epsByTitle = <int, List<Map<String, dynamic>>>{};
+    for (final ep in rawEpisodes) {
+      final e = ep as Map<String, dynamic>;
+      final tid = e['title_id'] as int? ?? 0;
+      epsByTitle.putIfAbsent(tid, () => []).add(e);
+    }
+    return rawTitles.map((e) {
+      final m = Map<String, dynamic>.from(e as Map<String, dynamic>);
+      m['episodes'] = epsByTitle[m['id'] as int? ?? 0] ?? [];
+      return CatalogItem.fromJson(m);
+    }).toList();
   }
 
   /// Delta sync — only items changed since [sinceTimestamp].
@@ -35,11 +44,19 @@ class CatalogApi {
       params: {'since': sinceTimestamp.toString()},
     );
     final data = response.data as Map<String, dynamic>;
-    // Server returns key "titles" (not "items")
-    final items = data['titles'] as List<dynamic>? ?? [];
-    return items
-        .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final rawTitles = data['titles'] as List<dynamic>? ?? [];
+    final rawEpisodes = data['episodes'] as List<dynamic>? ?? [];
+    final epsByTitle = <int, List<Map<String, dynamic>>>{};
+    for (final ep in rawEpisodes) {
+      final e = ep as Map<String, dynamic>;
+      final tid = e['title_id'] as int? ?? 0;
+      epsByTitle.putIfAbsent(tid, () => []).add(e);
+    }
+    return rawTitles.map((e) {
+      final m = Map<String, dynamic>.from(e as Map<String, dynamic>);
+      m['episodes'] = epsByTitle[m['id'] as int? ?? 0] ?? [];
+      return CatalogItem.fromJson(m);
+    }).toList();
   }
 
   /// Get a streaming URL for a specific file.

@@ -1,3 +1,21 @@
+// Safely parse a bool/int/null value from JSON.
+bool _parseBool(dynamic val) {
+  if (val == null) return false;
+  if (val is bool) return val;
+  if (val is int) return val == 1;
+  return false;
+}
+
+// Parse expires_at which server sends as Unix int seconds or null.
+String? _parseExpiry(dynamic val) {
+  if (val == null) return null;
+  if (val is int && val > 0) {
+    return DateTime.fromMillisecondsSinceEpoch(val * 1000).toIso8601String();
+  }
+  if (val is String && val.isNotEmpty) return val;
+  return null;
+}
+
 class AppUser {
   final int id;
   final String phone;
@@ -61,8 +79,8 @@ class UserSubscription {
   });
 
   factory UserSubscription.fromJson(Map<String, dynamic> json) {
-    final expiresAt = json['expires_at'] as String?;
-    bool active = (json['is_active'] as int? ?? 0) == 1;
+    final expiresAt = _parseExpiry(json['expires_at']);
+    bool active = _parseBool(json['is_active']);
 
     // Also check expiry date
     if (active && expiresAt != null) {

@@ -108,8 +108,12 @@ class _AuthInterceptor extends Interceptor {
       if (response.statusCode == 200) {
         final data = response.data as Map<String, dynamic>;
         final newAccess = data['access_token'] as String?;
+        final newRefresh = data['refresh_token'] as String?;
         if (newAccess != null) {
           await Keystore.saveAccessToken(newAccess);
+          if (newRefresh != null && newRefresh.isNotEmpty) {
+            await Keystore.saveRefreshToken(newRefresh);
+          }
           return true;
         }
       }

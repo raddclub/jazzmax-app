@@ -1,3 +1,11 @@
+// Safely parse a bool/int/null value from JSON (handles Python bool → JSON true/false).
+bool _parseBool(dynamic val) {
+  if (val == null) return false;
+  if (val is bool) return val;
+  if (val is int) return val == 1;
+  return false;
+}
+
 class CatalogItem {
   final int id;
   final String title;
@@ -69,7 +77,7 @@ class CatalogItem {
           ? json['genres'] as String
           : json['genres']?.toString(),
       posterUrl:   json['poster'] as String? ?? json['poster_url'] as String?,
-      isFree:      (json['is_free'] as int? ?? 0) == 1,
+      isFree:      _parseBool(json['is_free']),
       dbVersion:   json['db_version'] as int? ?? 0,
       episodes:    episodesRaw.cast<Map<String, dynamic>>(),
       fileId:      json['file_id']?.toString(),

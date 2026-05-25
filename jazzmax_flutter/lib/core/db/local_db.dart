@@ -23,7 +23,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 4,
+      version: 8,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );

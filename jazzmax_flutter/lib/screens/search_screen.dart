@@ -6,6 +6,7 @@ import '../core/constants.dart';
 import '../providers/catalog_provider.dart';
 import '../models/catalog_item.dart';
 import '../widgets/content_card.dart';
+import 'package:shimmer/shimmer.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
@@ -195,7 +196,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 3, childAspectRatio: 2/3, crossAxisSpacing: 10, mainAxisSpacing: 10),
       itemCount: 9,
-      itemBuilder: (_, __) => const ShimmerCard(),
+      itemBuilder: (_, __) => Shimmer.fromColors(
+        baseColor: AppColors.surface,
+        highlightColor: AppColors.border,
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
+      ),
     );
   }
 

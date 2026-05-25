@@ -16,7 +16,9 @@ log = logging.getLogger("hub.app_history")
 
 bp = Blueprint("app_history", __name__, url_prefix="/api/history")
 
-SECRET = os.environ.get("SESSION_SECRET", "dev-secret")
+def _get_secret() -> str:
+    from .app_auth import _jwt_secret  # noqa: PLC0415
+    return _jwt_secret()
 
 
 def _ensure_table() -> None:
@@ -42,7 +44,7 @@ def _get_user_id() -> int | None:
     token = auth[7:]
     try:
         payload = jwt.decode(
-            token, SECRET, algorithms=["HS256"],
+            token, _get_secret(), algorithms=["HS256"],
             options={"verify_sub": False},
         )
         # Reject guest tokens — guests don't have persistent history
