@@ -6,6 +6,15 @@ bool _parseBool(dynamic val) {
   return false;
 }
 
+// Safely parse an int from JSON — handles String, int, double, null.
+int? _parseInt(dynamic val) {
+  if (val == null) return null;
+  if (val is int) return val;
+  if (val is double) return val.toInt();
+  if (val is String) return int.tryParse(val);
+  return null;
+}
+
 class CatalogItem {
   final int id;
   final String title;
@@ -67,9 +76,9 @@ class CatalogItem {
   factory CatalogItem.fromJson(Map<String, dynamic> json) {
     final episodesRaw = json['episodes'] as List<dynamic>? ?? [];
     return CatalogItem(
-      id:          json['id'] as int,
+      id:          _parseInt(json['id']) ?? 0,
       title:       json['title'] as String? ?? '',
-      year:        json['year'] as int?,
+      year:        _parseInt(json['year']),
       mediaType:   json['media_type'] as String? ?? 'movie',
       description: json['description'] as String? ?? json['plot'] as String?,
       rating:      (json['rating'] as num?)?.toDouble(),
@@ -78,7 +87,7 @@ class CatalogItem {
           : json['genres']?.toString(),
       posterUrl:   json['poster'] as String? ?? json['poster_url'] as String?,
       isFree:      _parseBool(json['is_free']),
-      dbVersion:   json['db_version'] as int? ?? 0,
+      dbVersion:   _parseInt(json['db_version']) ?? 0,
       episodes:    episodesRaw.cast<Map<String, dynamic>>(),
       fileId:      json['file_id']?.toString(),
       language:    json['language'] as String?,
