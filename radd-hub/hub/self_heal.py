@@ -129,39 +129,54 @@ def _thread_watchdog() -> dict:
 # Doctor: database
 # ─────────────────────────────────────────────────────────────────────────────
 _DB_BACKUP_DIR = config.DATA_DIR / "backups"
-_MAX_BACKUPS   = 6
+_MAX_BACKUPS   = 30
 
 def _db_doctor() -> dict:
     db_path = config.DB_PATH
     if not db_path.exists():
         return {"ok": False, "error": "DB file missing"}
 
-    # 1. Integrity check
+    # 1. WAL checkpoint + integrity check using a single connection
     try:
-        con = sqlite3.connect(str(db_path), timeout=5)
+        con = sqlite3.connect(str(db_path), timeout=10)
+        con.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         result = con.execute("PRAGMA integrity_check").fetchone()
-        con.close()
         integrity_ok = (result and result[0] == "ok")
+        con.close()
     except Exception as e:
         integrity_ok = False
         log.error("self_heal db_doctor: integrity check failed: %s", e)
+        try:
+            con.close()
+        except Exception:
+            pass
 
     if not integrity_ok:
         log.error("self_heal db_doctor: DB corruption detected — attempting restore")
         _restore_latest_backup(db_path)
+        _apply_emergency_tokens()
         return {"ok": False, "action": "restore_attempted"}
 
-    # 2. Rolling backup
+    # 2. Rolling backup using SQLite native backup API (safe with WAL mode)
     _DB_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    ts_str  = time.strftime("%Y%m%d_%H%M%S")
-    bak     = _DB_BACKUP_DIR / f"radd_hub.{ts_str}.db"
+    ts_str = time.strftime("%Y%m%d_%H%M%S")
+    bak    = _DB_BACKUP_DIR / f"radd_hub.{ts_str}.db"
     try:
-        shutil.copy2(str(db_path), str(bak))
+        src_con = sqlite3.connect(str(db_path), timeout=10)
+        dst_con = sqlite3.connect(str(bak), timeout=10)
+        src_con.backup(dst_con)
+        dst_con.close()
+        src_con.close()
     except Exception as e:
         log.warning("self_heal db_doctor: backup failed: %s", e)
+        try:
+            dst_con.close()
+            src_con.close()
+        except Exception:
+            pass
         return {"ok": True, "backup": False}
 
-    # 3. Prune old backups
+    # 3. Prune old backups (keep _MAX_BACKUPS most recent)
     backups = sorted(_DB_BACKUP_DIR.glob("radd_hub.*.db"), key=lambda f: f.stat().st_mtime)
     while len(backups) > _MAX_BACKUPS:
         try:
@@ -170,6 +185,30 @@ def _db_doctor() -> dict:
             break
 
     return {"ok": True, "backup": str(bak.name)}
+
+
+def _apply_emergency_tokens() -> None:
+    """After a DB restore, re-inject the latest refresh tokens from the emergency file.
+    This prevents losing a rotated token that was saved after the last DB backup."""
+    efile = config.DATA_DIR / "auth" / "emergency_tokens.json"
+    if not efile.exists():
+        return
+    try:
+        import json as _json
+        tokens = _json.loads(efile.read_text())
+        with db.conn() as c:
+            for acct_id_str, info in tokens.items():
+                rt  = info.get("refresh_token") or ""
+                raw = info.get("raw_accesstoken") or ""
+                if not rt:
+                    continue
+                c.execute(
+                    "UPDATE accounts SET refresh_token=?, raw_accesstoken=COALESCE(NULLIF(?,''),raw_accesstoken) WHERE id=?",
+                    (rt, raw, int(acct_id_str))
+                )
+        log.info("self_heal: emergency tokens applied to %d account(s) after restore", len(tokens))
+    except Exception as e:
+        log.warning("self_heal: emergency token apply failed: %s", e)
 
 
 def _restore_latest_backup(db_path: Path) -> bool:
@@ -553,7 +592,7 @@ _SCHEDULE = [
     ("badge_updater",  _update_badges,    30),
     ("thread_watchdog",_thread_watchdog,  60),
     ("fs_doctor",      _fs_doctor,        300),
-    ("db_doctor",      _db_doctor,        300),
+    ("db_doctor",      _db_doctor,        60),
     ("disk_doctor",    _disk_doctor,      600),
     ("config_doctor",  _config_doctor,    600),
     ("dep_doctor",     _dep_doctor,       900),

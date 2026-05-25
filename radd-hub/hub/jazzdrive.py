@@ -1350,6 +1350,9 @@ def android_refresh_session(refresh_token: str,
                 "android_refresh_session: persisted rotated refresh_token early (acct=%s)",
                 account_id,
             )
+            # Crash-safe backup: write to emergency file OUTSIDE the DB transaction
+            # so even if the DB is corrupted/restored, the token survives
+            _save_emergency_token(account_id, new_rt, raw_at or "")
         except Exception as _early_save_err:
             log.debug("android_refresh_session: early token save failed: %s", _early_save_err)
 
