@@ -23,7 +23,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 8,
+      version: 9,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -133,6 +133,17 @@ class LocalDb {
         await db.execute('ALTER TABLE downloads ADD COLUMN content_type TEXT');
       } catch (_) {}
     }
+    if (oldV < 9) {
+      // Normalize media_type: rename 'series' and 'tv' rows to 'show'
+      // so getShows() works correctly with all historic data.
+      // Also clear sync_meta so a forced full re-sync happens on next launch.
+      try {
+        await db.execute("UPDATE titles SET media_type = 'show' WHERE media_type IN ('series', 'tv')");
+      } catch (_) {}
+      try {
+        await db.delete('sync_meta');
+      } catch (_) {}
+    }
   }
 
   // ── Titles ────────────────────────────────────────────────────────────────
@@ -146,8 +157,9 @@ class LocalDb {
 
   static Future<List<CatalogItem>> getShows() async {
     final db = await instance;
-    final rows = await db.query('titles',
-        where: 'media_type = ?', whereArgs: ['show'], orderBy: 'title ASC');
+    final rows = await db.rawQuery(
+        'SELECT * FROM titles WHERE media_type IN (?, ?, ?) ORDER BY title ASC',
+        ['show', 'series', 'tv']);
     return rows.map(_rowToItem).toList();
   }
 
