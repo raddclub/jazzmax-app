@@ -85,6 +85,9 @@ dependencies:
   # Disk space info for downloads screen
   disk_space_plus: ^0.2.0
 
+  # Debug log sharing (debug APK only — will be toggled off via kDebugLogging flag)
+  share_plus: ^10.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
