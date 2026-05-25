@@ -32,7 +32,10 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       await ref.read(authProvider.notifier).register(phone: _phone.text.trim(), password: _pass.text);
       if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     } on DioException catch (e) {
-      final serverMsg = (e.response?.data as Map?)?['error'] as String?;
+      final _errData = e.response?.data;
+      final serverMsg = (_errData is Map
+          ? ((_errData['error'] ?? _errData['message']) as String?)
+          : (_errData is String && _errData.isNotEmpty ? _errData : null));
       setState(() { _error = serverMsg ?? _friendly(e.toString()); _loading = false; });
     } catch (e) {
       setState(() { _error = _friendly(e.toString()); _loading = false; });
@@ -95,7 +98,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         prefixIcon: Icons.phone_outlined,
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return 'Enter your phone number';
-                          if (v.trim().length < 10) return 'Enter a valid Pakistan phone number';
+                          if (v.trim().length < 11) return 'Enter 11-digit Jazz number (03XX-XXXXXXX)';
                           return null;
                         })
                         .animate(delay: 120.ms).fadeIn(duration: 350.ms)

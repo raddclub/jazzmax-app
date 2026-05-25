@@ -190,7 +190,10 @@ class VaultService {
 
   static Future<bool> isBiometricAvailable() async {
     try {
-      return await _auth.canCheckBiometrics;
+      if (await _auth.canCheckBiometrics) return true;
+      // Fallback for devices (e.g. Infinix) where canCheckBiometrics
+      // returns false even with enrolled fingerprints
+      return await _auth.isDeviceSupported();
     } catch (_) {
       return false;
     }

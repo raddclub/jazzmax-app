@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../core/constants.dart';
 import '../services/vault_service.dart';
 import 'vault_settings_screen.dart';
+import 'package:file_picker/file_picker.dart';
 
 class VaultScreen extends StatefulWidget {
   final String? folderPath;
@@ -414,6 +415,47 @@ class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _importFiles(FileType type) async {
+    Navigator.pop(context); // close bottom sheet first
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: type,
+        allowMultiple: true,
+        withData: false,
+        withReadStream: false,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      int imported = 0;
+      for (final file in result.files) {
+        final src = file.path;
+        if (src == null) continue;
+        await VaultService.moveFileToVault(
+          src,
+          folder: widget.folderPath != null
+              ? widget.folderPath!.split('/').last
+              : null,
+        );
+        imported++;
+      }
+
+      if (mounted && imported > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$imported file${imported > 1 ? "s" : ""} added to vault'),
+          backgroundColor: AppColors.surface,
+        ));
+        await _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Could not import file: $e'),
+          backgroundColor: AppColors.error,
+        ));
+      }
+    }
+  }
+
   void _showAddMenu() {
     showModalBottomSheet(
       context: context,
@@ -434,6 +476,10 @@ class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
           ),
           _SheetTile(icon: Icons.create_new_folder_rounded, label: 'New Folder',
               onTap: () { Navigator.pop(context); _createFolder(); }),
+          _SheetTile(icon: Icons.photo_library_rounded, label: 'From Gallery',
+              onTap: () => _importFiles(FileType.media)),
+          _SheetTile(icon: Icons.insert_drive_file_rounded, label: 'From Files',
+              onTap: () => _importFiles(FileType.any)),
           const SizedBox(height: 8),
         ]),
       ),
