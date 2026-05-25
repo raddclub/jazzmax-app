@@ -82,7 +82,7 @@ class _TidStatusScreenState extends State<TidStatusScreen>
     try {
       final res = await ApiClient.instance.get(
         '/api/subscription/tid/check_by_phone',
-        queryParameters: {'phone': widget.phone},
+        params: {'phone': widget.phone},
       );
       final data = res.data as Map<String, dynamic>;
       final payments = (data['payments'] as List<dynamic>?) ?? [];
