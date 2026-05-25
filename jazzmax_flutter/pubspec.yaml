@@ -4,8 +4,8 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.4.0 <4.0.0'
-  flutter: '>=3.22.0'
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.19.0'
 
 dependencies:
   flutter:
@@ -18,13 +18,13 @@ dependencies:
   dio: ^5.4.0
 
   # Secure token storage
-  flutter_secure_storage: ^9.2.4
+  flutter_secure_storage: ^9.0.0
 
   # Biometric + PIN auth for vault
-  local_auth: ^2.3.0
+  local_auth: ^2.2.0
 
   # SHA-256 PIN hashing for vault
-  crypto: ^3.0.6
+  crypto: ^3.0.3
 
   # Video thumbnail generation for local/downloaded files
   video_thumbnail: ^0.5.3
