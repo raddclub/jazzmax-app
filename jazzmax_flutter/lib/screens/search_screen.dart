@@ -62,7 +62,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     switch (_activeFilter) {
       case 'Movies':  return items.where((i) => i.isMovie).toList();
       case 'Shows':   return items.where((i) => i.isShow).toList();
-      case 'Urdu':    return items.where((i) => (i.language ?? '').toLowerCase().contains('urdu') || (i.language ?? '').isEmpty).toList();
+      case 'Urdu':    return items.where((i) => (i.language ?? '').toLowerCase().contains('urdu')).toList();
       case 'English': return items.where((i) => (i.language ?? '').toLowerCase().contains('english')).toList();
       case 'Punjabi': return items.where((i) => (i.language ?? '').toLowerCase().contains('punjabi')).toList();
       default: return items;

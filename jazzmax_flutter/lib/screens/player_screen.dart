@@ -105,6 +105,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool _buffering = true;
   bool _playing = false;
   bool _ended = false;
+  Duration _bufferedPosition = Duration.zero;
 
   // Position notifier — updates slider/time WITHOUT rebuilding full tree
   final _positionNotifier = ValueNotifier<Duration>(Duration.zero);
@@ -180,12 +181,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             positionMs: p.inMilliseconds,
             durationMs: _duration.inMilliseconds);
       }
-      // Sleep timer
-      if (_sleepRemainingSeconds != null && _sleepRemainingSeconds! <= 0) {
-        _cancelSleepTimer();
-        _player.pause();
-        _userPaused = true;
-      }
+      // Sleep countdown handled by _sleepTimer
     });
     _player.stream.duration.listen((d) {
       if (!mounted) return;
@@ -199,6 +195,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player.stream.playing.listen((p) {
       if (!mounted) return;
       setState(() => _playing = p);
+    });
+    _player.stream.buffer.listen((b) {
+      if (!mounted) return;
+      setState(() => _bufferedPosition = b);
     });
     _player.stream.completed.listen((done) {
       if (!mounted || !done) return;
@@ -806,6 +806,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               totalEps: widget.episodes?.length,
               sleepLabel: _sleepLabel,
               scale: _scale,
+              bufferedFraction: _duration.inMilliseconds > 0
+                  ? (_bufferedPosition.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+                  : 0.0,
               isLocal: _isLocalFile,
               seekThumb: _seekThumb,
               sliderDragging: _sliderDragging,
@@ -838,8 +841,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   _seekThumb = null;
                 });
               },
-              onSeekBack: () => _seekRelative(-10),
-              onSeekForward: () => _seekRelative(10),
+              onSeekBack: () => _seekRelative(-15),
+              onSeekForward: () => _seekRelative(15),
               onLock: () => setState(() {
                 _locked = !_locked;
                 _showControls = false;
@@ -966,6 +969,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 class _ControlsOverlay extends StatelessWidget {
   final String title;
   final bool playing, buffering, locked;
+  final double bufferedFraction;
   final Duration position, duration;
   final double progress, speed, scale;
   final String fitLabel, sleepLabel;
@@ -983,6 +987,7 @@ class _ControlsOverlay extends StatelessWidget {
 
   const _ControlsOverlay({
     required this.title, required this.playing, required this.buffering,
+    required this.bufferedFraction,
     required this.locked, required this.position, required this.duration,
     required this.progress, required this.speed, required this.fitLabel,
     required this.hasNext, required this.isLocal, required this.sliderDragging,
@@ -1139,22 +1144,44 @@ class _ControlsOverlay extends StatelessWidget {
                 ),
               ),
 
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: sliderDragging ? 5 : 3,
-                thumbShape: RoundSliderThumbShape(
-                    enabledThumbRadius: sliderDragging ? 10 : 5),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
-                activeTrackColor: AppColors.primary,
-                inactiveTrackColor: Colors.white24,
-                thumbColor: AppColors.primary,
-                overlayColor: AppColors.primaryGlow,
-              ),
-              child: Slider(
-                value: progress.clamp(0.0, 1.0),
-                onChangeStart: onSliderStart,
-                onChanged: onSliderChange,
-                onChangeEnd: onSliderEnd,
+            SizedBox(
+              height: sliderDragging ? 44 : 36,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // ── Buffer (gray) bar behind progress ──
+                  Positioned(
+                    left: 24, right: 24,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: bufferedFraction.clamp(0.0, 1.0),
+                        backgroundColor: Colors.white10,
+                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white30),
+                        minHeight: sliderDragging ? 5 : 3,
+                      ),
+                    ),
+                  ),
+                  // ── Progress (red) slider — transparent inactive track ──
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: sliderDragging ? 5 : 3,
+                      thumbShape: RoundSliderThumbShape(
+                          enabledThumbRadius: sliderDragging ? 10 : 5),
+                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
+                      activeTrackColor: AppColors.primary,
+                      inactiveTrackColor: Colors.transparent,
+                      thumbColor: AppColors.primary,
+                      overlayColor: AppColors.primaryGlow,
+                    ),
+                    child: Slider(
+                      value: progress.clamp(0.0, 1.0),
+                      onChangeStart: onSliderStart,
+                      onChanged: onSliderChange,
+                      onChangeEnd: onSliderEnd,
+                    ),
+                  ),
+                ],
               ),
             ),
 

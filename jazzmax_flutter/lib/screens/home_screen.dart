@@ -44,7 +44,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       case 'Movies':  return s.movies;
       case 'Shows':   return s.shows;
       case 'Dramas':  return all.where((i) => i.title.toLowerCase().contains('drama') || i.isShow).toList();
-      case 'Urdu':    return all.where((i) => (i.language ?? '').toLowerCase().contains('urdu') || (i.language ?? '').isEmpty).toList();
+      case 'Urdu':    return all.where((i) => (i.language ?? '').toLowerCase().contains('urdu')).toList();
       case 'Punjabi': return all.where((i) => (i.language ?? '').toLowerCase().contains('punjabi')).toList();
       case 'English': return all.where((i) => (i.language ?? '').toLowerCase().contains('english')).toList();
       default:        return all;
@@ -420,7 +420,7 @@ class _ContentSection extends StatelessWidget {
             ),
           ],
           const Spacer(),
-          TextButton(onPressed: () {}, // TODO: view all
+          TextButton(onPressed: () => Navigator.of(context).pushNamed(AppRoutes.search),
             child: const Text('See all', style: TextStyle(color: AppColors.primary, fontSize: 13))),
         ]),
       ),

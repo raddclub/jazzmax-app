@@ -154,7 +154,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     _SectionTile(
                       icon: Icons.palette_outlined,
                       label: 'Theme',
-                      trailing: Text(ref.read(themeProvider.notifier).displayName,
+                      trailing: Text(ref.watch(themeProvider.notifier).displayName,
                           style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                       onTap: () => _showThemePicker(context),
                     ),
