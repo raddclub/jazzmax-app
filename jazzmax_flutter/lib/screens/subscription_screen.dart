@@ -10,6 +10,7 @@ import '../providers/subscription_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
 import '../widgets/jazz_text_field.dart';
+import 'tid_status_screen.dart';
 
 // ── Payment method model (fetched from billing API) ──────────────────────────
 class _PayMethod {
@@ -99,7 +100,18 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         paymentMethod: _selectedMethod ?? 'jazzcash',
       );
       if (success) {
-        setState(() { _tidSuccess = 'Transaction submitted! Admin will verify and activate your plan shortly.'; _submitting = false; _tidCtrl.clear(); });
+        setState(() { _submitting = false; });
+        final user = ref.read(authProvider).user;
+        if (mounted) {
+          Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => TidStatusScreen(
+              phone: user?.phone ?? '',
+              tid: tid,
+              plan: _selectedPlanId!,
+              paymentMethod: _selectedMethod ?? 'jazzcash',
+            ),
+          ));
+        }
       } else {
         final err = ref.read(subscriptionProvider).error ?? 'Submission failed.';
         setState(() { _tidError = err.replaceFirst('Exception: ', ''); _submitting = false; });
