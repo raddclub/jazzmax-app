@@ -245,5 +245,5 @@ class ApiPaths {
   static const String historyBase       = '/api/history';
   static String saveHistory(String fileId) => '/api/history/$fileId';
   static String playUrl(String fileId)    => '/watch/api/play/$fileId';
-  static const String publicMethods      = '/billing/api/public/methods';
+  static const String publicMethods      = '/api/payment-methods';
 }

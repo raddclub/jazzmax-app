@@ -20,7 +20,7 @@ class _PayMethod {
       this.accountNumber, this.instructions, this.enabled = true});
 
   factory _PayMethod.fromJson(Map<String, dynamic> j) => _PayMethod(
-    key:           j['key']            as String? ?? j['id'] as String? ?? '',
+    key:           j['code']           as String? ?? j['key'] as String? ?? j['id'] as String? ?? '',
     name:          j['name']           as String? ?? '',
     accountNumber: j['account_number'] as String?,
     instructions:  j['instructions']   as String?,
