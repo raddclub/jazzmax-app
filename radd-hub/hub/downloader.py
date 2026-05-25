@@ -582,6 +582,29 @@ def _process_job(job_row: dict) -> None:
 
         if site == "upload":
             log_fn("Upload job: skipping search, using local file directly")
+        elif site == "direct":
+            # Direct URL download — skip scraping entirely
+            direct_url = (job_row.get("url") or "").strip()
+            if not direct_url:
+                raise ValueError("Direct download job is missing a URL")
+            _stage("Downloading from direct URL…")
+            log_fn(f"Direct URL: {direct_url[:120]}")
+            staging_dir = Path(sc_config.get("download_dir") or str(config.STAGING_DIR))
+            staging_dir.mkdir(parents=True, exist_ok=True)
+            dl_path = download_file(
+                direct_url,
+                dest_dir=staging_dir,
+                job=job_obj,
+                log_fn=log_fn,
+            )
+            if "/skipped/already_uploaded/" in str(dl_path):
+                log_fn("File already in library — nothing to upload.")
+                _update_db(job_id, status="done", progress=100, message="Already in library")
+                return
+            job_obj["download_path"] = str(dl_path)
+            job_obj["status"] = "done"
+            log_fn(f"Download complete: {dl_path.name}")
+
         else:
             try:
                 from . import scraper

@@ -267,6 +267,59 @@ def save_dl_settings():
     return jsonify({"ok": True, "saved": saved})
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Direct URL download  (paste a link — skip the scraping pipeline entirely)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@bp.route("/api/queue/direct", methods=["POST"])
+@auth.login_required
+def queue_direct():
+    """Queue one or more direct download URLs without scraping.
+
+    Body JSON: { urls: "http://…\nhttp://…", name: "Movie Title" }
+    Each non-empty line becomes its own queue job with site='direct'.
+    The existing post-processing pipeline (ZIP extract → split → JazzDrive upload)
+    runs exactly the same as for regular downloads.
+    """
+    import re as _re
+    import urllib.parse as _up
+
+    data  = request.get_json(force=True, silent=True) or {}
+    raw   = (data.get("urls") or data.get("url") or "").strip()
+    urls  = [u.strip() for u in raw.splitlines() if u.strip()]
+    name  = (data.get("name") or "").strip()
+
+    if not urls:
+        return jsonify({"ok": False, "error": "At least one URL is required"}), 400
+
+    # Auto-derive a display name from the first URL when the user left it blank
+    if not name:
+        try:
+            path_part = _up.unquote(_up.urlparse(urls[0]).path)
+            stem = path_part.rstrip("/").split("/")[-1]
+            stem = _re.sub(r"\.\w{1,5}$", "", stem)           # strip extension
+            name = _re.sub(r"[._\-]+", " ", stem).strip()       # spaces
+        except Exception:
+            pass
+        if not name:
+            name = "Direct Download"
+
+    now    = int(time.time())
+    queued: list[dict] = []
+
+    with db.conn() as c:
+        for url in urls:
+            jid = uuid.uuid4().hex[:10]
+            c.execute(
+                "INSERT INTO queue(job_id, movie, url, site, status, created_at, updated_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (jid, name, url, "direct", "queued", now, now),
+            )
+            queued.append({"job_id": jid, "url": url})
+
+    return jsonify({"ok": True, "queued": len(queued), "jobs": queued, "name": name})
+
 # ─────────────────────────────────────────────
 # Batch queue (add many movies at once)
 # ─────────────────────────────────────────────

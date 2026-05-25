@@ -60,6 +60,7 @@
     <button class="ghost btn-sm" id="wa-indicator" onclick="openWAPanel()">🤖 WhatsApp</button>
     <button class="ghost btn-sm" id="jd-indicator" onclick="openJDPanel()">☁ JazzDrive</button>
     <button class="ghost btn-sm" onclick="openSearch()">🔍 Search</button>
+    <button class="ghost btn-sm" onclick="openDirect()">🔗 Direct URL</button>
     <button class="ghost btn-sm" onclick="openBatch()">📋 Batch</button>
     <button class="ghost btn-sm" onclick="openSettings()">⚙ Settings</button>
     <button class="ghost btn-sm" onclick="loadResults()">Results ↗</button>
@@ -144,6 +145,45 @@
     <div class="modal-body">
       <div id="log-meta" style="margin-bottom:10px;font-size:12px;color:var(--muted)"></div>
       <pre class="log-pre" id="log-pre">Loading…</pre>
+    </div>
+  </div>
+</div>
+
+
+<!-- ─────  Direct URL modal  ───── -->
+<div id="direct-modal" class="modal" style="display:none" onclick="if(event.target===this)closeDirect()">
+  <div class="modal-box" style="width:min(640px,100%)">
+    <div class="modal-head">
+      <h3>🔗 Direct URL Download</h3>
+      <button class="ghost btn-sm" onclick="closeDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted" style="margin-bottom:10px">
+        Paste a direct download link — movie file, episode file, or season ZIP.<br>
+        Multiple URLs: one per line. Each queues as a separate job.<br>
+        Zips are auto-extracted → episodes uploaded one-by-one to JazzDrive, same as the normal pipeline.
+      </p>
+      <div class="form-row">
+        <label>Movie / Show name <span class="muted">(for metadata &amp; poster)</span></label>
+        <input id="direct-name" placeholder="e.g. Inception 2010" style="width:100%">
+      </div>
+      <div class="form-row" style="margin-top:10px">
+        <label>Direct download URL(s) — one per line</label>
+        <textarea id="direct-urls" style="width:100%;height:120px;font-family:monospace;font-size:12px;
+          background:var(--panel2);border:1px solid var(--border);border-radius:7px;
+          color:var(--text);padding:10px;resize:vertical"
+          placeholder="https://example.com/Inception.2010.1080p.mkv&#10;https://example.com/season2.zip"></textarea>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:6px">
+        ✔ Supports: .mkv .mp4 .avi .zip &nbsp;|&nbsp;
+        ✔ ZIP = season pack (auto-extracted, episodes uploaded one-by-one) &nbsp;|&nbsp;
+        ✔ Files &gt;1.98 GB auto-split before upload
+      </div>
+      <div id="direct-result" style="margin-top:10px;display:none"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px;gap:8px">
+        <button class="ghost" onclick="closeDirect()">Cancel</button>
+        <button onclick="submitDirect()" id="direct-btn">⬇ Queue Download</button>
+      </div>
     </div>
   </div>
 </div>
@@ -658,6 +698,35 @@ async function fetchWALogs(){
     pre.textContent=(d.lines||[]).join('\n')||'(no logs)';
     pre.scrollTop=pre.scrollHeight;
   }catch(e){ document.getElementById('wa-log-pre').textContent='Error: '+e.message; }
+}
+
+function openDirect(){
+  document.getElementById('direct-result').style.display='none';
+  document.getElementById('direct-modal').style.display='flex';
+  setTimeout(()=>document.getElementById('direct-name').focus(),100);
+}
+function closeDirect(){ document.getElementById('direct-modal').style.display='none'; }
+
+async function submitDirect(){
+  const name = document.getElementById('direct-name').value.trim();
+  const urls = document.getElementById('direct-urls').value.trim();
+  if(!urls){ toast('Paste at least one URL'); return; }
+  const btn = document.getElementById('direct-btn');
+  const res  = document.getElementById('direct-result');
+  btn.disabled=true; btn.textContent='Queuing…';
+  res.style.display='block'; res.innerHTML='<span class="muted">Queuing…</span>';
+  try{
+    const d = await api('/stream/api/queue/direct',{
+      method:'POST', body:{urls, name: name||undefined}
+    });
+    if(d.ok){
+      res.innerHTML=`<div class="badge b-ok">✔ Queued ${d.queued} job${d.queued>1?'s':''} — <b>${d.name||'Direct'}</b></div>`;
+      setTimeout(()=>{ closeDirect(); refresh(); }, 900);
+    } else {
+      res.innerHTML=`<div class="badge b-err">Error: ${d.error||'unknown'}</div>`;
+    }
+  }catch(e){ res.innerHTML=`<div class="badge b-err">Error: ${e.message}</div>`; }
+  finally{ btn.disabled=false; btn.textContent='⬇ Queue Download'; }
 }
 
 refresh();
