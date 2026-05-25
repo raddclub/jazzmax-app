@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/constants.dart';
 import 'core/theme/theme_provider.dart';
 import 'core/theme/app_theme.dart';
+import 'core/debug/debug_logger.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
@@ -23,17 +24,43 @@ import 'screens/vault_screen.dart';
 import 'core/services/app_update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+// ── Navigation Observer ───────────────────────────────────────────────────────
+class _DebugNavObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    final name = route.settings.name ?? route.runtimeType.toString();
+    final prev = previousRoute?.settings.name ?? 'none';
+    DebugLogger.logNav(name, args: 'from=$prev');
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    final from = route.settings.name ?? route.runtimeType.toString();
+    final to = previousRoute?.settings.name ?? 'none';
+    DebugLogger.logNav('<back', args: 'popped=$from  backTo=$to');
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    final from = oldRoute?.settings.name ?? 'none';
+    final to = newRoute?.settings.name ?? newRoute?.runtimeType.toString() ?? 'none';
+    DebugLogger.logNav(to, args: 'replaced=$from');
+  }
+}
+
 class JazzMaxApp extends ConsumerWidget {
   const JazzMaxApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeProvider);
+    DebugLogger.logUi('JazzMaxApp', 'build — themeMode=${themeState.mode}');
     Animate.restartOnHotReload = true;
     return MaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: JazzThemeData.build(themeState.mode),
+      navigatorObservers: [_DebugNavObserver()],
       initialRoute: AppRoutes.splash,
       routes: {
         AppRoutes.splash:       (_) => const SplashScreen(),
@@ -51,6 +78,8 @@ class JazzMaxApp extends ConsumerWidget {
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.player) {
           final args = settings.arguments as Map<String, dynamic>;
+          DebugLogger.logNav(AppRoutes.player,
+              args: 'file_id=${args["file_id"]}  title=${args["title"]}');
           return PageRouteBuilder(
             pageBuilder: (_, __, ___) => PlayerScreen(
               fileId: args['file_id'] as String,
@@ -65,9 +94,11 @@ class JazzMaxApp extends ConsumerWidget {
           );
         }
         if (settings.name == AppRoutes.showDetail) {
-          final item = settings.arguments;
+          final item = settings.arguments as CatalogItem;
+          DebugLogger.logNav(AppRoutes.showDetail,
+              args: 'id=${item.id}  title=${item.title}');
           return PageRouteBuilder(
-            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item as CatalogItem),
+            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item),
             transitionsBuilder: (_, anim, __, child) =>
                 SlideTransition(
                   position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
@@ -120,6 +151,7 @@ class _ForceUpdateGuardState extends State<_ForceUpdateGuard> {
     _checked = true;
     final r = AppUpdateService.lastResult;
     if ((r.forceUpdate || r.blocked) && mounted) {
+      DebugLogger.logWarn('UPDATE', 'Force update or blocked: forceUpdate=${r.forceUpdate}  blocked=${r.blocked}  msg=${r.message}');
       setState(() { _blocked = true; _result = r; });
     }
   }
@@ -156,7 +188,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   ],
                 )),
                 const SizedBox(height: 56),
-                // Icon ring
                 Container(
                   width: 110, height: 110,
                   decoration: BoxDecoration(
@@ -174,7 +205,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 36),
-                // Title
                 Text(
                   result.blocked ? 'Access Blocked' : 'Update Required',
                   style: const TextStyle(
@@ -183,7 +213,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                // Message
                 Text(
                   result.message.isNotEmpty
                       ? result.message
@@ -195,7 +224,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 52),
-                // Update button
                 if (!result.blocked && result.updateUrl.isNotEmpty)
                   GestureDetector(
                     onTap: () async {
@@ -246,7 +274,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600, fontSize: 15)),
                   ),
                 const SizedBox(height: 24),
-                // Version info
                 if (result.currentVersion.isNotEmpty)
                   Text('Latest version: ${result.currentVersion}',
                       style: const TextStyle(color: Color(0xFF505070), fontSize: 12)),
