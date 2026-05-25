@@ -49,7 +49,7 @@ class CatalogItem {
   });
 
   bool get isMovie      => mediaType == 'movie';
-  bool get isShow       => mediaType == 'show';
+  bool get isShow       => mediaType == 'show' || mediaType == 'series' || mediaType == 'tv';
   bool get isOngoingNow => isOngoing == true || status == 'ongoing';
   bool get isCompleted  => status == 'completed';
   String get statusLabel {
