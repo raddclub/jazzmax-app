@@ -139,6 +139,9 @@ def sync():
             "file_id":       r["file_id"],
         })
 
+    # Build title->is_free map so episodes inherit their parent title free status
+    title_free_map = {t["id"]: t["is_free"] for t in titles}
+
     episodes = []
     if title_ids:
         placeholders = ",".join("?" * len(title_ids))
@@ -162,7 +165,7 @@ def sync():
                 "season":   r["season"],
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
-                "is_free":  False,  # files table has no is_free column; use title-level is_free instead
+                "is_free":  title_free_map.get(r["title_id"], False),
             })
 
     return jsonify({
