@@ -56,8 +56,8 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    scanFile -> {
-                        val scanPath = call.argument<String>(path)
+                    "scanFile" -> {
+                        val scanPath = call.argument<String>("path")
                         if (scanPath != null) {
                             MediaScannerConnection.scanFile(this, arrayOf(scanPath), null, null)
                         }
