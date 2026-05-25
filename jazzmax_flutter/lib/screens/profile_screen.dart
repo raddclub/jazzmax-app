@@ -17,6 +17,8 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loggingOut = false;
   String? _deviceName;
+  bool _hasInternet = true;
+  late final _connectivitySub = Connectivity().onConnectivityChanged.listen(_onConnectivityChange);
 
   @override
   void initState() {
@@ -24,6 +26,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     DeviceIdentifier.getDeviceName().then((n) {
       if (mounted) setState(() => _deviceName = n);
     });
+    _checkConnectivity();
+    _connectivitySub; // activate listener
+  }
+
+  Future<void> _checkConnectivity() async {
+    final result = await Connectivity().checkConnectivity();
+    if (mounted) setState(() => _hasInternet = result != ConnectivityResult.none);
+  }
+
+  void _onConnectivityChange(List<ConnectivityResult> results) {
+    if (mounted) setState(() => _hasInternet = results.isNotEmpty && results.first != ConnectivityResult.none);
+  }
+
+  @override
+  void dispose() {
+    _connectivitySub.cancel();
+    super.dispose();
   }
 
   Future<void> _logout() async {
@@ -213,7 +232,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       label: 'Downloads',
                       onTap: () => Navigator.of(context).pushNamed(AppRoutes.downloads),
                     ),
-                    if (user?.isGuest != true) ...[
+                    if (user?.isGuest != true && _hasInternet) ...[
                       _divider(),
                       _SectionTile(
                         icon: Icons.cloud_download_outlined,

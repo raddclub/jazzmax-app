@@ -248,9 +248,6 @@ class ApiPaths {
   static String saveHistory(String fileId) => '/api/history/$fileId';
   static String playUrl(String fileId)    => '/watch/api/play/$fileId';
 
-  static const String adminQueue        = '/stream/api/queue';
-  static const String adminQueueDirect  = '/stream/api/queue/direct';
-  static const String metaAutofix       = '/api/meta/autofix';
-  static const String metaAutofixStatus = '/api/meta/autofix/status';
+  static const String adminQueue        = '/api/queue/status';
   static const String publicMethods      = '/api/payment-methods';
 }

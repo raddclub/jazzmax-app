@@ -31,7 +31,7 @@ class _AdminQueueScreenState extends State<AdminQueueScreen> {
 
   Future<void> _load() async {
     try {
-      final res  = await ApiClient.instance.get('/api/queue/status');
+      final res  = await ApiClient.instance.get(ApiPaths.adminQueue);
       final data = res.data as Map<String, dynamic>;
       if (mounted) {
         setState(() {
