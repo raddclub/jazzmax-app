@@ -51,6 +51,8 @@ class VaultService {
 
   static Future<void> setPin(String pin) async {
     await _storage.write(key: _pinKey, value: _hashPin(pin));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_pinLengthKey, pin.length);
   }
 
   static Future<void> setFakePin(String pin) async {
@@ -59,6 +61,11 @@ class VaultService {
     } else {
       await _storage.write(key: _fakePinKey, value: _hashPin(pin));
     }
+  }
+
+  static Future<int> getPinLength() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_pinLengthKey) ?? 6;
   }
 
   static Future<bool> hasFakePin() async {

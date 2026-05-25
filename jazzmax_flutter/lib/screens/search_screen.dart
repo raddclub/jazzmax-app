@@ -31,7 +31,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void initState() {
     super.initState();
     _loadHistory();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _focus.requestFocus());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focus.requestFocus();
+      // Read initialFilter passed from home screen See-All
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null) {
+        final f = args['initialFilter'] as String?;
+        if (f != null && mounted) setState(() => _activeFilter = f);
+      }
+    });
   }
 
   Future<void> _loadHistory() async {
@@ -81,7 +89,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: null,
       body: SafeArea(
         child: Column(children: [
           // Search bar row

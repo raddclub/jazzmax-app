@@ -52,7 +52,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return LoadingOverlay(
       loading: _loggingOut,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: null,
         body: CustomScrollView(
           physics: const BouncingScrollPhysics(),
           slivers: [

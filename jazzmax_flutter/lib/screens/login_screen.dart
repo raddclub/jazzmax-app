@@ -56,7 +56,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return LoadingOverlay(
       loading: _loading,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: null,
         body: Stack(
           children: [
             // Background glow

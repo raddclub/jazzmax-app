@@ -23,6 +23,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
   bool _biometricEnabled = false;
   int _failedAttempts = 0;
   DateTime? _lockedUntil;
+  int _expectedPinLength = 6;
 
   late AnimationController _shakeCtrl;
   late Animation<double> _shakeAnim;
@@ -53,6 +54,10 @@ class _VaultLockScreenState extends State<VaultLockScreen>
         _lockedUntil = info.lockedUntil;
       });
     }
+    if (!widget.isSetup) {
+      final pinLen = await VaultService.getPinLength();
+      if (mounted) setState(() => _expectedPinLength = pinLen);
+    }
     if (!widget.isSetup && biAvail) {
       await Future.delayed(const Duration(milliseconds: 400));
       if (mounted) _tryBiometric();
@@ -71,7 +76,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
     if (_loading) return;
     if (_lockedUntil != null && DateTime.now().isBefore(_lockedUntil!)) return;
     final current = _confirming ? _confirmPin : _pin;
-    if (current.length >= 6) return;
+    if (current.length >= _expectedPinLength) return;
     setState(() {
       _error = false;
       if (_confirming) {
@@ -80,8 +85,8 @@ class _VaultLockScreenState extends State<VaultLockScreen>
         _pin = _pin + digit;
       }
     });
-    if (!_confirming && _pin.length == 6) _submit();
-    if (_confirming && _confirmPin.length == 6) _submit();
+    if (!_confirming && _pin.length == _expectedPinLength) _submit();
+    if (_confirming && _confirmPin.length == _expectedPinLength) _submit();
   }
 
   void _onBackspace() {
@@ -230,7 +235,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(6, (i) {
+                children: List.generate(_expectedPinLength, (i) {
                   final filled = i < current.length;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 150),

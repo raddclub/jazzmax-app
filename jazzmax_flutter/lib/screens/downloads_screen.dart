@@ -56,9 +56,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
   String _folderFor(Map m) {
+    // Prefer stored content_type if available (set at download time)
+    final ct = m['content_type'] as String?;
+    if (ct == 'show' || ct == 'series' || ct == 'tv') return 'TV Shows';
+    if (ct == 'drama') return 'Dramas';
+    if (ct == 'movie') return 'Movies';
+    // Fallback: heuristic on title
     final title = _title(m).toLowerCase();
-    if (title.contains('drama') || title.contains('episode')) return 'Dramas';
-    if (title.contains('season') || title.contains('s0') || title.contains('ep ')) return 'TV Shows';
+    if (title.contains('drama')) return 'Dramas';
+    if (title.contains('episode') || title.contains('season') ||
+        title.contains(' s0') || title.contains('ep ') ||
+        title.contains('series') || title.contains('show')) return 'TV Shows';
     return 'Movies';
   }
 
@@ -85,7 +93,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(downloadsProvider);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: null,
       appBar: _buildAppBar(state),
       body: Column(children: [
         _buildStorageBar(state),

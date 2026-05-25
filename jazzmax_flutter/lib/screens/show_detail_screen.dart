@@ -123,7 +123,7 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
     final isMovie = item.isMovie;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: null,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [

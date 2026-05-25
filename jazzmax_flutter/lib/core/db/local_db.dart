@@ -127,6 +127,12 @@ class LocalDb {
         } catch (_) {}
       }
     }
+    if (oldV < 5) {
+      // Add content_type column to downloads for reliable folder categorisation
+      try {
+        await db.execute('ALTER TABLE downloads ADD COLUMN content_type TEXT');
+      } catch (_) {}
+    }
   }
 
   // ── Titles ────────────────────────────────────────────────────────────────

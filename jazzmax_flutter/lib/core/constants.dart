@@ -14,7 +14,7 @@ class AppConstants {
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'jazzmax_catalog.db';
-  static const int catalogDbVersion = 7;
+  static const int catalogDbVersion = 8;
   static const int streamCacheTtlSeconds = 21600;
 }
 

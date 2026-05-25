@@ -1081,7 +1081,7 @@ class _ControlsOverlay extends StatelessWidget {
       // ── CENTER CONTROLS ──
       if (!locked)
         Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-          _SeekBtn(icon: Icons.replay_10_rounded, onTap: onSeekBack),
+          _SeekBtn(icon: Icons.replay_rounded, label: '15', onTap: onSeekBack),
           const SizedBox(width: 24),
           GestureDetector(
             onTap: onPlayPause,
@@ -1093,7 +1093,7 @@ class _ControlsOverlay extends StatelessWidget {
                   color: Colors.white, size: 42)),
           ),
           const SizedBox(width: 24),
-          _SeekBtn(icon: Icons.forward_10_rounded, onTap: onSeekForward),
+          _SeekBtn(icon: Icons.forward_rounded, label: '15', onTap: onSeekForward),
           if (hasNext) ...[
             const SizedBox(width: 16),
             GestureDetector(
@@ -1249,14 +1249,21 @@ class _TopBtn extends StatelessWidget {
 
 class _SeekBtn extends StatelessWidget {
   final IconData icon;
+  final String? label;
   final VoidCallback onTap;
-  const _SeekBtn({required this.icon, required this.onTap});
+  const _SeekBtn({required this.icon, required this.onTap, this.label});
   @override
   Widget build(BuildContext context) => GestureDetector(
     onTap: () { HapticFeedback.selectionClick(); onTap(); },
     child: Container(width: 68, height: 68,
         decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.08)),
-        child: Icon(icon, color: Colors.white, size: 36)));
+        child: label != null
+            ? Stack(alignment: Alignment.center, children: [
+                Icon(icon, color: Colors.white, size: 30),
+                Positioned(bottom: 13, child: Text(label!,
+                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800))),
+              ])
+            : Icon(icon, color: Colors.white, size: 36)));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

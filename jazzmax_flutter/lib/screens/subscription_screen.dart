@@ -127,7 +127,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
     return LoadingOverlay(
       loading: _submitting,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: null,
         appBar: AppBar(
           title: const Text('Subscription', style: TextStyle(fontWeight: FontWeight.w800)),
           leading: IconButton(

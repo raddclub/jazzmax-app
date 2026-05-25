@@ -63,7 +63,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     return LoadingOverlay(
       loading: _loading,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: null,
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           leading: IconButton(

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../core/constants.dart';
+import '../core/theme/jazz_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../models/catalog_item.dart';
@@ -57,7 +58,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final user    = ref.watch(authProvider).user;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: null,
       extendBodyBehindAppBar: true,
       appBar: _buildAppBar(user),
       body: RefreshIndicator(
@@ -346,7 +347,7 @@ class _HeroCard extends StatelessWidget {
                         child: const Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 48)))
                 : Container(color: AppColors.card),
             // Gradient
-            const DecoratedBox(decoration: BoxDecoration(gradient: AppColors.heroGradient)),
+            Builder(builder: (ctx) => DecoratedBox(decoration: BoxDecoration(gradient: ctx.jazzHeroGradient))),
             // Content
             Positioned(bottom: 0, left: 0, right: 0,
               child: Padding(
@@ -420,8 +421,15 @@ class _ContentSection extends StatelessWidget {
             ),
           ],
           const Spacer(),
-          TextButton(onPressed: () => Navigator.of(context).pushNamed(AppRoutes.search),
-            child: const Text('See all', style: TextStyle(color: AppColors.primary, fontSize: 13))),
+          TextButton(
+            onPressed: () {
+              String? filter;
+              if (title == "Movies") filter = "Movies";
+              else if (title.contains("Show") || title.contains("Drama")) filter = "Shows";
+              Navigator.of(context).pushNamed(AppRoutes.search,
+                  arguments: {"initialFilter": filter});
+            },
+            child: const Text("See all", style: TextStyle(color: AppColors.primary, fontSize: 13))),
         ]),
       ),
       SizedBox(
