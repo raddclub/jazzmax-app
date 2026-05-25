@@ -53,8 +53,8 @@ class AppUser {
       deviceId: userData['device_id'] as String?,
       deviceName: userData['device_name'] as String?,
       isActive: (userData['is_active'] as int? ?? 1) == 1,
-      createdAt: userData['created_at'] as String?,
-      lastLoginAt: userData['last_login_at'] as String?,
+      createdAt: userData['created_at']?.toString(),
+      lastLoginAt: userData['last_login_at']?.toString(),
       subscription: subData != null ? UserSubscription.fromJson(subData) : null,
     );
   }
