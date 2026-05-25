@@ -5,6 +5,7 @@ v3.0: Added filter_type, filter_genre, filter_dir, filter_actor, sort params,
 import threading
 from flask import Blueprint, render_template, request, jsonify, redirect
 from .. import db, auth
+from ..config import DATA_DIR as _DATA_DIR
 
 bp = Blueprint("library", __name__)
 
@@ -14,9 +15,7 @@ def _regen_db_update_bg():
     """Background: regenerate db_update.json whenever catalog changes."""
     import json as _json, time as _time, datetime as _dt, os as _os
     from hub import db as _db
-    out_path = _os.path.join(
-        _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-        "data", "db_update.json")
+    out_path = str(_DATA_DIR / "db_update.json")
     try:
         with _db.conn() as c:
             title_rows = c.execute(

@@ -1654,9 +1654,8 @@ def queue_add_alias():
 # Catalog sync  (consumed by Flutter app — no auth required for zero-rating)
 # ---------------------------------------------------------------------------
 
-_CATALOG_JSON_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "data", "db_update.json"
-)
+from ..config import DATA_DIR as _DATA_DIR
+_CATALOG_JSON_PATH = str(_DATA_DIR / "db_update.json")
 
 
 def _load_catalog():

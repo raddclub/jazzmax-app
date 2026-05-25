@@ -3,15 +3,13 @@ from __future__ import annotations
 import os, json, time, datetime, logging
 from flask import Blueprint, render_template_string, request, redirect, url_for, jsonify, send_file
 from hub import db
+from hub.config import DATA_DIR as _DATA_DIR
 from hub.auth import login_required
 
 log = logging.getLogger("hub.zero_rating")
 bp = Blueprint("zero_rating", __name__, url_prefix="/zero-rating")
 
-_DB_UPDATE_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "data", "db_update.json"
-)
+_DB_UPDATE_PATH = str(_DATA_DIR / "db_update.json")
 
 _HTML = """
 {% extends "base.html" %}
