@@ -106,6 +106,8 @@ class _ForceUpdateGuard extends StatefulWidget {
 
 class _ForceUpdateGuardState extends State<_ForceUpdateGuard> {
   bool _checked = false;
+  bool _blocked = false;
+  AppUpdateResult _result = AppUpdateResult.empty;
 
   @override
   void initState() {
@@ -117,58 +119,141 @@ class _ForceUpdateGuardState extends State<_ForceUpdateGuard> {
     if (_checked) return;
     _checked = true;
     final r = AppUpdateService.lastResult;
-    if ((r.forceUpdate || r.blocked) && r.message.isNotEmpty && mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => _UpdateDialog(result: r),
-      );
+    if ((r.forceUpdate || r.blocked) && mounted) {
+      setState(() { _blocked = true; _result = r; });
     }
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    if (_blocked) return _ForceUpdateScreen(result: _result);
+    return widget.child;
+  }
 }
 
-class _UpdateDialog extends StatelessWidget {
+class _ForceUpdateScreen extends StatelessWidget {
   final AppUpdateResult result;
-  const _UpdateDialog({required this.result});
+  const _ForceUpdateScreen({required this.result});
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      child: AlertDialog(
-        backgroundColor: const Color(0xFF12121A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(children: [
-          const Icon(Icons.system_update_rounded, color: Color(0xFFE8002D), size: 24),
-          const SizedBox(width: 10),
-          Text(result.blocked ? 'App Blocked' : 'Update Required',
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
-        ]),
-        content: Text(
-          result.message.isNotEmpty
-              ? result.message
-              : 'A required update is available. Please update JazzMAX to continue.',
-          style: const TextStyle(color: Color(0xFFB0B0C0), fontSize: 14, height: 1.5),
-        ),
-        actions: [
-          if (!result.blocked && result.updateUrl.isNotEmpty)
-            TextButton(
-              onPressed: () async {
-                final uri = Uri.tryParse(result.updateUrl);
-                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              child: const Text('Update Now',
-                  style: TextStyle(color: Color(0xFFE8002D), fontWeight: FontWeight.w700, fontSize: 15)),
-            )
-          else
-            TextButton(
-              onPressed: () {},
-              child: const Text('OK', style: TextStyle(color: Color(0xFFE8002D))),
+      child: Scaffold(
+        backgroundColor: const Color(0xFF08080E),
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logo
+                RichText(text: const TextSpan(
+                  style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: -1),
+                  children: [
+                    TextSpan(text: 'Jazz', style: TextStyle(color: Colors.white)),
+                    TextSpan(text: 'MAX', style: TextStyle(color: Color(0xFFE8002D))),
+                  ],
+                )),
+                const SizedBox(height: 56),
+                // Icon ring
+                Container(
+                  width: 110, height: 110,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: const Color(0xFFE8002D).withOpacity(0.08),
+                    border: Border.all(
+                        color: const Color(0xFFE8002D).withOpacity(0.25), width: 2),
+                  ),
+                  child: Icon(
+                    result.blocked
+                        ? Icons.block_rounded
+                        : Icons.system_update_alt_rounded,
+                    color: const Color(0xFFE8002D),
+                    size: 52,
+                  ),
+                ),
+                const SizedBox(height: 36),
+                // Title
+                Text(
+                  result.blocked ? 'Access Blocked' : 'Update Required',
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 26,
+                      fontWeight: FontWeight.w800, letterSpacing: -0.5),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                // Message
+                Text(
+                  result.message.isNotEmpty
+                      ? result.message
+                      : result.blocked
+                          ? 'This version of JazzMAX is not authorized. Please download the official app.'
+                          : 'A required update is available. Please update JazzMAX to continue watching.',
+                  style: const TextStyle(
+                      color: Color(0xFF9090B0), fontSize: 15, height: 1.65),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 52),
+                // Update button
+                if (!result.blocked && result.updateUrl.isNotEmpty)
+                  GestureDetector(
+                    onTap: () async {
+                      final uri = Uri.tryParse(result.updateUrl);
+                      if (uri != null) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 17),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFE8002D), Color(0xFFFF5757)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [BoxShadow(
+                          color: const Color(0xFFE8002D).withOpacity(0.4),
+                          blurRadius: 24, offset: const Offset(0, 10),
+                        )],
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.download_rounded, color: Colors.white, size: 20),
+                          SizedBox(width: 10),
+                          Text('Update Now',
+                              style: TextStyle(color: Colors.white,
+                                  fontWeight: FontWeight.w800, fontSize: 16)),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 17),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1A1A2E),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF252540)),
+                    ),
+                    child: const Text('Contact Support',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Color(0xFF9090B0),
+                            fontWeight: FontWeight.w600, fontSize: 15)),
+                  ),
+                const SizedBox(height: 24),
+                // Version info
+                if (result.currentVersion.isNotEmpty)
+                  Text('Latest version: ${result.currentVersion}',
+                      style: const TextStyle(color: Color(0xFF505070), fontSize: 12)),
+              ],
             ),
-        ],
+          ),
+        ),
       ),
     );
   }

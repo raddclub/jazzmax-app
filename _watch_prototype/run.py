@@ -33,6 +33,7 @@ from routes.poster_proxy import poster_proxy_bp
 from routes.sms_gateway import sms_bp as sms_gateway_bp
 from routes.app_version import bp as app_version_bp, version_gate_middleware
 from routes.app_plans import bp as app_plans_bp
+import routes.app_notifications as _notif_mod; app_notifications_bp = _notif_mod.bp
 
 # Read PORT before load_env() — radd-hub .env may override it otherwise
 _port = int(os.environ.get("PORT", 6000))
@@ -90,6 +91,7 @@ app.register_blueprint(jazzdrive_db_bp)
 app.register_blueprint(poster_proxy_bp)
 app.register_blueprint(sms_gateway_bp)
 app.register_blueprint(app_plans_bp)
+app.register_blueprint(app_notifications_bp)
 
 
 @app.route("/api/queue/status")

@@ -10,6 +10,8 @@ import '../providers/catalog_provider.dart';
 import '../models/catalog_item.dart';
 import '../widgets/content_card.dart';
 import '../widgets/bottom_nav.dart';
+import '../widgets/notification_banner.dart';
+import '../core/services/notification_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -32,8 +34,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final now = _scroll.offset > 50;
       if (now != _scrolled) setState(() => _scrolled = now);
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) =>
-        ref.read(catalogProvider.notifier).initialize());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(catalogProvider.notifier).initialize();
+      NotificationService.instance.fetch();
+    });
   }
 
   @override
@@ -103,6 +107,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
       actions: [
+        const NotificationBell(),
         IconButton(
           icon: const Icon(Icons.search_rounded, size: 26),
           onPressed: () => Navigator.of(context).pushNamed(AppRoutes.search),

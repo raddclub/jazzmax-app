@@ -248,6 +248,10 @@ class ApiPaths {
   static String saveHistory(String fileId) => '/api/history/$fileId';
   static String playUrl(String fileId)    => '/watch/api/play/$fileId';
 
-  static const String adminQueue        = '/api/queue/status';
-  static const String publicMethods      = '/api/payment-methods';
+  static const String adminQueue         = '/api/queue/status';
+  static const String publicMethods       = '/api/payment-methods';
+
+  static const String notifications      = '/api/notifications/';
+  static const String notificationsRead  = '/api/notifications/read';
+  static String notificationImage(int id) => '/api/notifications/image/$id';
 }

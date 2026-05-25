@@ -1,6 +1,6 @@
 """Broadcast Panel — send in-app notifications to all or specific users."""
 from __future__ import annotations
-import time, logging
+import time, logging, os, re
 from flask import Blueprint, render_template_string, request, redirect, url_for, jsonify
 from hub import db
 from hub.auth import login_required
@@ -60,7 +60,7 @@ _HTML = """
 
   <div class="bc-form">
     <h3>New Broadcast</h3>
-    <form method="post" action="/broadcast/send">
+    <form method="post" action="/broadcast/send" enctype="multipart/form-data">
 
       <div class="field">
         <label>Audience</label>
@@ -107,6 +107,11 @@ _HTML = """
         </select>
       </div>
 
+      <div class="field">
+        <label>Image (optional) — served from this server = zero-rated for Jazz users</label>
+        <input type="file" name="image" accept="image/*" style="cursor:pointer">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">JPG/PNG/WebP · max 5 MB · shown in the app notification card</div>
+      </div>
       <button type="submit" class="btn-send">📢 Send Broadcast</button>
     </form>
   </div>
@@ -125,6 +130,7 @@ _HTML = """
           {% else %}<span class="badge-free">{{ b.audience }}</span>{% endif %}
           <span style="font-size:11px;color:var(--muted);margin-left:auto">{{ b.sent_to }} recipients</span>
         </div>
+        {% if b.image_url %}<div style="margin:6px 0"><img src="{{ b.image_url }}" style="max-height:80px;border-radius:8px;object-fit:cover" loading="lazy"></div>{% endif %}
         <div class="bc-body">{{ b.body }}</div>
         <div class="bc-meta">{{ b.sent_human }} · {{ b.notif_type }}</div>
       </div>
@@ -155,6 +161,12 @@ def _ensure_tables():
             sent_to     INTEGER DEFAULT 0,
             sent_at     INTEGER DEFAULT (strftime('%s','now'))
         )""")
+        try:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(broadcasts)").fetchall()]
+            if "image_path" not in cols:
+                c.execute("ALTER TABLE broadcasts ADD COLUMN image_path TEXT")
+        except Exception:
+            pass
         c.execute("""CREATE TABLE IF NOT EXISTS user_notifications (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id     INTEGER NOT NULL,
@@ -190,6 +202,11 @@ def index():
     for r in hist_rows:
         d = dict(r)
         d["sent_human"] = _fmt(r["sent_at"])
+        keys = r.keys() if hasattr(r, "keys") else []
+        if "image_path" in keys and r["image_path"]:
+            d["image_url"] = f"/api/notifications/image/{r['id']}"
+        else:
+            d["image_url"] = None
         history.append(d)
 
     return render_template_string(_HTML,
@@ -206,6 +223,20 @@ def send():
     body       = request.form.get("body", "").strip()
     notif_type = request.form.get("notif_type", "info")
     now        = int(time.time())
+
+    # Handle image upload
+    image_path = None
+    img_file = request.files.get("image")
+    if img_file and img_file.filename:
+        ext = os.path.splitext(img_file.filename)[1].lower()
+        if ext not in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+            ext = ".jpg"
+        images_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                  "..", "data", "notif_images")
+        os.makedirs(images_dir, exist_ok=True)
+        tmp_path = os.path.join(images_dir, f"tmp_{now}{ext}")
+        img_file.save(tmp_path)
+        image_path = tmp_path
 
     if not title or not body:
         return redirect(url_for("broadcast.index"))
@@ -229,9 +260,16 @@ def send():
             users = []
 
         bc_id = c.execute(
-            "INSERT INTO broadcasts(audience,title,body,notif_type,sent_to,sent_at) VALUES(?,?,?,?,?,?)",
-            (audience, title, body, notif_type, len(users), now)
+            "INSERT INTO broadcasts(audience,title,body,notif_type,sent_to,sent_at,image_path) VALUES(?,?,?,?,?,?,?)",
+            (audience, title, body, notif_type, len(users), now, None)
         ).lastrowid
+        # Rename temp image to final name with broadcast id
+        if image_path and os.path.exists(image_path):
+            ext = os.path.splitext(image_path)[1]
+            final = os.path.join(os.path.dirname(image_path), f"bc_{bc_id}{ext}")
+            os.rename(image_path, final)
+            rel = os.path.relpath(final, "/opt/jazzmax")
+            c.execute("UPDATE broadcasts SET image_path=? WHERE id=?", (rel, bc_id))
 
         for u in users:
             c.execute(
