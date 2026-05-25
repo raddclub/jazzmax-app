@@ -215,6 +215,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                     _divider(),
                     _SectionTile(
+                      icon: Icons.cloud_download_outlined,
+                      iconColor: const Color(0xFF3B82F6),
+                      label: 'Server Downloads',
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0x223B82F6),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: const Text('ADMIN', style: TextStyle(
+                            color: Color(0xFF3B82F6), fontSize: 9, fontWeight: FontWeight.w700)),
+                      ),
+                      onTap: () => Navigator.of(context).pushNamed(AppRoutes.adminQueue),
+                    ),
+                    _divider(),
+                    _SectionTile(
                       icon: Icons.logout_rounded,
                       iconColor: AppColors.error,
                       label: 'Sign Out',

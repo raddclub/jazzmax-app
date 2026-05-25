@@ -15,6 +15,7 @@ class CatalogItem {
   final String? language;
   final bool? isNew;
   final double? watchProgress; // 0.0 - 1.0
+  final bool? isUploading;    // admin: currently being uploaded to JazzDrive
 
   const CatalogItem({
     required this.id,
@@ -32,6 +33,7 @@ class CatalogItem {
     this.language,
     this.isNew,
     this.watchProgress,
+    this.isUploading,
   });
 
   bool get isMovie => mediaType == 'movie';
@@ -60,15 +62,17 @@ class CatalogItem {
       language:    json['language'] as String?,
       isNew:       json['is_new'] as bool?,
       watchProgress: (json['watch_progress'] as num?)?.toDouble(),
+      isUploading: json['is_uploading'] as bool?,
     );
   }
 
-  CatalogItem copyWith({double? watchProgress}) => CatalogItem(
+  CatalogItem copyWith({double? watchProgress, bool? isUploading}) => CatalogItem(
     id: id, title: title, year: year, mediaType: mediaType,
     description: description, rating: rating, genres: genres,
     posterUrl: posterUrl, isFree: isFree, dbVersion: dbVersion,
     episodes: episodes, fileId: fileId, language: language, isNew: isNew,
     watchProgress: watchProgress ?? this.watchProgress,
+    isUploading: isUploading ?? this.isUploading,
   );
 
   /// Returns a new CatalogItem with episodes replaced (used by CatalogNotifier).
@@ -78,5 +82,6 @@ class CatalogItem {
     posterUrl: posterUrl, isFree: isFree, dbVersion: dbVersion,
     episodes: eps, fileId: fileId, language: language, isNew: isNew,
     watchProgress: watchProgress,
+    isUploading: isUploading,
   );
 }

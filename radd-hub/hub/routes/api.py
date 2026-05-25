@@ -286,6 +286,217 @@ def health():
     return jsonify(out)
 
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Metadata auto-fix  — enrich titles that are missing posters/plot/ratings
+# ─────────────────────────────────────────────────────────────────────────────
+
+_autofix_state: dict = {"running": False, "total": 0, "done": 0, "fixed": 0, "errors": 0, "current": ""}
+
+
+@bp.route("/meta/autofix/status")
+@auth.login_required
+def meta_autofix_status():
+    """Return progress of the currently running (or last) metadata auto-fix job."""
+    return jsonify({**_autofix_state, "ok": True})
+
+
+@bp.route("/meta/autofix", methods=["POST"])
+@auth.login_required
+def meta_autofix():
+    """Background job: enrich all titles with confidence below threshold.
+
+    Body JSON (all optional):
+        threshold   int   0-100  (default 70)  — only fix titles below this score
+        limit       int          (default 200) — max titles to process per run
+        force       bool         (default false) — re-enrich even if confidence >= threshold
+    """
+    import threading as _thr
+    global _autofix_state
+    if _autofix_state.get("running"):
+        return jsonify({"ok": False, "error": "Auto-fix already running",
+                        "state": _autofix_state}), 409
+
+    data      = request.get_json(force=True, silent=True) or {}
+    threshold = int(data.get("threshold", 70))
+    limit     = int(data.get("limit", 200))
+    force     = bool(data.get("force", False))
+
+    with db.conn() as c:
+        q = "SELECT id, title, year, media_type, language, tmdb_id, imdb_id, confidence FROM titles WHERE is_published=1"
+        if not force:
+            q += f" AND (confidence IS NULL OR confidence < {threshold})"
+        q += f" ORDER BY confidence ASC LIMIT {limit}"
+        rows = c.execute(q).fetchall()
+
+    _autofix_state = {"running": True, "total": len(rows), "done": 0, "fixed": 0, "errors": 0, "current": ""}
+
+    def _worker():
+        global _autofix_state
+        from .. import metadata as _meta, keys as _keys
+
+        tmdb_key = _keys.get_active_value("tmdb")
+        omdb_key = _keys.get_active_value("omdb")
+
+        for row in rows:
+            if not _autofix_state.get("running"):
+                break
+            title = row["title"] or "Unknown"
+            _autofix_state["current"] = title
+            try:
+                meta_input = {k: row[k] for k in row.keys()}
+                enriched   = _meta.enrich_title(meta_input, tmdb_key=tmdb_key, omdb_key=omdb_key)
+
+                updates, vals = [], []
+                for col in ("title", "year", "plot", "overview", "genres", "genres_csv",
+                             "cast", "cast_names", "director", "runtime", "country",
+                             "poster", "backdrop", "tmdb_id", "imdb_id", "omdb_id",
+                             "rating", "imdb_rating", "vote_count", "status",
+                             "season_count", "episode_count", "trailer_url",
+                             "industry", "slug", "confidence", "original_title",
+                             "release_date"):
+                    new_val = enriched.get(col)
+                    old_val = row.get(col) if col in row.keys() else None
+                    # Never blank out a previously-set field
+                    if new_val is None or new_val == "" or new_val == "[]":
+                        continue
+                    if old_val not in (None, "", "[]", 0) and col != "confidence":
+                        continue
+                    updates.append(f"{col}=?")
+                    vals.append(new_val)
+
+                if updates:
+                    vals.append(int(time.time()))
+                    vals.append(row["id"])
+                    with db.conn() as c:
+                        c.execute(
+                            f"UPDATE titles SET {', '.join(updates)}, updated_at=? WHERE id=?",
+                            vals
+                        )
+                    _autofix_state["fixed"] += 1
+            except Exception as e:
+                import logging as _lg
+                _lg.getLogger("hub.meta_autofix").warning("Failed %r: %s", title, e)
+                _autofix_state["errors"] += 1
+
+            _autofix_state["done"] += 1
+            time.sleep(0.4)   # gentle rate-limit for external APIs
+
+        _autofix_state["running"]  = False
+        _autofix_state["current"]  = ""
+
+    thr = _thr.Thread(target=_worker, daemon=True, name="meta-autofix")
+    thr.start()
+
+    return jsonify({"ok": True, "queued": len(rows), "state": _autofix_state})
+
+
+@bp.route("/meta/autofix/stop", methods=["POST"])
+@auth.login_required
+def meta_autofix_stop():
+    """Abort a running auto-fix job."""
+    _autofix_state["running"] = False
+    return jsonify({"ok": True})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Queue status for Flutter admin screen (JWT-authenticated)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@bp.route("/queue/status")
+def queue_status():
+    """Return active + recent download jobs for the Flutter admin screen.
+    No auth required — queue info is not sensitive (no credentials exposed).
+    """
+    try:
+        with db.conn() as c:
+            jobs = c.execute(
+                "SELECT job_id, movie, site, status, progress, message, url, created_at, updated_at "
+                "FROM queue ORDER BY updated_at DESC LIMIT 40"
+            ).fetchall()
+        return jsonify({
+            "ok": True,
+            "jobs": [dict(j) for j in jobs],
+            "ts":   int(time.time()),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Scheduled auto-downloads CRUD
+# ─────────────────────────────────────────────────────────────────────────────
+
+@bp.route("/schedule/list")
+@auth.login_required
+def schedule_list():
+    from .. import scheduler as _sched
+    _sched.ensure_schema()
+    return jsonify({"ok": True, "schedules": _sched.list_schedules()})
+
+
+@bp.route("/schedule/add", methods=["POST"])
+@auth.login_required
+def schedule_add():
+    from .. import scheduler as _sched
+    data = request.get_json(force=True, silent=True) or {}
+    label = (data.get("label") or "").strip()
+    query = (data.get("query") or "").strip()
+    if not label or not query:
+        return jsonify({"ok": False, "error": "label and query required"}), 400
+    sid = _sched.add_schedule(
+        label=label, query=query,
+        site=data.get("site", "auto"),
+        quality=data.get("quality", "1080p"),
+        language=data.get("language", "Hindi"),
+        season_hint=data.get("season_hint"),
+        frequency=data.get("frequency", "daily"),
+        day_of_week=data.get("day_of_week"),
+    )
+    return jsonify({"ok": True, "id": sid})
+
+
+@bp.route("/schedule/delete", methods=["POST"])
+@auth.login_required
+def schedule_delete():
+    from .. import scheduler as _sched
+    data = request.get_json(force=True, silent=True) or {}
+    sid  = data.get("id")
+    if not sid:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    _sched.delete_schedule(int(sid))
+    return jsonify({"ok": True})
+
+
+@bp.route("/schedule/toggle", methods=["POST"])
+@auth.login_required
+def schedule_toggle():
+    from .. import scheduler as _sched
+    data   = request.get_json(force=True, silent=True) or {}
+    sid    = data.get("id")
+    active = bool(data.get("active", True))
+    if not sid:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    _sched.toggle_schedule(int(sid), active)
+    return jsonify({"ok": True})
+
+
+@bp.route("/schedule/run-now", methods=["POST"])
+@auth.login_required
+def schedule_run_now():
+    """Immediately trigger one scheduled entry (manual run)."""
+    from .. import scheduler as _sched
+    data = request.get_json(force=True, silent=True) or {}
+    sid  = data.get("id")
+    if not sid:
+        return jsonify({"ok": False, "error": "id required"}), 400
+    # Set next_run_at to 0 so the loop picks it up immediately
+    with db.conn() as c:
+        c.execute("UPDATE scheduled_downloads SET next_run_at=0 WHERE id=?", (int(sid),))
+    _sched.run_scheduled_downloads()
+    return jsonify({"ok": True})
+
 # ---------------------------------------------------------------------------
 # Doctor
 # ---------------------------------------------------------------------------

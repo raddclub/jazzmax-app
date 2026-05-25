@@ -59,7 +59,28 @@ class ContentCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 _Badge(label: 'NEW', color: AppColors.primary),
               ],
+              if (item.isUploading == true) ...[
+                const SizedBox(height: 4),
+                _UploadingBadge(),
+              ],
             ])),
+            // Language badge (bottom-left, above title text)
+            if (item.language != null && item.language!.isNotEmpty)
+              Positioned(bottom: 28, left: 6,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.65),
+                    borderRadius: BorderRadius.circular(3),
+                    border: Border.all(color: Colors.white24, width: 0.5),
+                  ),
+                  child: Text(
+                    _langLabel(item.language!),
+                    style: const TextStyle(
+                      color: Colors.white70, fontSize: 8,
+                      fontWeight: FontWeight.w600, letterSpacing: 0.3),
+                  ),
+                )),
             if (item.rating != null && item.rating! > 0)
               Positioned(top: 6, right: 6,
                 child: Container(
@@ -226,6 +247,52 @@ class _DetailSheet extends StatelessWidget {
         ]),
         ),
       ]),
+    );
+  }
+}
+
+/// Capitalise first letter of each word, max 12 chars.
+String _langLabel(String lang) {
+  final words = lang.trim().split(RegExp(r'[_\s]+'));
+  final label = words.map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}').join(' ');
+  return label.length > 12 ? label.substring(0, 12) : label;
+}
+
+class _UploadingBadge extends StatefulWidget {
+  const _UploadingBadge();
+  @override
+  State<_UploadingBadge> createState() => _UploadingBadgeState();
+}
+
+class _UploadingBadgeState extends State<_UploadingBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(
+          CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut)),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF9800),
+          borderRadius: BorderRadius.circular(3),
+        ),
+        child: const Text('⬆ UPLOADING',
+          style: TextStyle(color: Colors.white, fontSize: 7,
+              fontWeight: FontWeight.w800, letterSpacing: 0.4)),
+      ),
     );
   }
 }

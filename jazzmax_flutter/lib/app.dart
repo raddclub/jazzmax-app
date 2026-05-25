@@ -18,6 +18,7 @@ import 'screens/downloads_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/show_detail_screen.dart';
 import 'screens/vault_lock_screen.dart';
+import 'screens/admin_queue_screen.dart';
 import 'screens/vault_screen.dart';
 import 'core/services/app_update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -45,6 +46,7 @@ class JazzMaxApp extends ConsumerWidget {
         AppRoutes.downloads:    (_) => const DownloadsScreen(),
         AppRoutes.search:       (_) => const SearchScreen(),
         AppRoutes.vault:         (_) => const VaultScreen(),
+        AppRoutes.adminQueue:    (_) => const AdminQueueScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.player) {

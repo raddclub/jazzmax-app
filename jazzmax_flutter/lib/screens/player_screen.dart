@@ -901,9 +901,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               right: 0, top: 0, bottom: 0,
               child: _TracksPanel(
                 title: 'Subtitles',
-                tracks: _player.state.tracks.subtitle
-                    .map((t) => t.language ?? t.id ?? 'Track')
-                    .toList(),
+                tracks: _buildSubLabels(_player.state.tracks.subtitle),
                 onSelect: (i) {
                   _player.setSubtitleTrack(
                       _player.state.tracks.subtitle[i]);
@@ -918,9 +916,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               right: 0, top: 0, bottom: 0,
               child: _TracksPanel(
                 title: 'Audio',
-                tracks: _player.state.tracks.audio
-                    .map((t) => t.language ?? t.id ?? 'Track')
-                    .toList(),
+                tracks: _buildAudioLabels(_player.state.tracks.audio),
                 onSelect: (i) {
                   _player.setAudioTrack(_player.state.tracks.audio[i]);
                   setState(() => _showAudioMenu = false);
@@ -1302,6 +1298,77 @@ class _SpeedPanel extends StatelessWidget {
           onTap: () => onSelect(s), dense: true)).toList())),
       ])).animate().slideX(begin: 1, end: 0, duration: 200.ms, curve: AppCurves.standard);
   }
+}
+
+
+// ─── ISO 639 language code → human name ────────────────────────────────────
+String _langName(String? code) {
+  if (code == null || code.isEmpty) return '';
+  const m = {
+    'eng': 'English',  'en': 'English',
+    'hin': 'Hindi',    'hi': 'Hindi',
+    'urd': 'Urdu',     'ur': 'Urdu',
+    'pan': 'Punjabi',  'pun': 'Punjabi', 'pa': 'Punjabi',
+    'pus': 'Pashto',   'ps': 'Pashto',
+    'snd': 'Sindhi',   'sd': 'Sindhi',
+    'ara': 'Arabic',   'ar': 'Arabic',
+    'per': 'Persian',  'fas': 'Persian', 'fa': 'Persian',
+    'zho': 'Chinese',  'chi': 'Chinese', 'zh': 'Chinese',
+    'kor': 'Korean',   'ko': 'Korean',
+    'jpn': 'Japanese', 'ja': 'Japanese',
+    'tam': 'Tamil',    'ta': 'Tamil',
+    'tel': 'Telugu',   'te': 'Telugu',
+    'mal': 'Malayalam','ml': 'Malayalam',
+    'kan': 'Kannada',  'kn': 'Kannada',
+    'ben': 'Bengali',  'bn': 'Bengali',
+    'fre': 'French',   'fra': 'French', 'fr': 'French',
+    'ger': 'German',   'deu': 'German', 'de': 'German',
+    'spa': 'Spanish',  'es': 'Spanish',
+    'ita': 'Italian',  'it': 'Italian',
+    'rus': 'Russian',  'ru': 'Russian',
+    'por': 'Portuguese','pt': 'Portuguese',
+    'tur': 'Turkish',  'tr': 'Turkish',
+    'und': '',
+  };
+  final key = code.toLowerCase().trim();
+  return m[key] ?? (key.length <= 3 ? key.toUpperCase() : code);
+}
+
+List<String> _buildAudioLabels(List<dynamic> tracks) {
+  final names = <String>[];
+  final usedLangs = <String, int>{};
+  for (var t in tracks) {
+    final lang = _langName(t.language as String?);
+    if (lang.isEmpty) {
+      names.add('Audio ${names.length + 1}');
+    } else {
+      usedLangs[lang] = (usedLangs[lang] ?? 0) + 1;
+      final count = usedLangs[lang]!;
+      names.add(count == 1 ? lang : '$lang ($count)');
+    }
+  }
+  return names;
+}
+
+List<String> _buildSubLabels(List<dynamic> tracks) {
+  final names = <String>[];
+  final usedLangs = <String, int>{};
+  for (var t in tracks) {
+    final lang = _langName(t.language as String?);
+    final title = (t.title ?? '') as String;
+    String label;
+    if (lang.isNotEmpty) {
+      usedLangs[lang] = (usedLangs[lang] ?? 0) + 1;
+      final count = usedLangs[lang]!;
+      label = count == 1 ? lang : '$lang ($count)';
+    } else if (title.isNotEmpty) {
+      label = title;
+    } else {
+      label = 'Sub ${names.length + 1}';
+    }
+    names.add(label);
+  }
+  return names;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

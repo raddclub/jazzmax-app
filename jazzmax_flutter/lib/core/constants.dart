@@ -207,6 +207,7 @@ class AppRoutes {
   static const String vault        = '/vault';
   static const String vaultLock    = '/vault-lock';
   static const String showDetail   = '/show-detail';
+  static const String adminQueue   = '/admin-queue';
 }
 
 // ── Storage Keys ──────────────────────────────────────────────────────────────
@@ -245,5 +246,10 @@ class ApiPaths {
   static const String historyBase       = '/api/history';
   static String saveHistory(String fileId) => '/api/history/$fileId';
   static String playUrl(String fileId)    => '/watch/api/play/$fileId';
+
+  static const String adminQueue        = '/stream/api/queue';
+  static const String adminQueueDirect  = '/stream/api/queue/direct';
+  static const String metaAutofix       = '/api/meta/autofix';
+  static const String metaAutofixStatus = '/api/meta/autofix/status';
   static const String publicMethods      = '/api/payment-methods';
 }
