@@ -374,3 +374,45 @@ Applied all fixes identified in the previous A-to-Z API contract audit session.
 - Always include field in SQL SELECT before reading it in Python (BUG-012: `is_active` was in return dict but not in SELECT)
 - Inline comments after a string literal eat the comma: `"sql"  # comment,` vs `"sql",  # comment`
 - Python heredocs over SSH break if Python code contains single quotes — use SCP+exec pattern instead
+
+---
+
+## Session 5 — 2026-05-26
+
+### Goal
+Wire up JazzDrive zero-rated catalog sync fallback (set `jazzDriveDbUpdateUrl` in `constants.dart`).
+
+### Completed
+
+1. **`constants.dart` patched** — `jazzDriveDbUpdateUrl` set to `'http://92.4.95.252/api/catalog/db_update'`
+   - Commit: `8584c1c7`
+   - Verified Oracle endpoint returns correct JSON: `{version, titles[69], episodes[6]}`
+   - Verified public accessibility: `http://92.4.95.252/api/catalog/db_update` ✅
+
+2. **BUG-001b confirmed fixed** — `is_free` returns `int` (0/1), not Python `bool` ✅
+
+3. **GitHub Actions free-minutes exhausted** — All builds since commit `8584c1c7` fail with `runner_id: 0` (2-second failure, no runner assigned). Cause: concurrent TASK_LOG CI run consumed the last free minutes of the monthly quota. Code changes are correct and in the repo.
+
+4. **Self-hosted runner installed on Oracle** — Bypasses GitHub free-minutes limit permanently.
+   - Runner: `oracle-arm64` at `/opt/actions-runner/`, labels: `self-hosted, linux, ARM64`
+   - Service: `actions.runner.raddclub-raddflix-app.oracle-arm64.service` (systemd, auto-start)
+   - Workflow updated: `build-apk.yml` → `runs-on: [self-hosted, linux, ARM64]`
+   - Commit: pushed as ci workflow change
+
+### Status of JazzDrive Sync
+
+`_syncFromJazzDrive()` in `sync_service.dart` is wired to `AppConstants.jazzDriveDbUpdateUrl`. On app launch, if Oracle is reachable, it GETs `/api/catalog/db_update` and inserts/updates the returned 69 titles + 6 episodes into the local SQLite catalog. When a JazzDrive CDN share link for `db_update.json` becomes available, update `jazzDriveDbUpdateUrl` to that URL for true zero-rated delivery.
+
+### Files Modified
+
+**Flutter (GitHub API):** `raddflix_flutter/lib/core/constants.dart`  
+**CI/CD:** `.github/workflows/build-apk.yml` (self-hosted runner, Java 21)  
+**Oracle:** self-hosted runner at `/opt/actions-runner/`, systemd service registered  
+**Docs:** `agent-hub/history/TASK_LOG.md`
+
+### Key Lessons
+
+- GitHub Actions free-tier: 2000 min/month for **private** repos. Concurrent builds can exhaust quota mid-session.
+- `runner_id: 0` + 2-second job completion = spending limit hit (not a code error).
+- Self-hosted runner on Oracle (already provisioned VPS) eliminates this permanently at zero cost.
+- Oracle server is **aarch64 (ARM64)** — use `actions-runner-linux-arm64-*.tar.gz`, not x64.
