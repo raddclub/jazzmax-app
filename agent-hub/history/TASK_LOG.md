@@ -973,3 +973,53 @@ Completed all missing Phase 3 player features per PLAYER_SPEC.md.
 - OpenSubtitles search integration
 - Auto intro detection via ML
 
+
+---
+
+## [2026-05-26] Bug Fixes + §3.11 Sleep Fade + §3.20 Loading State Upgrade
+
+**Agent:** Main Agent (Session 10 — audit & new feature)
+
+### Task
+Audit all Phase 3 code for bugs/compile errors. Fix them. Implement next spec task.
+
+### Done
+
+#### Bug Fixes (compile-breaking)
+- **player_prefs.dart** — added 16 missing fields in all 5 sections (field decl, constructor default, copyWith param+body, load(), save()):
+  - Subtitle: `subtitleItalic`, `subtitleFontFamily`, `subtitleTextColorValue`, `subtitleOutlineColorValue`, `subtitleBackgroundColorValue`, `subtitleBackgroundOpacity`, `subtitlePosition`, `subtitleVerticalOffset`, `subtitleAutoDetect`
+  - UI/Appearance: `uiFontSize`, `showEpisodeInfo`, `bookmarkVibrate`, `showPlaybackInfo`
+  - Cinematic: `cinematicModeOnLock`, `gesturesInCinematic`, `cinematicTapBehavior`
+  - Transparent: `transparentModeFrosted`
+- **subtitle_overlay.dart** — fixed Color usage: now reads `subtitleTextColorValue` (int) and wraps in `Color(...)` instead of calling `.value` on non-existent Color props
+
+#### §3.11 Sleep Fade ✅
+- `_startSleepFade()` — Timer fades both system volume (VolumeController) and MPV volume over `sleepFadeDurationSeconds` seconds before sleep timer expires
+- `_restoreVolumeAfterSleep()` — restores volume to pre-fade level after sleep or on cancel
+- "Sleeping in Ns…" pulsing orange badge appears when fade is active
+- `_cancelSleepTimer` now also cancels fade timer + restores volume
+- Controlled by `prefs.sleepFadeEnabled` + `prefs.sleepFadeDurationSeconds`
+
+#### §3.20 Loading & Error State Upgrades ✅
+- JazzDrive loading overlay upgraded: full-screen Shimmer (grey[900]/grey[800]) + accent-color spinner + animated "Loading video…" text with fade in/out
+- Slow connection warning: `_slowConnTimer` fires after 8 seconds of buffering → SnackBar "Slow connection — video may stutter"
+- Added `_bufferingStartedAt` tracking + auto-reset when buffering ends
+
+### Files Changed
+- `raddflix_flutter/lib/core/player/player_prefs.dart` — 16 new fields (447 → 545 lines)
+- `raddflix_flutter/lib/screens/player_screen.dart` — Sleep Fade + Shimmer loading + slow-connection warning (2748 → 2870+ lines)
+- `raddflix_flutter/lib/widgets/player/subtitle_overlay.dart` — fix int color fields
+
+### Notes for Next Agent
+- **All PlayerPrefs fields now match player_settings_screen.dart** — no more compile errors from missing fields
+- Sleep Fade is fully wired; test with a 1-minute sleep timer and 30s fade to verify
+- §3.19 Animations & §3.20 Error States are now complete
+- **Remaining unimplemented spec sections:**
+  - §3.3 Smart Intro: long-press seek bar → "Set intro end here" context menu (items 1–4 done, item 5 missing)
+  - §3.16E: audio_session interruption/headphone setup (partially done — audio_session imported but stream.listen may need wiring)
+  - §3.18 Volume Boost to 300%: UI slider in quick settings, swipe-into-boost gesture
+  - §3K Frame-by-frame: panel UI + button wiring
+  - §3K Chapter markers on seek bar
+  - Screenshot: `_takeScreenshot()` calls `player.screenshot()` + `Gal.putImageBytes()` — needs verification
+
+---
