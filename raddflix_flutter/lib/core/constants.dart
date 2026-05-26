@@ -84,6 +84,7 @@ class AppColors {
   static const Color warning       = Color(0xFFF59E0B);
   static const Color warningGlow   = Color(0x22F59E0B);
   static const Color info          = Color(0xFF3B82F6);
+  static const Color accent        = Color(0xFF3B82F6); // alias for info, used in year filter chips
 
   // Divider
   static const Color divider       = Color(0xFF1E1E35);
