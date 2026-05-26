@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/db/local_db.dart';
 import '../core/db/sync_service.dart';
-import '../core/debug/debug_logger.dart';
+import '../core/services/poster_service.dart';
 import '../models/catalog_item.dart';
 
 enum CatalogStatus { idle, syncing, ready, error }
@@ -49,42 +49,21 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   CatalogNotifier() : super(const CatalogState());
 
   Future<void> initialize() async {
-    DebugLogger.log('CATALOG', 'initialize() called');
     await _loadFromDb();
     await syncFromServer();
   }
 
   Future<void> _loadFromDb() async {
-    DebugLogger.logDb('LOAD', 'Querying movies and shows from SQLite...');
     try {
-      final movies   = await LocalDb.getMovies();
+      final movies  = await LocalDb.getMovies();
       final rawShows = await LocalDb.getShows();
-
-      DebugLogger.logDb('LOAD_RESULT',
-          'movies=${movies.length}  rawShows=${rawShows.length}');
-
       // Embed episodes into each show so ShowDetailScreen has them on first open
       final shows = await Future.wait(rawShows.map((show) async {
         final eps = await LocalDb.getEpisodes(show.id);
         return show.copyWithEpisodes(eps);
       }));
-
-      final count  = await LocalDb.getTotalCount();
-      final recent = await _loadRecentlyWatched(movies, shows);
-
-      DebugLogger.logDb('LOAD_DONE',
-          'movies=${movies.length}  shows=${shows.length}  total=$count  recentlyWatched=${recent.length}');
-
-      if (movies.isEmpty && shows.isEmpty) {
-        DebugLogger.logWarn('CATALOG',
-            'Both movies and shows are EMPTY after DB load. DB may not have synced yet.');
-      } else {
-        // Log a few titles to confirm data looks right
-        final samples = [...movies, ...shows].take(3).map((i) =>
-            '"${i.title}" (${i.mediaType}, free=${i.isFree})').join(', ');
-        DebugLogger.log('CATALOG', 'Sample items: $samples');
-      }
-
+      final count   = await LocalDb.getTotalCount();
+      final recent  = await _loadRecentlyWatched(movies, shows);
       state = state.copyWith(
         status: CatalogStatus.ready,
         movies: movies,
@@ -92,10 +71,25 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         recentlyWatched: recent,
         totalCount: count,
       );
-    } catch (e, s) {
-      DebugLogger.logError('CATALOG', '_loadFromDb threw an exception', e, s);
+      // Background poster download — runs silently after UI renders
+      _schedulePosterSync(movies, shows);
+    } catch (e) {
       state = state.copyWith(error: e.toString());
     }
+  }
+
+  void _schedulePosterSync(
+    List<CatalogItem> movies,
+    List<CatalogItem> shows,
+  ) {
+    // Delay so UI is interactive first
+    Future.delayed(const Duration(seconds: 3), () async {
+      final all = [
+        ...movies.map((i) => {'id': i.id, 'poster_url': i.posterUrl ?? ''}),
+        ...shows.map((i) => {'id': i.id, 'poster_url': i.posterUrl ?? ''}),
+      ];
+      await PosterService.runBackgroundSync(all);
+    });
   }
 
   Future<List<CatalogItem>> _loadRecentlyWatched(
@@ -109,9 +103,10 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         final fileId   = pos['file_id'] as String? ?? '';
         final posMs    = pos['position_ms'] as int? ?? 0;
         final durMs    = pos['duration_ms'] as int? ?? 0;
-        if (posMs < 3000) continue;
+        if (posMs < 3000) continue; // Skip if barely watched
         final progress = durMs > 0 ? posMs / durMs : 0.0;
-        if (progress > 0.95) continue;
+        if (progress > 0.95) continue; // Skip if essentially finished
+        // Find the CatalogItem that has this fileId
         final match = all.where((i) => i.fileId == fileId).firstOrNull;
         if (match != null) {
           result.add(match.copyWith(watchProgress: progress));
@@ -119,23 +114,17 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         if (result.length >= 10) break;
       }
       return result;
-    } catch (e) {
-      DebugLogger.logError('CATALOG', '_loadRecentlyWatched error', e);
+    } catch (_) {
       return [];
     }
   }
 
   Future<void> syncFromServer() async {
-    DebugLogger.logSync('PROVIDER', 'syncFromServer() starting...');
     state = state.copyWith(status: CatalogStatus.syncing, error: null);
     final result = await SyncService.sync();
-    DebugLogger.logSync('PROVIDER',
-        'SyncService.sync() done — success=${result.success}  items=${result.itemsSynced}  upToDate=${result.isUpToDate}  msg=${result.message}');
     if (result.success) {
       await _loadFromDb();
     } else {
-      DebugLogger.logWarn('CATALOG',
-          'Sync failed — keeping existing DB data. Error: ${result.message}');
       state = state.copyWith(
         status: CatalogStatus.ready,
         error: result.itemsSynced == 0 ? result.message : null,
