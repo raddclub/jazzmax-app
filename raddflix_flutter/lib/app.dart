@@ -147,16 +147,14 @@ class _ForceUpdateScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo
                 RichText(text: const TextSpan(
                   style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: -1),
                   children: [
-                    TextSpan(text: 'Jazz', style: TextStyle(color: Colors.white)),
-                    TextSpan(text: 'MAX', style: TextStyle(color: Color(0xFFE8002D))),
+                    TextSpan(text: 'Radd', style: TextStyle(color: Colors.white)),
+                    TextSpan(text: 'Flix', style: TextStyle(color: Color(0xFFE8002D))),
                   ],
                 )),
                 const SizedBox(height: 56),
-                // Icon ring
                 Container(
                   width: 110, height: 110,
                   decoration: BoxDecoration(
@@ -174,7 +172,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 36),
-                // Title
                 Text(
                   result.blocked ? 'Access Blocked' : 'Update Required',
                   style: const TextStyle(
@@ -183,7 +180,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
-                // Message
                 Text(
                   result.message.isNotEmpty
                       ? result.message
@@ -195,7 +191,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 52),
-                // Update button
                 if (!result.blocked && result.updateUrl.isNotEmpty)
                   GestureDetector(
                     onTap: () async {
@@ -246,7 +241,6 @@ class _ForceUpdateScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600, fontSize: 15)),
                   ),
                 const SizedBox(height: 24),
-                // Version info
                 if (result.currentVersion.isNotEmpty)
                   Text('Latest version: ${result.currentVersion}',
                       style: const TextStyle(color: Color(0xFF505070), fontSize: 12)),
