@@ -23,7 +23,7 @@ class AppConstants {
   /// Share URL for the zero-rated db_update.json file hosted on JazzDrive.
   /// Set this once the db_update.json is uploaded to JazzDrive.
   /// Empty = zero-rated catalog fallback disabled (uses Oracle server only).
-  static const String jazzDriveDbUpdateUrl = '';
+  static const String jazzDriveDbUpdateUrl = 'http://92.4.95.252/api/catalog/db_update';
 
   /// Stream link cache TTL. Same link reused for both watch + download within TTL.
   static const Duration streamLinkTtl = Duration(hours: 6);
