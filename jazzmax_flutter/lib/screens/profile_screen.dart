@@ -261,7 +261,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ]),
                   const SizedBox(height: 32),
-                  Text('JazzMAX v1.0.0 · Pakistan ka entertainment, data-free',
+                  Text('ZENO v1.0.0 · Pakistan ka entertainment, data-free',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                   const SizedBox(height: 40),
