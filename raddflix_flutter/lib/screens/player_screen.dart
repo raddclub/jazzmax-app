@@ -33,6 +33,7 @@ import '../widgets/player/playback_info_overlay.dart';
 import '../screens/player_settings_screen.dart';
 import 'dart:math' as math;
 import 'package:audio_session/audio_session.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:gal/gal.dart';
 import '../widgets/player/cinematic_overlay.dart';
@@ -132,6 +133,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   bool _buffering = true;
+  DateTime? _bufferingStartedAt;
+  bool _slowConnectionShown = false;
+  Timer? _slowConnTimer;
   bool _playing = false;
   bool _ended = false;
   Duration _bufferedPosition = Duration.zero;
@@ -683,6 +687,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player.stream.buffering.listen((b) {
       if (!mounted) return;
       setState(() => _buffering = b);
+      if (b) {
+        _bufferingStartedAt = DateTime.now();
+        _slowConnTimer?.cancel();
+        _slowConnTimer = Timer(const Duration(seconds: 8), () {
+          if (!mounted || !_buffering) return;
+          if (!_slowConnectionShown) {
+            _slowConnectionShown = true;
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Slow connection — video may stutter'),
+                duration: Duration(seconds: 3),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        });
+      } else {
+        _slowConnTimer?.cancel();
+        _bufferingStartedAt = null;
+        _slowConnectionShown = false;
+      }
     });
     _player.stream.playing.listen((p) {
       if (!mounted) return;
@@ -1097,6 +1122,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _nextEpTimer?.cancel();
     _sleepTimer?.cancel();
     _sleepFadeTimer?.cancel();
+    _slowConnTimer?.cancel();
     _seekThumbDebounce?.cancel();
     _jazzRetryTimer?.cancel();
     _tapTimer?.cancel();
@@ -1345,27 +1371,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ).animate().fadeIn(duration: 300.ms),
 
           // ── Link loading (JazzDrive/Oracle URL resolution) ──
+          // ── Link loading (JazzDrive URL resolution) — shimmer + spinner ──
           if (_isLinkLoading)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 36, height: 36,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Color(0xFFE8002D),
-                      ),
-                    ),
-                    SizedBox(height: 12),
-                    Text('Loading…',
-                        style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
-                ),
+            Stack(children: [
+              // Shimmer background over entire video area
+              Shimmer.fromColors(
+                baseColor: Colors.grey[900]!,
+                highlightColor: Colors.grey[800]!,
+                child: Container(color: Colors.white),
               ),
-            ),
+              // Centered spinner + animated loading text
+              Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  const SizedBox(
+                    width: 38, height: 38,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      strokeCap: StrokeCap.round,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE8002D)),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text('Loading video…',
+                      style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 13))
+                  .animate(onPlay: (c) => c.repeat())
+                  .fadeIn(duration: 400.ms).then().fadeOut(duration: 400.ms),
+                ]),
+              ),
+            ]),
 
           // ── Drag Indicator (brightness / volume) ──
           if (_draggingBrightness || _draggingVolume)
