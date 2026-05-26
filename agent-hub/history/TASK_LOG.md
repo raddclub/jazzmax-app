@@ -211,3 +211,57 @@ All 3 server-side fixes verified live on Oracle before committing:
 - ✅ Flutter Analyze: no errors
 - ✅ APK Build: passes
 - ⚠️ Deploy: will pass once `ORACLE_SSH_KEY` GitHub secret is updated with PEM-formatted key (the sed fix in the workflow handles the current format)
+
+---
+
+## Session: 2026-05-26 — Comprehensive API Contract Audit (A-to-Z)
+
+**Agent:** Replit Agent (main)  
+**Trigger:** Full API contract audit between Oracle backend and Flutter app
+
+### Audit Scope
+Read ALL backend route files (app_auth, app_catalog, app_search, app_subscription, app_plans, app_history, app_notifications, watch.py) and ALL Flutter-side models, API clients, providers, screens, and local DB code. Cross-referenced every JSON field produced by the server against every field consumed by Flutter.
+
+### Bugs Found — 12 Total
+
+| ID | Severity | Component | Description |
+|----|----------|-----------|-------------|
+| BUG-001 | 🔴 CRITICAL | `app_catalog.py` sync | `is_free` returned as Python bool (JSON `true/false`) but Flutter casts to `int?` → TypeError crash — entire catalog sync fails |
+| BUG-002 | 🔴 CRITICAL | `app_catalog.py` sync | `media_type` returned as `"tv"` from DB, Flutter `getShows()` queries `WHERE media_type='show'` → all TV shows invisible |
+| BUG-003 | 🔴 CRITICAL | `app_search.py` | Search returns key `"type"` but Flutter reads `"media_type"` → all search results get type='movie' |
+| BUG-004 | 🔴 CRITICAL | `app_search.py` | Search returns key `"title_id"` but Flutter reads `"id"` (non-nullable) → TypeError crash on every search result |
+| BUG-005 | 🟠 HIGH | `show_detail_screen.dart` | Reads `p['position']` / `p['duration']` but local DB columns are `position_ms` / `duration_ms` → episode progress always 0 |
+| BUG-006 | 🟠 HIGH | `app_notifications.py` | `created_at` is SQLite TEXT string, Flutter casts to `int? ?? 0` → all notification timestamps are epoch 0 |
+| BUG-007 | 🟠 HIGH | `app_subscription.py` | `hd_access` field missing from PLANS response; Flutter defaults to false → HD badge never shows |
+| BUG-008 | 🟡 MEDIUM | `app_subscription.py` | `features` array missing from PLANS response → subscription feature list always blank |
+| BUG-009 | 🟡 MEDIUM | `app_catalog.py` sync | Episode `share_url` missing from Oracle sync; only JazzDrive fallback sync includes it → zero-rated episode links broken |
+| BUG-010 | 🟡 MEDIUM | `catalog_item.dart` | `genres` list serialized via `.toString()` → stored as `[Action, Drama]` string instead of `"Action, Drama"` |
+| BUG-011 | 🟢 LOW | `user.dart` | `isGuest` not parsed from JSON (tracked separately via SharedPreferences — functional but inconsistent) |
+| BUG-012 | 🟢 LOW | `app_auth.py` me() | `is_active` not returned in `/api/auth/me` response; Flutter defaults to `true` |
+
+### Files Read
+
+**Backend (Oracle server):**
+- `/opt/jazzmax/_watch_prototype/routes/app_auth.py`
+- `/opt/jazzmax/_watch_prototype/routes/app_catalog.py`
+- `/opt/jazzmax/_watch_prototype/routes/app_search.py`
+- `/opt/jazzmax/_watch_prototype/routes/app_subscription.py`
+- `/opt/jazzmax/_watch_prototype/routes/app_plans.py`
+- `/opt/jazzmax/_watch_prototype/routes/app_history.py`
+- `/opt/jazzmax/_watch_prototype/routes/app_notifications.py`
+
+**Flutter (raddflix-app repo):**
+- `models/catalog_item.dart`, `models/user.dart`, `models/subscription.dart`
+- `core/api/catalog_api.dart`, `core/api/auth_api.dart`, `core/api/subscription_api.dart`
+- `core/db/local_db.dart`, `core/db/sync_service.dart`
+- `core/constants.dart` (ApiPaths)
+- `providers/auth_provider.dart`, `providers/catalog_provider.dart`, `providers/subscription_provider.dart`
+- `screens/player_screen.dart`, `screens/show_detail_screen.dart`
+- `core/services/notification_service.dart`
+
+### Output
+Full detailed audit report with root causes, exact code diffs, and ranked fix order:  
+→ `agent-hub/history/API_AUDIT.md`
+
+### No Code Changed This Session
+This was a read-only audit session. No backend or Flutter code was modified. All bugs documented in API_AUDIT.md with exact fix instructions.
