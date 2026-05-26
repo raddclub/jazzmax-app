@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
@@ -108,6 +109,16 @@ class ContentCard extends StatelessWidget {
   }
 
   Widget _buildPoster() {
+    // Prefer local cached poster (works offline/zero-rated)
+    if (item.posterPath != null && item.posterPath!.isNotEmpty) {
+      final f = File(item.posterPath!);
+      return Image.file(f, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildNetworkPoster());
+    }
+    return _buildNetworkPoster();
+  }
+
+  Widget _buildNetworkPoster() {
     if (item.posterUrl != null && item.posterUrl!.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: item.posterUrl!,
