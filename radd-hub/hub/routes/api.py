@@ -47,7 +47,7 @@ def ping():
 # Replaces the GitHub raw URL which stopped working when the repo went private.
 # ---------------------------------------------------------------------------
 
-@bp.route('/api/config')
+@bp.route('/config')
 def app_config():
     """Return the Flutter app remote config (api_base_url, min_version_code).
     No auth required — Flutter fetches this before the user logs in."""
