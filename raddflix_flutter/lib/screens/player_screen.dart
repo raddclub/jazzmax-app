@@ -94,6 +94,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   double _startScale = 1.0;
   double _startBrightness = 0.5;
   double _startVolume = 0.7;
+  double _startVolumeBoost = 1.0; // boost at gesture start (for swipe-into-boost)
+  bool _inBoostGesture = false;  // true once system vol hit 100% and swiping up
   Duration _dragStartPosition = Duration.zero;
   bool _draggingBrightness = false;
   bool _draggingVolume = false;
@@ -1021,6 +1023,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _dragStartLocal = d.localFocalPoint;
     _startBrightness = _brightness;
     _startVolume = _volume;
+    _startVolumeBoost = _volumeBoost;
+    _inBoostGesture = false;
     _dragStartPosition = _position;
     if (d.pointerCount >= 2) {
       _dragIntent = 'pinch';
@@ -1068,14 +1072,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           _draggingVolume = false;
         });
       case 'volume':
-        final newV =
-            (_startVolume - delta.dy / size.height * 1.5).clamp(0.0, 1.0);
-        VolumeController().setVolume(newV);
-        setState(() {
-          _volume = newV;
-          _draggingVolume = true;
-          _draggingBrightness = false;
-        });
+        // Raw value — may exceed 1.0 if starting at max and still swiping up
+        final rawV = _startVolume - delta.dy / size.height * 1.5;
+        if (rawV <= 1.0) {
+          // Normal system volume range 0–100%
+          final newV = rawV.clamp(0.0, 1.0);
+          VolumeController().setVolume(newV);
+          _player.setProperty('volume', '${(newV * _volumeBoost * 100).toInt()}');
+          setState(() {
+            _volume = newV;
+            _inBoostGesture = false;
+            _draggingVolume = true;
+            _draggingBrightness = false;
+          });
+        } else {
+          // Swipe-into-boost: system at max, MPV internal amplification 100%→300%
+          final boostDelta = (rawV - 1.0) * 2.5; // 2.5× gain per screen-height above max
+          final newBoost = (_startVolumeBoost + boostDelta).clamp(1.0, 3.0);
+          VolumeController().setVolume(1.0); // system stays at max
+          _player.setProperty('volume', '\${(newBoost * 100).toInt()}');
+          if (newBoost > 2.0) HapticFeedback.mediumImpact(); // haptic at 200%+
+          setState(() {
+            _volume = 1.0;
+            _volumeBoost = newBoost;
+            _inBoostGesture = true;
+            _draggingVolume = true;
+            _draggingBrightness = false;
+          });
+        }
       case 'seek':
         // Max 2 min per full-width swipe
         final seconds =
@@ -1092,6 +1116,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   void _onScaleEnd(ScaleEndDetails d) {
+    // Persist volume boost if changed via swipe-into-boost
+    if (_inBoostGesture && _volumeBoost != _startVolumeBoost) {
+      _prefs.save(_prefs.copyWith(volumeBoostMultiplier: _volumeBoost));
+    }
+    _inBoostGesture = false;
     if (_dragIntent == 'seek' && _dragSeekDelta != null) {
       final newPos =
           _dragStartPosition + Duration(seconds: _dragSeekDelta!.toInt());
@@ -1405,8 +1434,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             _DragIndicator(
               icon: _draggingBrightness
                   ? Icons.brightness_medium_rounded
-                  : Icons.volume_up_rounded,
+                  : (_inBoostGesture ? Icons.speaker_rounded : Icons.volume_up_rounded),
               value: _draggingBrightness ? _brightness : _volume,
+              boostValue: (!_draggingBrightness && _inBoostGesture) ? _volumeBoost : null,
             ),
 
           // ── Seek scrub label ──
@@ -2776,24 +2806,62 @@ class _SeekFlash extends StatelessWidget {
 class _DragIndicator extends StatelessWidget {
   final IconData icon;
   final double value;
-  const _DragIndicator({required this.icon, required this.value});
+  final double? boostValue; // non-null = we are in boost territory
+  const _DragIndicator({required this.icon, required this.value, this.boostValue});
+
   @override
   Widget build(BuildContext context) {
-    return Center(child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: BoxDecoration(color: Colors.black.withOpacity(0.7), borderRadius: BorderRadius.circular(12)),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: Colors.white, size: 28),
-        const SizedBox(height: 8),
-        SizedBox(width: 100, child: LinearProgressIndicator(
-            value: value, backgroundColor: Colors.white24,
-            valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-            minHeight: 3, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(height: 6),
-        Text('${(value * 100).toInt()}%',
-            style: const TextStyle(color: Colors.white, fontSize: 12)),
-      ]),
-    ));
+    final isBoost = boostValue != null;
+    // Color: orange at 150%+, red at 250%+
+    final pillColor = isBoost
+        ? (boostValue! > 2.5
+            ? Colors.red
+            : boostValue! > 1.5
+                ? Colors.orange
+                : Colors.white)
+        : Colors.white;
+    final barValue = isBoost
+        ? ((boostValue! - 1.0) / 2.0).clamp(0.0, 1.0) // 100%-300% mapped to 0-1
+        : value;
+    final label = isBoost
+        ? '${(boostValue! * 100).toInt()}%'
+        : '${(value * 100).toInt()}%';
+
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(12),
+          border: isBoost
+              ? Border.all(color: pillColor.withOpacity(0.5), width: 1.2)
+              : null,
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, color: pillColor, size: 28),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: 100,
+            child: LinearProgressIndicator(
+              value: barValue,
+              backgroundColor: Colors.white24,
+              valueColor: AlwaysStoppedAnimation<Color>(pillColor),
+              minHeight: 3,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 6),
+          if (isBoost) ...[
+            Text('⚡ Boost', style: TextStyle(color: pillColor.withOpacity(0.8), fontSize: 10)),
+            const SizedBox(height: 2),
+          ],
+          Text(label, style: TextStyle(color: pillColor, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    ).animate().scale(
+      begin: const Offset(0.88, 0.88), end: const Offset(1, 1),
+      duration: 180.ms, curve: Curves.elasticOut,
+    );
   }
 }
 
