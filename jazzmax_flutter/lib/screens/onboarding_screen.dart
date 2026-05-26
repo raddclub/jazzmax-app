@@ -16,28 +16,28 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   static const List<_PageData> _pages = [
     _PageData(
-      icon: '📶',
-      gradient: [Color(0xFF22C55E), Color(0xFF16A34A)],
+      icon: Icons.wifi_off_rounded,
+      iconColor: AppColors.oColor,
       title: 'Zero-Rated Streaming',
-      body: 'Watch movies & shows on Jazz SIM without spending any data. JazzMAX traffic is completely free of charge.',
+      body: 'Watch movies & shows on Jazz SIM without spending a single MB.\nZENO traffic is completely free.',
     ),
     _PageData(
-      icon: '📱',
-      gradient: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
-      title: 'Offline Catalog',
-      body: 'The full movie catalog downloads to your phone. Browse, search and explore 7000+ titles without any internet.',
+      icon: Icons.play_arrow_rounded,
+      iconColor: AppColors.zColor,
+      title: 'Stream Everything',
+      body: 'Movies, shows, dramas, anime — new titles added every week.\nYour entertainment, always growing.',
     ),
     _PageData(
-      icon: '🎬',
-      gradient: [Color(0xFFF59E0B), Color(0xFFD97706)],
-      title: 'Pakistani Content',
-      body: 'Urdu, Punjabi, Pakistani dramas and international hits. New titles added every week.',
+      icon: Icons.bolt_rounded,
+      iconColor: AppColors.nColor,
+      title: 'Instant & Offline',
+      body: 'Full catalog saved on your phone.\nBrowse, search and explore without any internet.',
     ),
     _PageData(
-      icon: '⭐',
-      gradient: [Color(0xFFE8002D), Color(0xFFB5001F)],
-      title: 'Subscribe to Unlock',
-      body: 'Start free. Upgrade to Basic, Standard or Premium to unlock HD quality and all content.',
+      icon: Icons.workspace_premium_rounded,
+      iconColor: AppColors.primary,
+      title: 'Dil Kholke Dekho',
+      body: 'Start free. Upgrade to unlock HD quality,\npremium content and all titles.',
     ),
   ];
 
@@ -52,68 +52,176 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final page = _pages[_page];
     final isLast = _page == _pages.length - 1;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          // Animated gradient background
+          // Animated radial glow background
           AnimatedContainer(
             duration: const Duration(milliseconds: 500),
             decoration: BoxDecoration(
               gradient: RadialGradient(
                 center: Alignment.topCenter,
-                radius: 1.2,
-                colors: [
-                  _pages[_page].gradient[0].withOpacity(0.15),
-                  AppColors.background,
-                ],
+                radius: 1.4,
+                colors: [page.iconColor.withOpacity(0.12), AppColors.background],
               ),
             ),
           ),
+
           SafeArea(
             child: Column(
               children: [
-                // Skip
+                // Skip button
                 Align(
                   alignment: Alignment.topRight,
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(20),
                     child: TextButton(
                       onPressed: _finish,
                       child: const Text('Skip',
-                          style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 14,
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                 ),
-                // Pages
+
+                // Page content
                 Expanded(
                   child: PageView.builder(
                     controller: _ctrl,
                     itemCount: _pages.length,
                     onPageChanged: (i) => setState(() => _page = i),
-                    itemBuilder: (_, i) => _OnboardPage(data: _pages[i], isActive: i == _page),
+                    itemBuilder: (context, i) {
+                      final p = _pages[i];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 36),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Icon circle
+                            Container(
+                              width: 110,
+                              height: 110,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: p.iconColor.withOpacity(0.1),
+                                border: Border.all(color: p.iconColor.withOpacity(0.3), width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(color: p.iconColor.withOpacity(0.25),
+                                      blurRadius: 40, spreadRadius: -5),
+                                ],
+                              ),
+                              child: Icon(p.icon, color: p.iconColor, size: 50),
+                            )
+                                .animate(key: ValueKey('icon_$i'))
+                                .scale(begin: const Offset(0.6, 0.6), end: const Offset(1, 1),
+                                    duration: 500.ms, curve: Curves.easeOutBack)
+                                .fadeIn(duration: 400.ms),
+
+                            const SizedBox(height: 44),
+
+                            Text(
+                              p.title,
+                              style: const TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.8,
+                                height: 1.1,
+                              ),
+                              textAlign: TextAlign.center,
+                            )
+                                .animate(key: ValueKey('title_$i'), delay: 80.ms)
+                                .fadeIn(duration: 400.ms)
+                                .slideY(begin: 0.15, end: 0, duration: 400.ms,
+                                    curve: Curves.easeOutCubic),
+
+                            const SizedBox(height: 18),
+
+                            Text(
+                              p.body,
+                              style: const TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 15.5,
+                                height: 1.65,
+                                letterSpacing: 0.1,
+                              ),
+                              textAlign: TextAlign.center,
+                            )
+                                .animate(key: ValueKey('body_$i'), delay: 140.ms)
+                                .fadeIn(duration: 400.ms)
+                                .slideY(begin: 0.12, end: 0, duration: 400.ms,
+                                    curve: Curves.easeOutCubic),
+                          ],
+                        ),
+                      );
+                    },
                   ),
                 ),
-                // Indicator
-                SmoothPageIndicator(
-                  controller: _ctrl,
+
+                // Page indicator
+                AnimatedSmoothIndicator(
+                  activeIndex: _page,
                   count: _pages.length,
                   effect: ExpandingDotsEffect(
-                    dotWidth: 8,
-                    dotHeight: 8,
-                    expansionFactor: 3,
-                    spacing: 6,
+                    dotHeight: 7,
+                    dotWidth: 7,
+                    expansionFactor: 3.5,
+                    spacing: 5,
+                    dotColor: AppColors.primary.withOpacity(0.25),
                     activeDotColor: AppColors.primary,
-                    dotColor: AppColors.textMuted.withOpacity(0.3),
                   ),
                 ),
-                const SizedBox(height: 32),
-                // Button
+
+                const SizedBox(height: 36),
+
+                // CTA button
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-                  child: _buildButton(isLast),
+                  padding: const EdgeInsets.symmetric(horizontal: 28),
+                  child: GestureDetector(
+                    onTap: isLast
+                        ? _finish
+                        : () => _ctrl.nextPage(
+                              duration: const Duration(milliseconds: 350),
+                              curve: Curves.easeOutCubic,
+                            ),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 17),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isLast
+                              ? [AppColors.primary, AppColors.primaryLight]
+                              : [AppColors.surfaceHigh, AppColors.card],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        border: isLast ? null
+                            : Border.all(color: AppColors.glassBorder, width: 1),
+                        boxShadow: isLast ? [
+                          BoxShadow(color: AppColors.primary.withOpacity(0.4),
+                              blurRadius: 24, offset: const Offset(0, 8)),
+                        ] : [],
+                      ),
+                      child: Text(
+                        isLast ? 'Get Started' : 'Continue',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: isLast ? Colors.white : AppColors.textSecondary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
+                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -121,135 +229,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
-
-  Widget _buildButton(bool isLast) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            _pages[_page].gradient[0],
-            _pages[_page].gradient[1],
-          ],
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        boxShadow: [
-          BoxShadow(
-            color: _pages[_page].gradient[0].withOpacity(0.4),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          onTap: () {
-            if (isLast) {
-              _finish();
-            } else {
-              _ctrl.nextPage(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeInOutCubic,
-              );
-            }
-          },
-          child: Container(
-            height: 52,
-            alignment: Alignment.center,
-            child: Text(
-              isLast ? 'Get Started' : 'Next →',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OnboardPage extends StatelessWidget {
-  final _PageData data;
-  final bool isActive;
-  const _OnboardPage({required this.data, required this.isActive});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Icon circle
-          Container(
-            width: 130,
-            height: 130,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  data.gradient[0].withOpacity(0.2),
-                  data.gradient[1].withOpacity(0.08),
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              border: Border.all(
-                color: data.gradient[0].withOpacity(0.3),
-                width: 1.5,
-              ),
-            ),
-            child: Center(
-              child: Text(data.icon, style: const TextStyle(fontSize: 56)),
-            ),
-          )
-              .animate(target: isActive ? 1.0 : 0.0)
-              .scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1),
-                  duration: 400.ms, curve: AppCurves.enter),
-          const SizedBox(height: 48),
-          Text(
-            data.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-              height: 1.1,
-            ),
-          )
-              .animate(target: isActive ? 1.0 : 0.0)
-              .fadeIn(duration: 350.ms, delay: 100.ms)
-              .slideY(begin: 0.3, end: 0, duration: 350.ms, curve: AppCurves.standard),
-          const SizedBox(height: 16),
-          Text(
-            data.body,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 15,
-              height: 1.65,
-              letterSpacing: 0.1,
-            ),
-          )
-              .animate(target: isActive ? 1.0 : 0.0)
-              .fadeIn(duration: 350.ms, delay: 200.ms),
-        ],
-      ),
-    );
-  }
 }
 
 class _PageData {
-  final String icon;
-  final List<Color> gradient;
+  final IconData icon;
+  final Color iconColor;
   final String title;
   final String body;
-  const _PageData({required this.icon, required this.gradient, required this.title, required this.body});
+  const _PageData({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.body,
+  });
 }
