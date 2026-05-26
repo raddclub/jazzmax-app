@@ -55,3 +55,38 @@ Full project cleanup, rebrand from JazzMAX → RaddFlix, and agent coordination 
 - Many features are still missing from the Flutter app — a feature backlog should be created
 
 ---
+---
+
+## Session: 2026-05-26 — Crash Diagnosis & Fix Session
+
+**Agent:** Main agent on raddclub Replit account  
+**Goal:** Deep forensic scan, identify crash root cause, fix all issues, produce master handoff
+
+### What Was Done
+
+1. **Complete forensic scan** — read all 15 planning docs + 12 key dart files + all CI/config files
+2. **Crash root causes identified and ALL FIXED:**
+   - `build-apk.yml` working-directory was `jazzmax_flutter` → changed to `raddflix_flutter`
+   - `proguard-rules.pro` had `-keep class com.jazzmax.app.**` → fixed to `com.raddflix.app.**`
+   - `splash_screen.dart` `_buildLogo()` rendered "JazzMAX" → now renders "RaddFlix"
+   - `app.dart` `_ForceUpdateScreen` rendered "JazzMAX" → now renders "RaddFlix"
+3. **Master handoff document written:** `agent-hub/HANDOFF_2026_05_26.md`
+   - Complete system map, all files, all known issues, priority action list for next agent
+
+### GitHub Commits This Session
+- `fix: update GitHub Actions to use raddflix_flutter folder path`
+- `fix: proguard package name com.jazzmax.app → com.raddflix.app (crash fix)`
+- `fix: splash screen RaddFlix branding (was showing JazzMAX)`
+- `fix: ForceUpdateScreen RaddFlix branding (was showing JazzMAX)`
+- `docs: master handoff document — crash fixes, architecture, next steps`
+
+### Current App State
+- **Phases 0-2:** COMPLETE (crash fixes, branding, home screen Netflix-style)
+- **Phases 3-9:** NOT DONE (player gestures, search, downloads, profile, security, subscriptions, APK dist)
+- **Build system:** Fixed — next agent should trigger GitHub Actions build and test on device
+- **Server:** 69 titles, 12 have JazzDrive files, 8 users, 1 paid subscriber
+
+### Next Agent Priority
+1. Delete legacy `build_apk.yml` (underscore) — broken, conflicts with active workflow
+2. Trigger GitHub Actions build → download APK → test on device
+3. Continue Phase 3: player gestures (double-tap seek, swipe volume/brightness)
