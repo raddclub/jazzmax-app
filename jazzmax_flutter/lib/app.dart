@@ -172,7 +172,7 @@ class _ForceUpdateScreen extends StatelessWidget {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: const Color(0xFF08080E),
+        backgroundColor: const AppColors.background,
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -184,7 +184,7 @@ class _ForceUpdateScreen extends StatelessWidget {
                   style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: -1),
                   children: [
                     TextSpan(text: 'Jazz', style: TextStyle(color: Colors.white)),
-                    TextSpan(text: 'MAX', style: TextStyle(color: Color(0xFFE8002D))),
+                    TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
                   ],
                 )),
                 const SizedBox(height: 56),
@@ -192,15 +192,15 @@ class _ForceUpdateScreen extends StatelessWidget {
                   width: 110, height: 110,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: const Color(0xFFE8002D).withOpacity(0.08),
+                    color: AppColors.primary.withOpacity(0.08),
                     border: Border.all(
-                        color: const Color(0xFFE8002D).withOpacity(0.25), width: 2),
+                        color: AppColors.primary.withOpacity(0.25), width: 2),
                   ),
                   child: Icon(
                     result.blocked
                         ? Icons.block_rounded
                         : Icons.system_update_alt_rounded,
-                    color: const Color(0xFFE8002D),
+                    color: AppColors.primary,
                     size: 52,
                   ),
                 ),
@@ -217,8 +217,8 @@ class _ForceUpdateScreen extends StatelessWidget {
                   result.message.isNotEmpty
                       ? result.message
                       : result.blocked
-                          ? 'This version of JazzMAX is not authorized. Please download the official app.'
-                          : 'A required update is available. Please update JazzMAX to continue watching.',
+                          ? 'This version of ZENO is not authorized. Please download the official app.'
+                          : 'A required update is available. Please update ZENO to continue watching.',
                   style: const TextStyle(
                       color: Color(0xFF9090B0), fontSize: 15, height: 1.65),
                   textAlign: TextAlign.center,
@@ -237,13 +237,13 @@ class _ForceUpdateScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 17),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFFE8002D), Color(0xFFFF5757)],
+                          colors: [AppColors.primary, Color(0xFFFF5757)],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         ),
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [BoxShadow(
-                          color: const Color(0xFFE8002D).withOpacity(0.4),
+                          color: AppColors.primary.withOpacity(0.4),
                           blurRadius: 24, offset: const Offset(0, 10),
                         )],
                       ),
