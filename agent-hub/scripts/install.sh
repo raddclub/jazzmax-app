@@ -14,7 +14,7 @@ echo ""
 # ── 1. Check required env vars ───────────────────────────────────────────────
 if [ -z "$ORACLE_SSH_KEY" ]; then
   echo "ERROR: ORACLE_SSH_KEY is not set."
-  echo "  Go to Replit Secrets and add ORACLE_SSH_KEY (base64-encoded SSH private key)"
+  echo "  Go to Replit Secrets and paste your Oracle SSH private key as-is"
   exit 1
 fi
 
@@ -25,10 +25,7 @@ if [ -z "$GITHUB_TOKEN" ]; then
 fi
 
 echo "[1/4] Setting up Oracle SSH key..."
-echo "$ORACLE_SSH_KEY" | tr -d ' \n' | base64 -d > /tmp/oracle_key 2>/dev/null || {
-  echo "ERROR: Failed to decode ORACLE_SSH_KEY. Make sure it is base64-encoded."
-  exit 1
-}
+printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key
 chmod 600 /tmp/oracle_key
 echo "      SSH key written to /tmp/oracle_key"
 
