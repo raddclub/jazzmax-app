@@ -420,7 +420,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 }
 
-// ── Download Card (Grid) ──────────────────────────────────────────────────────
+// ── Download Card (Grid) ────────────────────────���─────────────────────────────
 class _DownloadCard extends StatefulWidget {
   final String title, sizeStr, statusStr, localPath;
   final double progress;
