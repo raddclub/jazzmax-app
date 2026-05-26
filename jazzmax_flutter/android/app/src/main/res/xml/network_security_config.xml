@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Allows HTTP (cleartext) traffic to the JazzMAX Oracle production server
+  Allows HTTP (cleartext) traffic to the ZENO Oracle production server
   and to localhost (for development). All other traffic requires HTTPS.
 -->
 <network-security-config>
