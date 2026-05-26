@@ -8,11 +8,26 @@ Endpoints:
 from __future__ import annotations
 import os
 import logging
+import calendar
+from datetime import datetime  # FIX BUG-006
 from flask import Blueprint, request, jsonify, send_file, abort, g
 from hub import db
 from .app_auth import require_app_auth
 
 log = logging.getLogger("hub.app_notifications")
+
+
+def _ts(val) -> int:
+    """Convert SQLite CURRENT_TIMESTAMP string to Unix epoch int. FIX BUG-006."""
+    if val is None:
+        return 0
+    if isinstance(val, int):
+        return val
+    try:
+        dt = datetime.strptime(str(val), "%Y-%m-%d %H:%M:%S")
+        return int(calendar.timegm(dt.timetuple()))
+    except Exception:
+        return 0
 bp = Blueprint("app_notifications", __name__, url_prefix="/api/notifications")
 
 _IMAGES_DIR = os.path.join(
@@ -61,7 +76,7 @@ def get_notifications():
             "body":         r["body"],
             "type":         r["notif_type"],
             "is_read":      bool(r["is_read"]),
-            "created_at":   r["created_at"],
+            "created_at":   _ts(r["created_at"]),  # FIX BUG-006
             "image_url":    image_url,
         })
 
