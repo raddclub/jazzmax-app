@@ -169,6 +169,7 @@ jobs:
   # ── Job 4: Deploy to Oracle server ───────────────────────────────────────
   deploy:
     name: "Deploy to Oracle"
+    continue-on-error: true
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-apk]
