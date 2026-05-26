@@ -1,5 +1,5 @@
 # ZENO — Complete Overhaul Task List
-> App renamed from JazzMAX → ZENO | Brand color: #7B2FFF Electric Violet | Tagline: "Sub Dekho, Dil Kholke"
+> App renamed from JazzMAX → ZENO | Brand: ZENO Red #E8002D → Orange #FF6B00 → White | Tagline: "Sab Dekho, Dil Khol Ke"
 
 ## STATUS LEGEND: ⬜ TODO | 🔄 IN PROGRESS | ✅ DONE
 
@@ -15,31 +15,44 @@
 - [x] ✅ app_catalog.py — share_url in /sync and /db_update responses
 - [x] ✅ jazzdrive_db.py — fixed broken generate_db_update SQL
 - [x] ✅ show_detail_screen.dart — download buttons on every episode + movie
-- [x] ✅ main.dart — PosterService + JazzDriveService boot calls
+- [x] ✅ main.dart — PosterService + JazzDriveService boot calls wrapped in try/catch
+- [x] ✅ APK crash fixes — startup services safe, assets/brand/ folder, package ID com.zeno.app
+- [x] ✅ build-apk.yml — ZENO APK naming, GitHub Actions workflow fixed
 
 ---
 
 ## PHASE 1: BRAND IDENTITY — ZENO
 - [x] ✅ App renamed: JazzMAX → ZENO
-- [x] ✅ Primary color: #7B2FFF (Electric Violet) — own brand, not Jazz red
+- [x] ✅ Primary color: #E8002D ZENO Red (NOT violet) + Orange #FF6B00 accent
 - [x] ✅ Letter icons: Z=Play🔴 E=Eye🔵 N=Lightning⚡ O=People🟢
-- [x] ✅ Tagline: "Sub Dekho, Dil Kholke"
-- [x] ✅ constants.dart — full ZENO brand colors + StorageKeys
+- [x] ✅ Tagline: "Sab Dekho, Dil Khol Ke"
+- [x] ✅ constants.dart — full ZENO Red/Orange brand colors, pure dark backgrounds
 - [x] ✅ splash_screen.dart — animated ZENO logo reveal with particle field
 - [x] ✅ onboarding_screen.dart — ZENO branded, icon-based pages
-- [x] ✅ app.dart — ZENO title, ForceUpdate screen updated
+- [x] ✅ app.dart — ZENO title, ForceUpdate screen updated, violet→red colors
 - [x] ✅ pubspec.yaml — name: zeno
+- [x] ✅ ZENO Brand Kit (10 assets) generated + BRAND_GUIDELINES.md
 
 ---
 
-## PHASE 2: HOME SCREEN — Netflix Style
-- [ ] Hero banner with auto-rotating featured content
-- [ ] Continue Watching row (from watch history)
-- [ ] Trending Now row
-- [ ] Category filter chips (Movies/Shows/Dramas/Anime/Urdu/Punjabi)
-- [ ] Shimmer skeleton while loading
-- [ ] Sticky top bar with ZENO logo + search icon
-- [ ] Pull-to-refresh animation
+## PHASE 2: HOME SCREEN — Netflix Style ✅ COMPLETE
+- [x] ✅ Hero banner with auto-rotating featured content (290dp height, 5s interval)
+- [x] ✅ Hero: title, year, genres, description, Watch Now + More Info buttons
+- [x] ✅ Hero: FREE badge on free content, rating badge top-right
+- [x] ✅ Continue Watching row (from watch history)
+- [x] ✅ Trending Now row with rank number badges (1-10)
+- [x] ✅ Free to Watch dedicated row (all is_free titles)
+- [x] ✅ Movies row + TV Shows & Dramas row
+- [x] ✅ Category filter chips (Movies/Shows/Dramas/Urdu/Punjabi/English)
+- [x] ✅ Category grid view for filtered content (3 columns)
+- [x] ✅ Shimmer skeleton while loading (290dp hero + 6 card shimmer)
+- [x] ✅ Sticky top bar with ZENO logo (red→orange gradient) + search icon + notifications
+- [x] ✅ Pull-to-refresh syncs catalog from server
+- [x] ✅ ZENO logo: red→orange→warm white ShaderMask gradient
+- [x] ✅ Category chips: red/orange gradient when active
+- [x] ✅ Content rows: 210dp tall, icon-labeled section headers
+- [x] ✅ Empty state: icon + message + debug hint (tap logo 5× for debug panel)
+- [x] ✅ Debug panel: 5-tap logo secret, log viewer, copy + share buttons
 
 ---
 
@@ -88,19 +101,19 @@
 
 ## PHASE 7: SECURITY CLEANUP
 - [ ] Close port 8000 (currently public, bypasses Nginx)
-- [ ] Move JWT_SECRET + SMS_KEY from SQLite → env vars
+- [ ] Move JWT_SECRET + SMS_KEY from SQLite → env
 
 ---
 
-## PHASE 8: ZERO-RATED CATALOG SYNC
-- [ ] Upload db_update.json to JazzDrive
-- [ ] Set jazzDriveDbUpdateUrl in constants.dart
-- [ ] Test zero-rated sync on Jazz SIM with zero balance
+## PHASE 8: SUBSCRIPTION FLOW
+- [ ] Plans screen UI
+- [ ] TID (Transaction ID) submission
+- [ ] Status polling
 
 ---
 
-## PHASE 9: GITHUB + APK BUILD
-- [ ] Push all ZENO files to GitHub
-- [ ] Trigger GitHub Actions APK build
-- [ ] Test APK on device — verify: login ✓ catalog ✓ video plays ✓
-- [ ] Update Android app label to "ZENO" in AndroidManifest.xml
+## PHASE 9: APK BUILD & DISTRIBUTION 🔄 IN PROGRESS
+- [x] ✅ build-apk.yml — GitHub Actions workflow, ZENO-X.X.X APK naming
+- [x] ✅ emulator_test.yml — fixed package ID com.zeno.app
+- [ ] Upload APK to JazzDrive for OTA distribution
+- [ ] jazzmax_config.json pointing to production Oracle server
