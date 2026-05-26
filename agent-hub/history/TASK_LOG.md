@@ -441,3 +441,50 @@ Wire up JazzDrive zero-rated catalog sync fallback (set `jazzDriveDbUpdateUrl` i
 | Self-hosted runner | ❌ Removed (not needed) |
 
 ---
+
+---
+
+## Session 5 — Player Spec (same day, 2026-05-26)
+
+### Task
+User requested: build the most customizable, advanced video player ever — more customizable than MX Player, VLC, nPlayer, Infuse. Deep research on all major players, extract all features, write implementation spec for next agent.
+
+### Done
+1. Deep research on: MX Player, VLC, nPlayer, Infuse, KMPlayer, BSPlayer, Kodi, PowerDVD, Nova Video Player, Just Player, mpv, PlayerXtreme, Plex, Jellyfin
+2. Audited existing `player_screen.dart` — documented what already works
+3. Created `agent-hub/PLAYER_SPEC.md` — complete implementation guide for next agent
+
+### What PLAYER_SPEC.md contains
+- Full `PlayerPrefs` model (50+ settings, all with defaults)
+- Gesture system spec (all zones, all gestures, all configurable)
+- Cinematic Mode spec (full detail — one-tap lock, gestures still work)
+- Subtitle system (auto-detect from folder, styling panel, timing offset, encoding)
+- 10-band Equalizer with presets + bass boost + volume boost + normalize
+- Video enhancement (brightness/contrast/saturation/hue/night mode)
+- A-B Loop spec (full UI detail)
+- Speed control enhanced (0.25–4.0×, remember speed, custom slider)
+- Frame-by-frame control
+- Chapter markers on seek bar
+- Seek thumbnail preview
+- Screenshot to gallery
+- Button customization (drag to reorder, enable/disable, size, opacity)
+- PlayerSettingsScreen full structure (gear icon → bottom sheet quick panel → full settings)
+- Supported formats list (video/audio/subtitle/streaming)
+- Modes table (Normal/Cinematic/Locked/Background/PiP/Cast)
+- Implementation priority order (Phase 3A → 3B → 3C → 3D → 3E → 3F)
+- MPV command reference (EQ, video filters, volume boost, frame-step, screenshot)
+- Subtitle auto-detection code example
+- Packages to add (gal, flutter_colorpicker)
+- Files to modify list
+- Testing checklist (14 items)
+
+### Files Created/Modified
+- `agent-hub/PLAYER_SPEC.md` — NEW, comprehensive player implementation spec
+- `agent-hub/HANDOFF_2026_05_26.md` — updated with player task reference
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+READ `agent-hub/PLAYER_SPEC.md` FULLY before writing any player code.
+Implement in order: Phase 3A (gesture config) → 3B (controls customization) → 3C (subtitle) → 3D (cinematic) → 3E (audio) → 3F (advanced).
+The existing player code is in `raddflix_flutter/lib/screens/player_screen.dart` — read it first, build on top of it.
+New architecture files: `player_prefs.dart`, `player_prefs_provider.dart`, `player_settings_screen.dart` — create these new.
