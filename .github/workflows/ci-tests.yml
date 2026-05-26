@@ -187,10 +187,14 @@ jobs:
             exit 0
           fi
           mkdir -p ~/.ssh
-          echo "$ORACLE_SSH_KEY" > ~/.ssh/deploy_key
+          # Reconstruct PEM newlines: key may be stored with spaces instead of \n
+          echo "$ORACLE_SSH_KEY" \
+            | sed 's|-----BEGIN OPENSSH PRIVATE KEY----- |-----BEGIN OPENSSH PRIVATE KEY-----\n|g' \
+            | sed 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|g' \
+            | tr ' ' '\n' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$ORACLE_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             "${ORACLE_USER}@${ORACLE_HOST}" \
-            "cd /opt/jazzmax && git pull origin main && cd radd-hub && python radd_hub.py restart && echo DEPLOYED_OK"
+            "cd /opt/jazzmax && git pull origin main && sudo supervisorctl restart jazzmax_watch && echo DEPLOYED_OK"
           echo "Oracle server updated at $(date -u)." >> $GITHUB_STEP_SUMMARY
