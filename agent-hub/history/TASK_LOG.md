@@ -651,3 +651,103 @@ User requested:
 - ORACLE_SSH_KEY is plain text in Replit Secrets (fixed in Session 6)
 
 ---
+
+---
+
+## [2026-05-26] — Session 8: FINAL Deep Audit — Rotation, 300% Boost, Icons, Animations
+
+### Task
+Final deep checkup before implementation. User requested:
+1. Full screen rotation control like MX Player (all modes, rotation lock etc)
+2. Nothing missed — complete audit
+3. Correct icons for every button
+4. Cool animations spec
+5. Fast loading/buffering animations
+6. Audio boost to 300% (real — not fake)
+7. Final polish — then approve for implementation
+
+### Deep Audit Findings
+
+**Code issues found and added to spec:**
+- Buffering indicator: currently `Colors.white70` → must change to accent color `#E8002D` with pulse ring
+- Rotation: currently hardcoded `[landscapeLeft, landscapeRight]` only — no user control
+- `dispose()`: currently restores to `[portraitUp, portraitDown]` — should restore ALL orientations
+- Volume: only system volume via VolumeController, NO MPV boost implemented at all
+- No error/retry overlay (stream errors just logged silently)
+- No shimmer on initial load
+- No seek-back on resume (lifecycle handler is empty)
+
+### New Sections Added to PLAYER_SPEC.md (FINAL — 1265 lines)
+
+**Section 3.17 — Screen Rotation Control (Full MX Player Parity)**
+6 rotation modes:
+- `sensor_landscape` (DEFAULT) — auto between left/right, never portrait. Best for video.
+- `auto` — full sensor including portrait
+- `lock_left` — force DeviceOrientation.landscapeLeft
+- `lock_right` — force DeviceOrientation.landscapeRight
+- `lock_portrait` — force portrait (for vertical videos)
+- `lock_current` — lock whatever orientation it is right now
+
+Rotate button in top bar cycles: sensor_landscape → lock_left → lock_right → lock_portrait → back
+Each press: HapticFeedback.selectionClick() + mode badge next to icon
+Portrait video auto-detection: if height > width → show tip to switch to portrait mode
+dispose() fix: always restores DeviceOrientation.values (full auto) when player exits
+
+**Section 3.18 — Volume Boost 300% (REAL Implementation)**
+- MPV volume property: 100 = normal, 300 = 3× amplification
+- Implementation: VolumeController().setVolume(1.0) + player.setProperty('volume', '300')
+- This is REAL software amplification — more than MX Player (200%) and VLC (200%)
+- UI: 100%→300% slider with color changes (white→orange→red above 200%)
+- Warning text above 200%: "May distort audio"
+- Swipe volume gesture: when system at 100%, further swipe enters boost territory (different pill color)
+
+**Section 3.19 — Animations & Visual Polish (Complete Spec)**
+Every animation described with exact flutter_animate code:
+- Buffering: accent-color spinner + outer pulse ring animation
+- Link loading: shimmer placeholder + animated dots text
+- Controls show/hide: fadeIn(180ms) + subtle slideY(0.02)
+- Gesture pills: spring scale (Curves.elasticOut)
+- Rage Skip badge: elastic scale + bounce + delayed fadeOut
+- Track checkmark: scale from 0 spring animation
+- Skip Intro button: pulsing border animation to draw attention
+- Bookmark dot: elastic pop-in on seek bar
+- Ambilight: AnimatedContainer 300ms for smooth color transitions
+- Sync badges: slide down from top, slide up when dismissed
+
+**Section 3.20 — Loading & Error States**
+- Error/retry overlay: player.stream.error listener + retry calls _openMedia()
+- Slow connection toast after 8s buffering
+- Headphone unplug visual toast + pause
+- Progressive loading: black→shimmer→spinner→"Connecting..." text
+
+**Section 13 — Icons Reference (Complete)**
+Every button mapped to exact Flutter Material icon:
+All use `_rounded` variants for consistency (matching existing code pattern)
+Special cases: lock_right uses Transform.rotate(angle: pi) on lock_left icon
+
+**Updated Testing Checklist (37 items)**
+Added rotation tests, volume boost tests, error state tests, performance tests
+
+### What Was Confirmed Working in Code (No Changes Needed)
+- Language tags: _buildAudioLabels + _buildSubLabels already work correctly
+- Zoom reset: onResetZoom already wired
+- flutter_animate: already imported and used (keep same patterns)
+- shimmer: in pubspec, just not used in player yet — add to loading state
+
+### Files Changed
+- `agent-hub/PLAYER_SPEC.md` — FINAL version, 1265 lines
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+THIS IS THE FINAL SPEC. Do not modify PLAYER_SPEC.md without user approval.
+Implementation order: 3A → 3B → 3C → 3D → 3E → 3F → 3G → 3H → 3I → 3J → 3K
+Read EVERY section before writing code.
+Key first-day wins (do these early for quick visible progress):
+  1. Upgrade buffering indicator color (5 min fix, visible immediately)
+  2. Seek-back on resume (5 lines in didChangeAppLifecycleState)
+  3. Rotation cycle button (high-visibility, users notice immediately)
+  4. Volume boost 100-300% slider (MPV volume property)
+  5. Active track highlighted in picker (add activeIndex param to _TracksPanel)
+ORACLE_SSH_KEY: plain text in Replit Secrets (no base64 decode needed)
+
+---
