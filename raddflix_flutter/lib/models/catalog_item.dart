@@ -71,7 +71,7 @@ class CatalogItem {
       rating:      (json['rating'] as num?)?.toDouble(),
       genres:      json['genres'] is String
           ? json['genres'] as String
-          : json['genres']?.toString(),
+          : (json['genres'] is List ? (json['genres'] as List).map((e) => e.toString()).join(', ') : json['genres']?.toString()),  // FIX BUG-010
       posterUrl:   json['poster'] as String? ?? json['poster_url'] as String?,
       isFree:      (json['is_free'] as int? ?? 0) == 1,
       dbVersion:   json['db_version'] as int? ?? 0,
