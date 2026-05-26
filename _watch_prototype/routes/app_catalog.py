@@ -95,7 +95,7 @@ def sync():
                 t.id, t.title, t.year, t.media_type, t.plot, t.overview,
                 t.rating, t.genres, t.language, t.is_free, t.updated_at,
                 t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count,
-                f.id AS file_id
+                f.id AS file_id, f.share_url AS file_share_url
             FROM titles t
             LEFT JOIN files f ON f.title_id = t.id
               AND (f.season IS NULL OR f.season = 0)
@@ -137,10 +137,8 @@ def sync():
             "poster_jd_url": (_WATCH_BASE + "/watch/poster/" + str(r["id"])) if r["id"] else "",
             "db_version":    int(r["updated_at"] or 0),
             "file_id":       r["file_id"],
+            "share_url":     r["file_share_url"] or "",
         })
-
-    # Build title->is_free map so episodes inherit their parent title free status
-    title_free_map = {t["id"]: t["is_free"] for t in titles}
 
     episodes = []
     if title_ids:
@@ -148,7 +146,7 @@ def sync():
         with db.conn() as c:
             ep_rows = c.execute(
                 f"""
-                SELECT id, title_id, filename, season, episode
+                SELECT id, title_id, filename, season, episode, share_url
                 FROM files
                 WHERE title_id IN ({placeholders})
                   AND season IS NOT NULL AND season > 0
@@ -165,7 +163,7 @@ def sync():
                 "season":   r["season"],
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
-                "is_free":  title_free_map.get(r["title_id"], False),
+                "is_free":  False,  # files table has no is_free column; use title-level is_free instead
             })
 
     return jsonify({
@@ -221,7 +219,7 @@ def db_update():
                 t.id, t.title, t.year, t.media_type, t.plot, t.overview,
                 t.rating, t.genres, t.language, t.is_free, t.updated_at,
                 t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count,
-                f.id AS file_id
+                f.id AS file_id, f.share_url AS file_share_url
             FROM titles t
             LEFT JOIN files f ON f.title_id = t.id
               AND (f.season IS NULL OR f.season = 0)
@@ -258,6 +256,7 @@ def db_update():
             "poster_url":  r["poster"] or "",
             "db_version":  int(r["updated_at"] or 0),
             "file_id":     r["file_id"],
+            "share_url":   r["file_share_url"] or "",
         })
 
     episodes_out = []
@@ -266,7 +265,7 @@ def db_update():
         with db.conn() as c:
             ep_rows = c.execute(
                 f"""
-                SELECT id, title_id, filename, season, episode
+                SELECT id, title_id, filename, season, episode, share_url
                 FROM files
                 WHERE title_id IN ({placeholders})
                   AND season IS NOT NULL AND season > 0
@@ -283,6 +282,7 @@ def db_update():
                 "season":   r["season"],
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
+                "share_url": r["share_url"] or "",
                 "quality":  None,
                 "is_free":  0,  # files table has no is_free; inherit from parent title
             })
