@@ -1,94 +1,91 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# ─── Python ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+env/
 
-# compiled output
-dist
-tmp
-out-tsc
-*.tsbuildinfo
-.expo
-.expo-shared
+# ─── Data / Databases ──────────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+radd-hub/data/
+data/logs/
+data/cache/
+data/tmp/
+data/staging/
+data/auth/
+data/backups/
 
-# dependencies
-node_modules
+# ─── Credentials & Secrets ─────────────────────────────────────────────────
+.env
+*.env
+radd-hub/bots/whatsapp/auth_info/
+radd-hub/bots/whatsapp/pairing-number.txt
+radd-hub/bots/whatsapp/bot-state.json
+radd-hub/bots/whatsapp/users.json
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
+# ─── Browser Binaries (Playwright downloads at runtime) ────────────────────
+radd-hub/local/
+local/browsers/
+**/chrome-linux64/
+**/chrome-headless-shell-linux64/
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# ─── Node.js ───────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-error.log*
 
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
+# ─── Flutter / Dart ────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+*.iml
+*.ipr
+*.iws
+.idea/
 
-# System Files
+# ─── Android keystore ──────────────────────────────────────────────────────
+*.jks
+*.keystore
+
+# ─── Logs ──────────────────────────────────────────────────────────────────
+*.log
+*.log.*
+logs/
+
+# ─── Runtime generated files ───────────────────────────────────────────────
+_watch_prototype/posters/
+_watch_prototype/jazzmax.db
+radd-hub/hub/jazz.db
+radd-hub/data/poster_cache.db
+radd-hub/data/jazzdrive_session.json
+radd-hub/data/db_update.json
+radd-hub/data/bot-state.json
+radd-hub/data/raddhub.pid
+data/notif_images/
+
+# ─── OS ────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+desktop.ini
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
-
-# Replit
-.cache/
-.local/
-.upm/
-.config/
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-.pythonlibs/
-
-# Large binary folders (re-downloaded automatically)
-radd-hub/local/
-
-# Logs, temp, backups
-radd-hub/data/logs/
-radd-hub/data/backups/
-radd-hub/data/tmp/
-radd-hub/data/staging/
-radd-hub/data/media/
-radd-hub/data/cache/
-
-# SQLite WAL files (safe to exclude — database is checkpointed before push)
-radd-hub/data/radd_hub.db-wal
-radd-hub/data/radd_hub.db-shm
-radd-hub/data/raddhub.pid
-
-# Secrets / env
-.env
-.env.local
-radd-hub/.env
-
-# Zip exports
-jazzmax_*.zip
-
-# JazzMAX keystore (stored as GitHub Secret KEYSTORE_BASE64)
-jazzmax_flutter/android/app/keystore/*.keystore
-jazzmax_flutter/android/app/keystore/*.jks
-jazzmax_flutter/android/app/key.properties
-
-# Python
-__pycache__/
-*.pyc
-.pythonlibs/
-
-# Build artifacts
-jazzmax_flutter/build/
+# ─── Editor ────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
