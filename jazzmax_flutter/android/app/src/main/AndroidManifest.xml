@@ -89,7 +89,7 @@
     <!-- Chromecast / Google Cast -->
     <meta-data
         android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-        android:value="com.jazzmax.app.CastOptionsProvider" />
+        android:value="com.zeno.app.CastOptionsProvider" />
 </application>
 
     <!-- url_launcher: allow opening http/https URLs on Android 11+ -->
