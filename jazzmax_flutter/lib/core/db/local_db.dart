@@ -490,6 +490,7 @@ class LocalDb {
       genres:      row['genres'] as String?,
       posterUrl:   row['poster_url'] as String?,
       shareUrl:    row['share_url'] as String?,
+      posterPath:  row['poster_path'] as String?,
       isFree:      (row['is_free'] as int? ?? 0) == 1,
       dbVersion:   row['db_version'] as int? ?? 0,
       language:    row['language'] as String?,
