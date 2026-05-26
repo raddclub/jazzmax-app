@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import '../db/local_db.dart';
+import '../services/jazzdrive_service.dart';
+import '../debug/debug_logger.dart';
 
 /// Manages video file downloads using Dio.
 /// Files saved to app private storage — not accessible outside the app.
@@ -10,14 +12,40 @@ class DownloadService {
   static final Dio _dio = Dio();
 
   /// Download a video file and save to private app storage.
+  /// Resolves the stream URL on-device via JazzDrive (zero-rated) if possible,
+  /// otherwise uses the [streamUrl] parameter as-is.
   /// [onProgress] fires with value 0.0 → 1.0 as download progresses.
   static Future<void> downloadFile({
     required String fileId,
     required String titleText,
     required String streamUrl,
     String? posterUrl,
+    String? shareUrl,
     required void Function(double progress) onProgress,
   }) async {
+    // Try to get a fresh zero-rated JazzDrive URL if share_url is known
+    String resolvedUrl = streamUrl;
+    if (shareUrl != null && shareUrl.isNotEmpty) {
+      try {
+        final link = await JazzDriveService.getStreamLink(fileId, shareUrl);
+        resolvedUrl = link.streamUrl;
+        DebugLogger.log('DOWNLOAD', 'Using JazzDrive URL for $fileId');
+      } catch (e) {
+        DebugLogger.logWarn('DOWNLOAD', 'JazzDrive link failed, using provided URL: $e');
+      }
+    } else {
+      // Try fetching share_url from local DB (set during catalog sync)
+      final dbShareUrl = await LocalDb.getShareUrl(fileId);
+      if (dbShareUrl != null && dbShareUrl.isNotEmpty) {
+        try {
+          final link = await JazzDriveService.getStreamLink(fileId, dbShareUrl);
+          resolvedUrl = link.streamUrl;
+          DebugLogger.log('DOWNLOAD', 'Using DB JazzDrive URL for $fileId');
+        } catch (e) {
+          DebugLogger.logWarn('DOWNLOAD', 'DB JazzDrive link failed, using provided URL: $e');
+        }
+      }
+    }
     final dir = await _getDownloadDir();
     final localPath = '${dir.path}/$fileId.mp4';
 
@@ -31,7 +59,7 @@ class DownloadService {
 
     try {
       await _dio.download(
-        streamUrl,
+        resolvedUrl,
         localPath,
         onReceiveProgress: (received, total) {
           final progress = total > 0 ? received / total : 0.0;
