@@ -751,3 +751,65 @@ Key first-day wins (do these early for quick visible progress):
 ORACLE_SSH_KEY: plain text in Replit Secrets (no base64 decode needed)
 
 ---
+
+---
+
+## [2026-05-26] — Session 9: Phase 3A Implementation — PlayerPrefs + JazzDrive XML Fix
+
+### Task
+Start implementation. User confirmed:
+1. Link generation method is correct (100% zero-rated via on-device JazzDrive)
+2. JazzDrive XML bug fix needed before implementation starts
+
+### JazzDrive XML Bug Analysis
+When JazzDrive CDN token expires or Jazz flags a session, CDN returns an XML error page instead of video bytes. MPV either fires stream.error or "plays" it with duration=0 forever. Browser fix = delete cookies. App fix = invalidate stale CDN URL cache + re-generate fresh link.
+
+Root cause: tokens can expire before our 6h cache TTL. `JazzDriveService.invalidate()` already existed — just needed to be called automatically on failure.
+
+### Phase 3A — Files Changed
+
+**NEW: `raddflix_flutter/lib/core/player/player_prefs.dart`**
+- Complete PlayerPrefs model (all 60+ settings from spec)
+- `const PlayerPrefs()` default constructor
+- `copyWith()` for immutable updates
+- `PlayerPrefs.load()` static factory — reads from SharedPreferences
+- `save()` instance method — writes all fields to SharedPreferences
+
+**NEW: `raddflix_flutter/lib/core/player/player_prefs_provider.dart`**
+- `playerPrefsProvider` — Riverpod StateNotifierProvider
+- `PlayerPrefsNotifier.update()` — transform + save in one call
+- `PlayerPrefsNotifier.reset()` — restore all defaults
+
+**MODIFIED: `raddflix_flutter/lib/screens/player_screen.dart`** (1600 → 1817 lines)
+Changes:
+1. Import player_prefs.dart
+2. New state: `_jazzRetryCount`, `_jazzRetryTimer`, `_streamError`, `_showRemaining`, `_prefs`
+3. `initState()`: added `_loadPrefs()` call
+4. `_loadPrefs()`: loads PlayerPrefs.load(), calls `_applyRotation(prefs.rotationMode)`
+5. `_applyRotation(mode)`: sets SystemChrome for 6 rotation modes
+6. `_cycleRotation()`: cycles sensor_landscape → lock_left → lock_right → lock_portrait
+7. `_jazzAutoRetry()`: detects XML/expired token → `JazzDriveService.invalidate()` → `_openMedia()` retry (max 1 auto-retry, then shows error overlay)
+8. `_player.stream.error.listen()`: Layer 1 detection — MPV hard error
+9. Duration-zero timer after 5s: Layer 2 detection — XML page returns but MPV "plays" nothing
+10. `didChangeAppLifecycleState.resumed`: added seek-back (5 seconds, configurable via prefs)
+11. `dispose()`: FIXED — now restores `DeviceOrientation.values` (full auto) instead of only portrait
+12. `_jazzRetryTimer?.cancel()` added to dispose
+13. Buffering indicator: UPGRADED — accent color #E8002D with outer pulse ring animation
+14. Error overlay: full-screen with "Could not load video" + Retry + Go Back buttons
+15. Long-press speed: now reads `_prefs.longPressSpeed` (was hardcoded 2.0×)
+16. Rotation button: added to _ControlsOverlay top bar
+17. `_rotationIcon()` helper: returns correct icon per mode
+18. `_rotationLabel()` helper: returns human-readable mode label
+
+### What was NOT changed (by design)
+- _buildAudioLabels / _buildSubLabels: already work, untouched
+- All existing gestures: untouched, just long-press speed made configurable
+- Skip intro logic: still hardcoded at 85s — to be replaced in Phase 3C
+- Track picker: no activeIndex highlight yet — Phase 3C
+
+### Next Phase: 3B — Controls & Settings Screen
+- player_settings_screen.dart
+- Quick settings bottom sheet
+- Individual setting toggles wired to playerPrefsProvider
+
+---
