@@ -265,3 +265,57 @@ Full detailed audit report with root causes, exact code diffs, and ranked fix or
 
 ### No Code Changed This Session
 This was a read-only audit session. No backend or Flutter code was modified. All bugs documented in API_AUDIT.md with exact fix instructions.
+
+---
+
+## Session: API Contract Bug Fix — 2026-05-26
+
+**Type:** Implementation — Bug fixes  
+**Started:** 2026-05-26  
+**Result:** ✅ All 12 bugs fixed, 24/24 automated backend checks PASS
+
+### What Was Done
+
+Applied all fixes identified in the previous A-to-Z API contract audit session.
+
+**Backend fixes (Oracle server `/opt/jazzmax/_watch_prototype/routes/`):**
+
+| Bug | Fix |
+|-----|-----|
+| BUG-001 | `is_free`: `bool(r["is_free"])` → `1 if r["is_free"] else 0` in sync + search |
+| BUG-002 | `media_type`: normalize `"tv"`/`"series"` → `"show"` in catalog sync |
+| BUG-003 | Search: renamed JSON key `"type"` → `"media_type"` with normalization |
+| BUG-004 | Search: renamed JSON key `"title_id"` → `"id"` |
+| BUG-006 | Notifications: SQLite TEXT timestamp → Unix int via `_ts()` helper |
+| BUG-007 | Plans: added `hd_access` field (free=0, basic/standard/premium=1) |
+| BUG-008 | Plans: added `features` list (3–6 items per plan) |
+| BUG-009 | Catalog sync: added `share_url` to episode dict |
+| BUG-012 | `/api/auth/me`: added `is_active` to SQL SELECT + return dict |
+
+**Flutter fixes (GitHub API commits to `raddflix_flutter/lib/`):**
+
+| Bug | Fix |
+|-----|-----|
+| BUG-005 | `show_detail_screen.dart`: `p['position']`→`p['position_ms']`, `p['duration']`→`p['duration_ms']` |
+| BUG-010 | `catalog_item.dart`: genres List joined as comma string, not `.toString()` |
+| BUG-011 | `user.dart`: `isGuest: userData['is_guest'] as bool? ?? false` |
+
+### Approach
+
+1. Wrote 5 Python patch scripts locally, SCP'd to Oracle, executed in sequence
+2. Restarted `jazzmax_watch` via supervisorctl twice (after main fixes, after BUG-012 SQL fix)
+3. Flutter fixes applied via GitHub Contents API (PUT with base64 content + SHA)
+4. Backend commits via GitHub Contents API (PUT with base64 content + SHA)
+5. Automated test suite (`test_fixes.py`) run on Oracle — 24/24 PASS
+
+### Files Modified
+
+**Oracle backend:** `app_catalog.py`, `app_search.py`, `app_subscription.py`, `app_notifications.py`, `app_auth.py`  
+**Flutter:** `screens/show_detail_screen.dart`, `models/catalog_item.dart`, `models/user.dart`  
+**Docs:** `agent-hub/history/API_AUDIT.md`, `agent-hub/history/TASK_LOG.md`
+
+### Key Lessons
+
+- Always include field in SQL SELECT before reading it in Python (BUG-012: `is_active` was in return dict but not in SELECT)
+- Inline comments after a string literal eat the comma: `"sql"  # comment,` vs `"sql",  # comment`
+- Python heredocs over SSH break if Python code contains single quotes — use SCP+exec pattern instead
