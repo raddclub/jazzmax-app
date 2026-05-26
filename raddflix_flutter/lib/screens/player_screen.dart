@@ -18,6 +18,7 @@ import '../core/db/local_db.dart';
 import '../core/api/catalog_api.dart';
 import '../core/services/jazzdrive_service.dart';
 import '../core/debug/debug_logger.dart';
+import '../core/player/player_prefs.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
 const _pipChannel = MethodChannel('com.raddflix.app/pip');
@@ -134,6 +135,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool get _isLocalFile =>
       widget.localPath != null && widget.localPath!.isNotEmpty;
 
+  // JazzDrive XML auto-retry
+  int _jazzRetryCount = 0;
+  Timer? _jazzRetryTimer;
+  String? _streamError;
+
+  // Time display toggle (tap = elapsed/remaining)
+  bool _showRemaining = false;
+
+  // PlayerPrefs (loaded async — defaults used until ready)
+  PlayerPrefs _prefs = const PlayerPrefs();
+
   @override
   void initState() {
     super.initState();
@@ -146,6 +158,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _initPlayer();
     _scheduleHide();
     _initBrightnessVolume();
+    _loadPrefs();
   }
 
   @override
@@ -157,7 +170,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         WakelockPlus.disable();
       }
     } else if (state == AppLifecycleState.resumed) {
-      if (!_userPaused) WakelockPlus.enable();
+      if (!_userPaused) {
+        WakelockPlus.enable();
+        // Seek back N seconds so user doesn't miss anything after switching apps
+        final seekBack = _prefs.seekBackOnResumeSeconds;
+        if (seekBack > 0 && _position.inSeconds > seekBack) {
+          _player.seek(_position - Duration(seconds: seekBack));
+        }
+      }
     }
   }
 
@@ -166,6 +186,77 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       _brightness = await ScreenBrightness().current;
       _volume = await VolumeController().getVolume();
     } catch (_) {}
+  }
+
+  Future<void> _loadPrefs() async {
+    final loaded = await PlayerPrefs.load();
+    if (!mounted) return;
+    setState(() => _prefs = loaded);
+    // Apply rotation mode from prefs
+    _applyRotation(loaded.rotationMode);
+    // Apply long-press speed from prefs
+    // (long-press handler reads _prefs.longPressSpeed directly)
+  }
+
+  void _applyRotation(String mode) {
+    switch (mode) {
+      case 'auto':
+        SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        break;
+      case 'lock_left':
+        SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft]);
+        break;
+      case 'lock_right':
+        SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeRight]);
+        break;
+      case 'lock_portrait':
+        SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+        break;
+      case 'lock_current':
+        final mq = WidgetsBinding.instance.renderViews.first.flutterView.physicalSize;
+        final isLandscape = mq.width > mq.height;
+        SystemChrome.setPreferredOrientations(isLandscape
+          ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+          : [DeviceOrientation.portraitUp]);
+        break;
+      default: // 'sensor_landscape'
+        SystemChrome.setPreferredOrientations(
+          [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]);
+    }
+    setState(() => _prefs = _prefs.copyWith(rotationMode: mode));
+    _prefs.copyWith(rotationMode: mode).save();
+  }
+
+  void _cycleRotation() {
+    const order = ['sensor_landscape', 'lock_left', 'lock_right', 'lock_portrait'];
+    final idx = order.indexOf(_prefs.rotationMode);
+    final next = order[(idx + 1) % order.length];
+    _applyRotation(next);
+    HapticFeedback.selectionClick();
+  }
+
+  /// Called when JazzDrive stream errors (XML page / expired token).
+  /// Equivalent of "delete cookies + reload" in a browser.
+  void _jazzAutoRetry(String reason) {
+    if (_jazzRetryCount >= 1) {
+      // Already retried once — show error overlay
+      if (mounted) setState(() => _streamError = reason);
+      return;
+    }
+    _jazzRetryCount++;
+    if (mounted) {
+      setState(() {
+        _streamError = null;
+        _isLinkLoading = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Refreshing video link…'),
+        duration: Duration(seconds: 2),
+      ));
+    }
+    // Wipe stale cached URL — forces fresh JazzDrive login + new CDN token
+    JazzDriveService.invalidate(widget.fileId);
+    _openMedia(widget.fileId);
   }
   double _brightness = 0.5;
   double _volume = 0.7;
@@ -208,6 +299,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!mounted || !done) return;
       setState(() => _ended = true);
       _onPlaybackEnded();
+    });
+
+    // ── JazzDrive XML error detection ──────────────────────────────────────
+    // Layer 1: MPV fires a hard error (expired token, DNS fail, etc.)
+    _player.stream.error.listen((err) {
+      if (!mounted || _isLocalFile) return;
+      DebugLogger.logError('PLAYER', 'Stream error: $err');
+      _jazzAutoRetry(err);
+    });
+
+    // Layer 2: Playing for 5s but duration is still zero → got XML instead of video
+    _jazzRetryTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted || _isLocalFile || _jazzRetryCount > 0) return;
+      if (_duration == Duration.zero && !_isLinkLoading) {
+        DebugLogger.logError('PLAYER', 'Duration still zero after 5s — likely JazzDrive XML error');
+        _jazzAutoRetry('Stream returned non-video content (possible XML error page)');
+      }
     });
 
     _skipIntroTimer = Timer(const Duration(seconds: 5), () {
@@ -408,6 +516,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _updateSeekThumb(double fraction) {
     if (!_isLocalFile) return;
     _seekThumbDebounce?.cancel();
+    _jazzRetryTimer?.cancel();
     _seekThumbDebounce = Timer(const Duration(milliseconds: 120), () async {
       final ms = (fraction * _duration.inMilliseconds).toInt();
       try {
@@ -539,8 +648,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player.dispose();
     WakelockPlus.disable();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setPreferredOrientations(
-        [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown]);
+    // Restore full auto-rotate so system works normally after player exit
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
   }
 
@@ -648,7 +757,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         },
         onLongPressStart: (_) {
           setState(() => _longPressFast = true);
-          _player.setRate(2.0);
+          _player.setRate(_prefs.longPressSpeed);
         },
         onLongPressEnd: (_) {
           setState(() => _longPressFast = false);
@@ -676,17 +785,90 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (_showSeekLeft) _SeekFlash(isRight: false, label: _seekLabel),
           if (_showSeekRight) _SeekFlash(isRight: true, label: _seekLabel),
 
-          // ── Buffering ──
-          if (_buffering && !_ended)
-            const Center(
+          // ── Buffering (accent color + pulse ring) ──
+          if (_buffering && !_ended && _streamError == null)
+            Center(
               child: SizedBox(
-                width: 40, height: 40,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  strokeCap: StrokeCap.round,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white70)),
+                width: 60, height: 60,
+                child: Stack(alignment: Alignment.center, children: [
+                  // Outer pulse ring
+                  Container(
+                    width: 56, height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFFE8002D).withOpacity(0.35),
+                        width: 1.5)),
+                  ).animate(onPlay: (c) => c.repeat())
+                    .scale(begin: const Offset(1, 1), end: const Offset(1.45, 1.45),
+                           duration: 900.ms, curve: Curves.easeOut)
+                    .fadeOut(duration: 900.ms),
+                  // Inner spinner
+                  const SizedBox(
+                    width: 36, height: 36,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      strokeCap: StrokeCap.round,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFE8002D))),
+                  ),
+                ]),
               ),
             ),
+
+          // ── Stream error overlay ──
+          if (_streamError != null)
+            Container(
+              color: Colors.black.withOpacity(0.85),
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.error_outline_rounded,
+                        color: Color(0xFFE8002D), size: 48),
+                    const SizedBox(height: 16),
+                    const Text('Could not load video',
+                        style: TextStyle(color: Colors.white,
+                            fontSize: 18, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text('The video link may have expired.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white.withOpacity(0.65),
+                            fontSize: 13)),
+                    const SizedBox(height: 28),
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      // Retry button
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          backgroundColor: const Color(0xFFE8002D),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10))),
+                        icon: const Icon(Icons.refresh_rounded, size: 18),
+                        label: const Text('Retry', style: TextStyle(fontWeight: FontWeight.w700)),
+                        onPressed: () {
+                          setState(() { _streamError = null; _jazzRetryCount = 0; });
+                          JazzDriveService.invalidate(widget.fileId);
+                          _openMedia(widget.fileId);
+                        },
+                      ),
+                      const SizedBox(width: 12),
+                      // Back button
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white70,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              side: BorderSide(color: Colors.white24))),
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: const Text('Go Back'),
+                      ),
+                    ]),
+                  ]),
+                ),
+              ),
+            ).animate().fadeIn(duration: 300.ms),
 
           // ── Link loading (JazzDrive/Oracle URL resolution) ──
           if (_isLinkLoading)
@@ -914,6 +1096,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   setState(() => _showSubtitleMenu = !_showSubtitleMenu),
               onAudioTracks: () =>
                   setState(() => _showAudioMenu = !_showAudioMenu),
+              rotationMode: _prefs.rotationMode,
+              onCycleRotation: _cycleRotation,
               onNextEpisode: _hasNextEp ? _playNextEpisode : null,
               onPiP: _enterPiP,
               onCast: _enterCast,
@@ -1038,6 +1222,8 @@ class _ControlsOverlay extends StatelessWidget {
   final VoidCallback onSubtitleFile, onSubtitleTracks, onAudioTracks;
   final VoidCallback onPiP, onSleep, onCast;
   final bool castConnected;
+  final String rotationMode;
+  final VoidCallback onCycleRotation;
   final VoidCallback? onNextEpisode, onResetZoom;
   final ValueChanged<double> onSeekTo, onSliderStart, onSliderChange, onSliderEnd;
   final String Function(Duration) fmtDur;
@@ -1055,6 +1241,7 @@ class _ControlsOverlay extends StatelessWidget {
     required this.onSpeed, required this.onSubtitleFile, required this.onSubtitleTracks,
     required this.onAudioTracks, required this.onPiP, required this.onSleep,
     required this.onCast, required this.castConnected,
+    required this.rotationMode, required this.onCycleRotation,
     this.onNextEpisode, this.onResetZoom,
     required this.onSeekTo, required this.onSliderStart,
     required this.onSliderChange, required this.onSliderEnd,
@@ -1130,6 +1317,11 @@ class _ControlsOverlay extends StatelessWidget {
                   tooltip: 'Audio', onPressed: onAudioTracks),
               IconButton(icon: const Icon(Icons.lock_outline_rounded, color: Colors.white, size: 22),
                   tooltip: 'Lock', onPressed: onLock),
+              IconButton(
+                icon: Icon(_rotationIcon(rotationMode), color: Colors.white, size: 22),
+                tooltip: _rotationLabel(rotationMode),
+                onPressed: onCycleRotation,
+              ),
             ]),
           ),
         ),
@@ -1262,6 +1454,30 @@ class _ControlsOverlay extends StatelessWidget {
 }
 
 // ─── Top icon button with optional badge ────────────────────────────────────
+// ── Rotation helpers ────────────────────────────────────────────────────────
+
+IconData _rotationIcon(String mode) {
+  switch (mode) {
+    case 'lock_left':    return Icons.stay_current_landscape_rounded;
+    case 'lock_right':   return Icons.stay_current_landscape_rounded;
+    case 'lock_portrait': return Icons.stay_current_portrait_rounded;
+    case 'auto':         return Icons.screen_rotation_outlined;
+    case 'lock_current': return Icons.screen_lock_rotation_rounded;
+    default:             return Icons.screen_rotation_rounded; // sensor_landscape
+  }
+}
+
+String _rotationLabel(String mode) {
+  switch (mode) {
+    case 'lock_left':    return 'Locked: Landscape Left';
+    case 'lock_right':   return 'Locked: Landscape Right';
+    case 'lock_portrait': return 'Locked: Portrait';
+    case 'auto':         return 'Auto Rotate';
+    case 'lock_current': return 'Lock Current';
+    default:             return 'Sensor Landscape'; // sensor_landscape
+  }
+}
+
 class _TopIconBtn extends StatelessWidget {
   final IconData icon;
   final Color color;
