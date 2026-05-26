@@ -587,3 +587,67 @@ User requested:
 - Phase order: 3A -> 3B -> 3C (smart intro) -> 3D (subtitles) -> 3E (cinematic) -> 3F (audio/video) -> 3G (new features) -> 3H (advanced)
 
 ---
+
+---
+
+## [2026-05-26] — Session 7: Spec Polish — Sync Panel, Track Intelligence, Small Essential Features
+
+### Task
+User requested:
+1. Remove Episode Recap Preview feature
+2. Add proper audio/subtitle synchronization (not just prefs — full UI spec)
+3. Add correct language tag display for audio/subtitle tracks (verify + improve)
+4. Audit ALL small features being missed, not just big ones
+5. Fix anything incomplete or missing from the spec
+
+### Audit Findings (what was missing before this session)
+
+**Already working in existing code (DO NOT rebuild):**
+- Language tags on tracks: `_buildAudioLabels()` and `_buildSubLabels()` already read MPV ISO 639 metadata — shows Urdu, Hindi, Punjabi, Pashto, Sindhi, Arabic, Chinese, Korean, etc. correctly
+- Zoom reset: `onResetZoom` callback already wired in player
+
+**Genuinely missing from both code and spec — now added:**
+- Active track NOT highlighted in track picker (no checkmark for currently selected)
+- Audio/subtitle delay had prefs fields but ZERO UI spec (no buttons, no slider layout)
+- No active track badge in top bar showing "Urdu" or "CC English"
+- No track count badge ("3A · 2S")
+- No track memory (remember last selected language)
+- No auto-select audio by device locale
+- Seek-back on app resume (didChangeAppLifecycleState had no seek-back)
+- Jump to timestamp (tap time label)
+- Toggle elapsed/remaining (tap time)
+- Long-press play = restart
+- Android media notification + audio focus management
+- Headphone/Bluetooth button support
+- Volume boost visual indicator (🔊 150% badge)
+- Long-press subtitle text = copy to clipboard
+- Subtitle encoding override UI (was in prefs, no panel)
+- Orientation manual cycle (auto/left/right)
+- Share timestamp (long-press time label)
+
+### What Changed in PLAYER_SPEC.md
+
+- **Removed:** Section 3.14 Episode Recap Preview — replaced entirely
+- **Added:** Section 3.14 — Audio & Subtitle Synchronization Panel (full UI spec with ±50ms/±100ms/±500ms buttons + slider + Reset + live header badges)
+- **Added:** Section 3.15 — Track Intelligence (active track highlight, header badges, count badge, track memory, auto-select by locale)
+- **Added:** Section 3.16 — Small But Essential Features (10 features: seek-back on resume, jump to timestamp, toggle elapsed/remaining, long-press restart, Android media notification, headphone buttons, volume boost badge, copy subtitle, orientation cycle, share timestamp)
+- **Updated:** PlayerPrefs model (new fields for track intelligence, orientation mode, seekBackOnResumeSeconds, tapTimeToToggle, longPressPlayRestart)
+- **Updated:** Implementation phases — added Phase 3H (Small Essential), Phase 3I (New Original Features), Phase 3J (Advanced). Previous Phase 3G split into 3G+3H+3I
+- **Updated:** Packages — added `audio_session: ^0.1.21` for media notification + headphone support + audio focus
+- **Updated:** Files to Modify — added `_TracksPanel` needs `activeIndex` param + `didChangeAppLifecycleState` seek-back fix
+- **Updated:** Testing checklist — 32 items now
+
+### Files Changed
+- `agent-hub/PLAYER_SPEC.md` — v3, 1019 lines
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- Language tags ALREADY WORK in code — do NOT rewrite `_buildAudioLabels` or `_buildSubLabels`
+- The main track fix needed: add `activeIndex` parameter to `_TracksPanel` widget
+- Audio/subtitle sync panel is the most important new UI — spec very detailed in §3.14
+- Seek-back on resume is a 5-line fix in `didChangeAppLifecycleState` — do it early
+- `audio_session` package needed for: audio focus (pause on call), headphone unplug pause, media notification
+- Implementation order now: 3A → 3B → 3C → 3D (sync panel) → 3E → 3F → 3G → 3H → 3I → 3J
+- ORACLE_SSH_KEY is plain text in Replit Secrets (fixed in Session 6)
+
+---
