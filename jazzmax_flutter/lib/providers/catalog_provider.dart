@@ -11,6 +11,7 @@ class CatalogState {
   final List<CatalogItem> movies;
   final List<CatalogItem> shows;
   final List<CatalogItem> recentlyWatched;
+  final List<CatalogItem> trending;
   final String? error;
   final int totalCount;
 
@@ -19,6 +20,7 @@ class CatalogState {
     this.movies = const [],
     this.shows = const [],
     this.recentlyWatched = const [],
+    this.trending = const [],
     this.error,
     this.totalCount = 0,
   });
@@ -28,6 +30,7 @@ class CatalogState {
     List<CatalogItem>? movies,
     List<CatalogItem>? shows,
     List<CatalogItem>? recentlyWatched,
+    List<CatalogItem>? trending,
     String? error,
     int? totalCount,
   }) {
@@ -36,6 +39,7 @@ class CatalogState {
       movies: movies ?? this.movies,
       shows: shows ?? this.shows,
       recentlyWatched: recentlyWatched ?? this.recentlyWatched,
+      trending: trending ?? this.trending,
       error: error,
       totalCount: totalCount ?? this.totalCount,
     );
@@ -63,12 +67,14 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         return show.copyWithEpisodes(eps);
       }));
       final count   = await LocalDb.getTotalCount();
-      final recent  = await _loadRecentlyWatched(movies, shows);
+      final recent   = await _loadRecentlyWatched(movies, shows);
+      final trending = _computeTrending(movies, shows);
       state = state.copyWith(
         status: CatalogStatus.ready,
         movies: movies,
         shows: shows,
         recentlyWatched: recent,
+        trending: trending,
         totalCount: count,
       );
       // Background poster download — runs silently after UI renders
@@ -117,6 +123,21 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     } catch (_) {
       return [];
     }
+  }
+
+  List<CatalogItem> _computeTrending(
+      List<CatalogItem> movies,
+      List<CatalogItem> shows,
+  ) {
+    final all = [...movies, ...shows];
+    // Sort by rating descending; items without a rating go to end
+    all.sort((a, b) {
+      final ra = a.rating ?? 0.0;
+      final rb = b.rating ?? 0.0;
+      return rb.compareTo(ra);
+    });
+    // Take top items that have a poster (so they look good in the row)
+    return all.where((i) => (i.posterUrl ?? '').isNotEmpty).take(20).toList();
   }
 
   Future<void> syncFromServer() async {
