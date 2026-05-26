@@ -180,13 +180,20 @@ class _ForceUpdateScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo
-                RichText(text: const TextSpan(
-                  style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: -1),
-                  children: [
-                    TextSpan(text: 'Jazz', style: TextStyle(color: Colors.white)),
-                    TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
-                  ],
-                )),
+                Text(
+                  'ZENO',
+                  style: TextStyle(
+                    fontSize: 38,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -2,
+                    foreground: Paint()
+                      ..shader = const LinearGradient(
+                        colors: [Color(0xFF9D5FFF), Color(0xFF7B2FFF), Color(0xFF2F8BFF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ).createShader(const Rect.fromLTWH(0, 0, 150, 50)),
+                  ),
+                ),
                 const SizedBox(height: 56),
                 Container(
                   width: 110, height: 110,
