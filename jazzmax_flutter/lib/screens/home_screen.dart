@@ -136,14 +136,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       title: GestureDetector(
         onTap: _onLogoTap,
         behavior: HitTestBehavior.opaque,
-        child: RichText(
-          text: const TextSpan(
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
-            children: [
-              TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
-              TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
-            ],
-          ),
+        child: ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [Color(0xFF9D5FFF), Color(0xFF7B2FFF), Color(0xFF2F8BFF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(bounds),
+          child: const Text('ZENO', style: TextStyle(
+            fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -1.5,
+          )),
         ),
       ),
       actions: [
