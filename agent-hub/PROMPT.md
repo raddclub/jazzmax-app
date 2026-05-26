@@ -1,4 +1,4 @@
-# Ready-to-Paste Agent Starter Prompt
+# Agent Starter Prompt
 
 Copy the block below and paste it as your first message to any new AI agent.
 Replace the last line with your actual task.
@@ -8,28 +8,64 @@ Replace the last line with your actual task.
 ```
 You are working on RaddFlix — a Pakistani streaming platform.
 
-Before doing anything:
-1. Run the install script to set up SSH and verify connections:
-   curl -sL https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/scripts/install.sh | bash
+GitHub: raddclub/raddflix-app (PUBLIC repo)
+Oracle: ubuntu@92.4.95.252
+Secrets in Replit: $GITHUB_TOKEN, $ORACLE_SSH_KEY
 
-2. Read these files (fetch from GitHub raw or ask me to paste them):
-   - agent-hub/README.md       ← full project overview
-   - agent-hub/SKILLS.md       ← rules you must follow strictly
-   - agent-hub/history/TASK_LOG.md  ← what previous agents have done
+== STEP 1: Decode SSH key (run this first) ==
+python3 -c "
+import os,base64,subprocess
+raw=os.environ['ORACLE_SSH_KEY'].strip()
+h='-----BEGIN OPENSSH PRIVATE KEY-----'
+f='-----END OPENSSH PRIVATE KEY-----'
+body=raw.replace(h,'').replace(f,'').strip().replace(' ','')
+lines='\\n'.join(body[i:i+64] for i in range(0,len(body),64))
+key=h+'\\n'+lines+'\\n'+f+'\\n'
+open('/tmp/oracle_key','w').write(key)
+subprocess.run(['chmod','600','/tmp/oracle_key'])
+print('SSH ready')
+"
 
-3. After finishing your work, append a summary to agent-hub/history/TASK_LOG.md
-   via the GitHub API (see SKILLS.md Rule 8 for exact format).
+== STEP 2: Verify connections ==
+ssh -i /tmp/oracle_key -o StrictHostKeyChecking=no ubuntu@92.4.95.252 "echo OK && sudo supervisorctl status"
+curl -s -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/repos/raddclub/raddflix-app | python3 -c "import sys,json; d=json.load(sys.stdin); print('GitHub OK:',d['full_name'])"
 
-GitHub repo: raddclub/raddflix-app
-Oracle server: ubuntu@92.4.95.252 (SSH key is already set up after install script)
-GITHUB_TOKEN and ORACLE_SSH_KEY are in Replit Secrets.
+== STEP 3: Read context files before doing anything ==
+curl -sL -H "Authorization: token $GITHUB_TOKEN" \
+  "https://api.github.com/repos/raddclub/raddflix-app/contents/agent-hub/HANDOFF_2026_05_26.md" \
+  | python3 -c "import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)['content']).decode())"
 
-My task for you today: [DESCRIBE YOUR TASK HERE]
+Also read (last 80 lines):
+curl -sL -H "Authorization: token $GITHUB_TOKEN" \
+  "https://api.github.com/repos/raddclub/raddflix-app/contents/agent-hub/history/TASK_LOG.md" \
+  | python3 -c "import sys,json,base64; c=base64.b64decode(json.load(sys.stdin)['content']).decode(); print('\\n'.join(c.split('\\n')[-80:]))"
+
+== STEP 4: After finishing, append to TASK_LOG ==
+Format in SKILLS.md Rule 8. Use GitHub Contents API (PUT with base64 + SHA).
+
+My task today: [DESCRIBE YOUR TASK HERE]
 ```
 
 ---
 
-## Tip
+## Useful shell one-liners (paste after SSH is set up)
 
-After the install script runs successfully, the agent is ready.
-You only need to describe the task — everything else is in the docs.
+```bash
+# Check Oracle services
+ssh -i /tmp/oracle_key -o StrictHostKeyChecking=no ubuntu@92.4.95.252 "sudo supervisorctl status"
+
+# Check latest CI/build runs
+curl -sL -H "Authorization: token $GITHUB_TOKEN" \
+  "https://api.github.com/repos/raddclub/raddflix-app/actions/runs?per_page=5" | \
+  python3 -c "import sys,json; [print(r['id'],r['status'],r.get('conclusion','-'),r['name'][:22],r['head_sha'][:8]) for r in json.load(sys.stdin)['workflow_runs']]"
+
+# Trigger a new APK build
+curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Content-Type: application/json" \
+  "https://api.github.com/repos/raddclub/raddflix-app/actions/workflows/build-apk.yml/dispatches" \
+  -d '{"ref":"main"}'
+
+# Read any file from GitHub (get content + SHA)
+curl -sL -H "Authorization: token $GITHUB_TOKEN" \
+  "https://api.github.com/repos/raddclub/raddflix-app/contents/PATH/TO/FILE" | \
+  python3 -c "import sys,json,base64; j=json.load(sys.stdin); print('SHA:',j['sha']); print(base64.b64decode(j['content']).decode())"
+```
