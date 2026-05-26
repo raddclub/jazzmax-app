@@ -15,6 +15,8 @@ import '../services/cast_service.dart';
 import '../core/constants.dart';
 import '../core/security/keystore.dart';
 import '../core/db/local_db.dart';
+import '../core/api/catalog_api.dart';
+import '../core/services/jazzdrive_service.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
 const _pipChannel = MethodChannel('com.jazzmax.app/pip');
@@ -217,15 +219,41 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   Future<void> _openMedia(String fileId, {String? localPath}) async {
-    final token = await Keystore.getAccessToken();
-    final url = localPath != null && localPath.isNotEmpty
-        ? localPath
-        : '${AppConstants.apiBaseUrl}${ApiPaths.playUrl(fileId)}?token=${token ?? ''}';
-    await _player.open(Media(url));
-    setState(() {
-      _ended = false;
-      _position = Duration.zero;
-    });
+    // Local file: play directly
+    if (localPath != null && localPath.isNotEmpty) {
+      await _player.open(Media(localPath));
+      setState(() { _ended = false; _position = Duration.zero; });
+      return;
+    }
+
+    // Zero-rated path: on-device JazzDrive link generation
+    // Works without internet bundle — Jazz SIM zero-rated access only
+    final shareUrl = await LocalDb.getShareUrl(fileId);
+    if (shareUrl != null && shareUrl.isNotEmpty) {
+      try {
+        final link = await JazzDriveService.getStreamLink(fileId, shareUrl);
+        await _player.open(Media(link.streamUrl));
+        setState(() { _ended = false; _position = Duration.zero; });
+        return;
+      } catch (e) {
+        DebugLogger.logError('PLAYER', 'JazzDrive link failed for $fileId', e);
+        // Fall through to Oracle server fallback
+      }
+    }
+
+    // Fallback: Oracle server stream URL (requires internet bundle)
+    try {
+      final url = await CatalogApi.getStreamUrl(fileId);
+      await _player.open(Media(url));
+      setState(() { _ended = false; _position = Duration.zero; });
+    } catch (e) {
+      DebugLogger.logError('PLAYER', 'All stream methods failed for $fileId', e);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not load video. Check your connection.'),
+        ));
+      }
+    }
   }
 
   void _onPlaybackEnded() {
