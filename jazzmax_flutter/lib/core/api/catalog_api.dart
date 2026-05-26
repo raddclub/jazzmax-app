@@ -20,20 +20,9 @@ class CatalogApi {
   static Future<List<CatalogItem>> syncFull() async {
     final response = await _client.get(ApiPaths.catalogSync);
     final data = response.data as Map<String, dynamic>;
-    final rawTitles = data['titles'] as List<dynamic>? ?? [];
-    final rawEpisodes = data['episodes'] as List<dynamic>? ?? [];
-    // Build episode lookup: titleId → list of episode maps
-    final epsByTitle = <int, List<Map<String, dynamic>>>{};
-    for (final ep in rawEpisodes) {
-      final e = ep as Map<String, dynamic>;
-      final tid = e['title_id'] as int? ?? 0;
-      epsByTitle.putIfAbsent(tid, () => []).add(e);
-    }
-    return rawTitles.map((e) {
-      final m = Map<String, dynamic>.from(e as Map<String, dynamic>);
-      m['episodes'] = epsByTitle[m['id'] as int? ?? 0] ?? [];
-      return CatalogItem.fromJson(m);
-    }).toList();
+    final titles   = data['titles']   as List<dynamic>? ?? [];
+    final episodes = data['episodes'] as List<dynamic>? ?? [];
+    return _buildItemsWithEpisodes(titles, episodes);
   }
 
   /// Delta sync — only items changed since [sinceTimestamp].
@@ -44,18 +33,24 @@ class CatalogApi {
       params: {'since': sinceTimestamp.toString()},
     );
     final data = response.data as Map<String, dynamic>;
-    final rawTitles = data['titles'] as List<dynamic>? ?? [];
-    final rawEpisodes = data['episodes'] as List<dynamic>? ?? [];
+    final titles   = data['titles']   as List<dynamic>? ?? [];
+    final episodes = data['episodes'] as List<dynamic>? ?? [];
+    return _buildItemsWithEpisodes(titles, episodes);
+  }
+
+  /// Attaches episodes to their parent CatalogItems.
+  static List<CatalogItem> _buildItemsWithEpisodes(
+    List<dynamic> titles, List<dynamic> episodes) {
     final epsByTitle = <int, List<Map<String, dynamic>>>{};
-    for (final ep in rawEpisodes) {
-      final e = ep as Map<String, dynamic>;
-      final tid = e['title_id'] as int? ?? 0;
-      epsByTitle.putIfAbsent(tid, () => []).add(e);
+    for (final ep in episodes) {
+      final m = ep as Map<String, dynamic>;
+      final tid = m['title_id'] as int? ?? 0;
+      epsByTitle.putIfAbsent(tid, () => []).add(m);
     }
-    return rawTitles.map((e) {
-      final m = Map<String, dynamic>.from(e as Map<String, dynamic>);
-      m['episodes'] = epsByTitle[m['id'] as int? ?? 0] ?? [];
-      return CatalogItem.fromJson(m);
+    return titles.map((e) {
+      final item = CatalogItem.fromJson(e as Map<String, dynamic>);
+      final eps = epsByTitle[item.id] ?? [];
+      return eps.isEmpty ? item : item.copyWithEpisodes(eps);
     }).toList();
   }
 
