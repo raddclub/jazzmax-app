@@ -416,3 +416,28 @@ Wire up JazzDrive zero-rated catalog sync fallback (set `jazzDriveDbUpdateUrl` i
 - `runner_id: 0` + 2-second job completion = spending limit hit (not a code error).
 - Self-hosted runner on Oracle (already provisioned VPS) eliminates this permanently at zero cost.
 - Oracle server is **aarch64 (ARM64)** — use `actions-runner-linux-arm64-*.tar.gz`, not x64.
+
+
+### Addendum (same session — end of Session 5)
+
+**Repo made public** — user changed `raddclub/raddflix-app` visibility to Public.
+- GitHub Actions now uses **unlimited free minutes** on `ubuntu-latest` — billing issue resolved permanently
+- Self-hosted Oracle runner: installed, tested (1 build attempted), then **removed** (not needed, would add CPU load to production Oracle server)
+- Workflows reverted back to `runs-on: ubuntu-latest` + Java 17 (previous state)
+- Commits: `7ea0f222` (build-apk.yml revert), `b94bdc2b` (ci-tests.yml revert)
+- New builds triggered and running in_progress on ubuntu-latest ✅
+
+**TASK_LOG and HANDOFF updated** with full context for next agent.
+
+### Final State After Session 5
+
+| Item | Status |
+|---|---|
+| `jazzDriveDbUpdateUrl` | ✅ Set to `http://92.4.95.252/api/catalog/db_update` |
+| Oracle `/api/catalog/db_update` | ✅ Public, returns 69 titles + 6 episodes |
+| `is_free` int fix (BUG-001b) | ✅ Confirmed working |
+| GitHub Actions builds | ✅ Running on ubuntu-latest (public repo) |
+| Oracle services | ✅ Running normally |
+| Self-hosted runner | ❌ Removed (not needed) |
+
+---
