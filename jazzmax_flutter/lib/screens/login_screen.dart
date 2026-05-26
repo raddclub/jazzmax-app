@@ -188,7 +188,7 @@ class _Logo extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: const LinearGradient(
-              colors: [Color(0xFFE8002D), Color(0xFF8B0000)],
+              colors: [AppColors.primary, Color(0xFF8B0000)],
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             boxShadow: AppShadows.glow,
@@ -204,8 +204,8 @@ class _Logo extends StatelessWidget {
           text: const TextSpan(
             style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1.5, height: 1),
             children: [
-              TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
-              TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
+              TextSpan(text: 'ZENO', style: TextStyle(color: AppColors.textPrimary)),
+              TextSpan(text: '', style: TextStyle(color: AppColors.primary)),
             ],
           ),
         ),
