@@ -48,13 +48,13 @@ class _DebugNavObserver extends NavigatorObserver {
   }
 }
 
-class JazzMaxApp extends ConsumerWidget {
-  const JazzMaxApp({super.key});
+class ZenoApp extends ConsumerWidget {
+  const ZenoApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeProvider);
-    DebugLogger.logUi('JazzMaxApp', 'build — themeMode=${themeState.mode}');
+    DebugLogger.logUi('ZenoApp', 'build — themeMode=${themeState.mode}');
     Animate.restartOnHotReload = true;
     return MaterialApp(
       title: AppConstants.appName,
