@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -44,9 +45,9 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
     final progList = await LocalDb.getWatchPositions();
     final prog = <String, double>{};
     for (final p in progList) {
-      if (p['file_id'] != null && p['duration_ms'] != null && (p['duration_ms'] as int) > 0) {
-        final pos = (p['position_ms'] as int? ?? 0);
-        final dur = (p['duration_ms'] as int);
+      if (p['file_id'] != null && p['duration'] != null && (p['duration'] as int) > 0) {
+        final pos = (p['position'] as int? ?? 0);
+        final dur = (p['duration'] as int);
         prog[p['file_id'].toString()] = (pos / dur).clamp(0.0, 1.0);
       }
     }
@@ -149,15 +150,29 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
               background: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // Poster image
-                  item.posterUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: item.posterUrl!,
-                          fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(color: AppColors.surface),
-                          errorWidget: (_, __, ___) => _posterFallback(item),
-                        )
-                      : _posterFallback(item),
+                  // Poster image — local cache first (zero-rated, works offline)
+                  if (item.posterPath != null && item.posterPath!.isNotEmpty)
+                    Image.file(
+                      File(item.posterPath!),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => item.posterUrl != null
+                          ? CachedNetworkImage(
+                              imageUrl: item.posterUrl!,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) => Container(color: AppColors.surface),
+                              errorWidget: (_, __, ___) => _posterFallback(item),
+                            )
+                          : _posterFallback(item),
+                    )
+                  else if (item.posterUrl != null)
+                    CachedNetworkImage(
+                      imageUrl: item.posterUrl!,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) => Container(color: AppColors.surface),
+                      errorWidget: (_, __, ___) => _posterFallback(item),
+                    )
+                  else
+                    _posterFallback(item),
                   // Gradient overlay
                   DecoratedBox(
                     decoration: BoxDecoration(
