@@ -85,8 +85,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Timer? _nextEpTimer;
   bool _ratingShown = false;
   String? _tmpDecryptPath;
-  static const _pipCh    = MethodChannel('com.jazzmax.app/pip');
-  static const _secureCh = MethodChannel('com.jazzmax.app/secure');
+  static const _pipCh    = MethodChannel('com.zeno.app/pip');
+  static const _secureCh = MethodChannel('com.zeno.app/secure');
 
   @override
   void initState() {
