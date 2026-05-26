@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/player/player_prefs.dart';
 
-/// Custom subtitle overlay that renders subtitle text using PlayerPrefs styles.
-/// Wraps around the actual MPV subtitle track (which is set to invisible via
-/// SubtitleViewConfiguration(visible:false)) so we control the full style.
+/// Custom subtitle overlay rendered entirely from PlayerPrefs styles.
+/// The MPV subtitle track is set invisible via SubtitleViewConfiguration(visible:false)
+/// so we control every style property: font, size, bold, italic, colors, position, outline.
 class SubtitleOverlay extends StatelessWidget {
   final String? currentLine;
   final PlayerPrefs prefs;
@@ -17,9 +17,18 @@ class SubtitleOverlay extends StatelessWidget {
 
   Alignment get _alignment {
     switch (prefs.subtitlePosition) {
-      case 'top': return Alignment.topCenter;
+      case 'top':    return Alignment.topCenter;
       case 'center': return Alignment.center;
-      default: return Alignment.bottomCenter;
+      default:       return Alignment.bottomCenter;
+    }
+  }
+
+  EdgeInsets get _padding {
+    final offset = prefs.subtitleVerticalOffset * 60;
+    switch (prefs.subtitlePosition) {
+      case 'top':    return EdgeInsets.only(top: 20.0 + offset.abs());
+      case 'center': return EdgeInsets.zero;
+      default:       return EdgeInsets.only(bottom: 80.0 + offset.abs());
     }
   }
 
@@ -27,28 +36,25 @@ class SubtitleOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     if (currentLine == null || currentLine!.isEmpty) return const SizedBox.shrink();
 
-    final textColor = Color(int.parse(
-        prefs.subtitleTextColor.value.toRadixString(16).padLeft(8, 'ff'), radix: 16));
-    final outlineColor = Color(int.parse(
-        prefs.subtitleOutlineColor.value.toRadixString(16).padLeft(8, 'ff'), radix: 16));
-    final bgColor = prefs.subtitleBackgroundColor.withOpacity(prefs.subtitleBackgroundOpacity);
+    final textColor   = Color(prefs.subtitleTextColorValue);
+    final outlineColor = Color(prefs.subtitleOutlineColorValue);
+    final bgColor     = Color(prefs.subtitleBackgroundColorValue)
+        .withOpacity(prefs.subtitleBackgroundOpacity);
+    final outline     = prefs.subtitleOutlineThickness;
 
     return Positioned.fill(
       child: Align(
         alignment: _alignment,
         child: Padding(
-          padding: EdgeInsets.only(
-            bottom: prefs.subtitlePosition == 'bottom' ? 80 + prefs.subtitleVerticalOffset * 50 : 0,
-            top: prefs.subtitlePosition == 'top' ? 20 + prefs.subtitleVerticalOffset * 50 : 0,
-          ),
+          padding: _padding,
           child: GestureDetector(
             onLongPress: () {
               Clipboard.setData(ClipboardData(text: currentLine!));
             },
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
-              padding: bgColor.opacity > 0.01
-                  ? const EdgeInsets.symmetric(horizontal: 8, vertical: 4)
+              padding: bgColor.opacity > 0.02
+                  ? const EdgeInsets.symmetric(horizontal: 10, vertical: 5)
                   : EdgeInsets.zero,
               decoration: BoxDecoration(
                 color: bgColor,
@@ -59,20 +65,15 @@ class SubtitleOverlay extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: prefs.subtitleFontSize,
+                  fontFamily: prefs.subtitleFontFamily == 'Sans-Serif' ? null : prefs.subtitleFontFamily,
                   color: textColor,
                   fontWeight: prefs.subtitleBold ? FontWeight.bold : FontWeight.normal,
                   fontStyle: prefs.subtitleItalic ? FontStyle.italic : FontStyle.normal,
-                  shadows: prefs.subtitleOutlineThickness > 0 ? [
-                    Shadow(
-                      offset: Offset(prefs.subtitleOutlineThickness, prefs.subtitleOutlineThickness),
-                      blurRadius: prefs.subtitleOutlineThickness * 2,
-                      color: outlineColor,
-                    ),
-                    Shadow(
-                      offset: Offset(-prefs.subtitleOutlineThickness, -prefs.subtitleOutlineThickness),
-                      blurRadius: prefs.subtitleOutlineThickness * 2,
-                      color: outlineColor,
-                    ),
+                  shadows: outline > 0 ? [
+                    Shadow(offset: Offset( outline,  outline), blurRadius: outline * 2, color: outlineColor),
+                    Shadow(offset: Offset(-outline, -outline), blurRadius: outline * 2, color: outlineColor),
+                    Shadow(offset: Offset( outline, -outline), blurRadius: outline * 2, color: outlineColor),
+                    Shadow(offset: Offset(-outline,  outline), blurRadius: outline * 2, color: outlineColor),
                   ] : null,
                 ),
               ),

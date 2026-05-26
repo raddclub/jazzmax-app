@@ -143,6 +143,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Sleep timer
   int? _sleepRemainingSeconds;
   Timer? _sleepTimer;
+  // Sleep fade
+  bool _sleepFadeActive = false;
+  double _preFadeVolume = 0.7;
+  Timer? _sleepFadeTimer;
 
   // PiP
   bool _inPiP = false;
@@ -859,20 +863,51 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   // ── Sleep Timer ───────────────────────────────────────────────────────────
+  void _startSleepFade() {
+    if (_sleepFadeActive) return;
+    _sleepFadeActive = true;
+    _preFadeVolume = _volume;
+    final steps = _prefs.sleepFadeDurationSeconds.clamp(5, 120);
+    var step = 0;
+    _sleepFadeTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted || !_sleepFadeActive) { t.cancel(); return; }
+      step++;
+      final fraction = step / steps;
+      final newVol = ((1.0 - fraction) * _preFadeVolume).clamp(0.0, 1.0);
+      VolumeController().setVolume(newVol);
+      _player.setProperty('volume', '${(newVol * _volumeBoost * 100).toInt()}');
+      if (step >= steps) t.cancel();
+    });
+  }
+
+  void _restoreVolumeAfterSleep() {
+    _sleepFadeTimer?.cancel();
+    _sleepFadeActive = false;
+    VolumeController().setVolume(_preFadeVolume);
+    _player.setProperty('volume', '${(_volumeBoost * 100).toInt()}');
+  }
+
   void _setSleepTimer(int minutes) {
     _cancelSleepTimer();
     if (minutes <= 0) return;
     setState(() => _sleepRemainingSeconds = minutes * 60);
     _sleepTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) {
-        t.cancel();
-        return;
-      }
+      if (!mounted) { t.cancel(); return; }
       setState(() {
         _sleepRemainingSeconds = (_sleepRemainingSeconds ?? 0) - 1;
+
+        // Start volume fade when N seconds remain
+        if (_prefs.sleepFadeEnabled &&
+            !_sleepFadeActive &&
+            _sleepRemainingSeconds! > 0 &&
+            _sleepRemainingSeconds! <= _prefs.sleepFadeDurationSeconds) {
+          _startSleepFade();
+        }
+
         if (_sleepRemainingSeconds! <= 0) {
           t.cancel();
           _sleepRemainingSeconds = null;
+          _restoreVolumeAfterSleep();
           _player.pause();
           _userPaused = true;
           setState(() => _showControls = true);
@@ -883,6 +918,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _cancelSleepTimer() {
     _sleepTimer?.cancel();
+    _sleepFadeTimer?.cancel();
+    if (_sleepFadeActive) _restoreVolumeAfterSleep();
+    _sleepFadeActive = false;
     setState(() => _sleepRemainingSeconds = null);
   }
 
@@ -1058,6 +1096,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _skipIntroTimer?.cancel();
     _nextEpTimer?.cancel();
     _sleepTimer?.cancel();
+    _sleepFadeTimer?.cancel();
     _seekThumbDebounce?.cancel();
     _jazzRetryTimer?.cancel();
     _tapTimer?.cancel();
@@ -1396,6 +1435,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               ).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
             ),
 
+          // ── Sleep fade badge ──
+          if (_sleepFadeActive && _sleepRemainingSeconds != null)
+            Positioned(
+              top: 12, left: 0, right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.75),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.orange.withOpacity(0.6), width: 1),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.bedtime_rounded, color: Colors.orange, size: 14),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Sleeping in ${_sleepRemainingSeconds}s…',
+                      style: const TextStyle(
+                          color: Colors.orange, fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ]),
+                ).animate(onPlay: (c) => c.repeat(reverse: true))
+                 .fadeIn(duration: 800.ms).then().fadeOut(duration: 800.ms),
+              ),
+            ),
           // ── Sleep timer badge ──
           if (_sleepRemainingSeconds != null && !_showControls)
             Positioned(

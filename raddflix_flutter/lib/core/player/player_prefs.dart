@@ -34,7 +34,16 @@ class PlayerPrefs {
   final int    subtitleTimingOffsetMs;
   final String subtitleEncoding;
   final bool   subtitleBold;
+  final bool   subtitleItalic;
+  final String subtitleFontFamily;
   final double subtitleOutlineThickness;
+  final int    subtitleTextColorValue;       // ARGB int
+  final int    subtitleOutlineColorValue;    // ARGB int
+  final int    subtitleBackgroundColorValue; // ARGB int
+  final double subtitleBackgroundOpacity;
+  final String subtitlePosition;            // 'bottom'/'center'/'top'
+  final double subtitleVerticalOffset;
+  final bool   subtitleAutoDetect;
 
   // ── AUDIO ─────────────────────────────────────────────────────────────────
   final int    audioTimingOffsetMs;
@@ -101,9 +110,23 @@ class PlayerPrefs {
   final int  sleepFadeDurationSeconds;
 
   // ── UI ───────────────────────────────────────────────────────────────────
-  final bool showNetworkSpeed;
-  final bool showDecoderInfo;
-  final bool vibrateOnGesture;
+  final bool   showNetworkSpeed;
+  final bool   showDecoderInfo;
+  final bool   showPlaybackInfo;
+  final bool   showEpisodeInfo;
+  final bool   vibrateOnGesture;
+  final double uiFontSize;
+
+  // ── BOOKMARKS ─────────────────────────────────────────────────────────────
+  final bool bookmarkVibrate;
+
+  // ── CINEMATIC ─────────────────────────────────────────────────────────────
+  final bool   cinematicModeOnLock;
+  final bool   gesturesInCinematic;
+  final String cinematicTapBehavior; // 'pause_resume' | 'show_controls'
+
+  // ── TRANSPARENT (extra) ───────────────────────────────────────────────────
+  final bool transparentModeFrosted;
 
   const PlayerPrefs({
     this.gestureEnabled = true,
@@ -129,7 +152,16 @@ class PlayerPrefs {
     this.subtitleTimingOffsetMs = 0,
     this.subtitleEncoding = 'auto',
     this.subtitleBold = false,
+    this.subtitleItalic = false,
+    this.subtitleFontFamily = 'Sans-Serif',
     this.subtitleOutlineThickness = 2.0,
+    this.subtitleTextColorValue = 0xFFFFFFFF,
+    this.subtitleOutlineColorValue = 0xFF000000,
+    this.subtitleBackgroundColorValue = 0xFF000000,
+    this.subtitleBackgroundOpacity = 0.0,
+    this.subtitlePosition = 'bottom',
+    this.subtitleVerticalOffset = 0.1,
+    this.subtitleAutoDetect = false,
     this.audioTimingOffsetMs = 0,
     this.volumeBoostMultiplier = 1.0,
     this.equalizerEnabled = false,
@@ -174,7 +206,15 @@ class PlayerPrefs {
     this.sleepFadeDurationSeconds = 30,
     this.showNetworkSpeed = false,
     this.showDecoderInfo = false,
+    this.showPlaybackInfo = false,
+    this.showEpisodeInfo = true,
     this.vibrateOnGesture = true,
+    this.uiFontSize = 1.0,
+    this.bookmarkVibrate = true,
+    this.cinematicModeOnLock = false,
+    this.gesturesInCinematic = true,
+    this.cinematicTapBehavior = 'pause_resume',
+    this.transparentModeFrosted = false,
   });
 
   PlayerPrefs copyWith({
@@ -186,7 +226,11 @@ class PlayerPrefs {
     double? buttonSize, double? controlBarOpacity, int? autoHideSeconds,
     bool? tapTimeToToggleRemaining, bool? showBufferBar,
     bool? subtitleEnabled, double? subtitleFontSize, int? subtitleTimingOffsetMs,
-    String? subtitleEncoding, bool? subtitleBold, double? subtitleOutlineThickness,
+    String? subtitleEncoding, bool? subtitleBold, bool? subtitleItalic,
+    String? subtitleFontFamily, double? subtitleOutlineThickness,
+    int? subtitleTextColorValue, int? subtitleOutlineColorValue, int? subtitleBackgroundColorValue,
+    double? subtitleBackgroundOpacity, String? subtitlePosition,
+    double? subtitleVerticalOffset, bool? subtitleAutoDetect,
     int? audioTimingOffsetMs, double? volumeBoostMultiplier,
     bool? equalizerEnabled, String? equalizerPreset, List<double>? equalizerBands,
     bool? dialogueBoostEnabled, bool? audioNormalization, bool? deinterlaceEnabled,
@@ -205,7 +249,10 @@ class PlayerPrefs {
     bool? ambilightEnabled, double? ambilightIntensity, int? ambilightSampleIntervalMs,
     bool? bingeGuardEnabled, int? bingeGuardThresholdMinutes,
     bool? sleepFadeEnabled, int? sleepFadeDurationSeconds,
-    bool? showNetworkSpeed, bool? showDecoderInfo, bool? vibrateOnGesture,
+    bool? showNetworkSpeed, bool? showDecoderInfo, bool? showPlaybackInfo,
+    bool? showEpisodeInfo, bool? vibrateOnGesture, double? uiFontSize,
+    bool? bookmarkVibrate, bool? cinematicModeOnLock, bool? gesturesInCinematic,
+    String? cinematicTapBehavior, bool? transparentModeFrosted,
   }) => PlayerPrefs(
     gestureEnabled: gestureEnabled ?? this.gestureEnabled,
     swipeBrightnessEnabled: swipeBrightnessEnabled ?? this.swipeBrightnessEnabled,
@@ -230,7 +277,16 @@ class PlayerPrefs {
     subtitleTimingOffsetMs: subtitleTimingOffsetMs ?? this.subtitleTimingOffsetMs,
     subtitleEncoding: subtitleEncoding ?? this.subtitleEncoding,
     subtitleBold: subtitleBold ?? this.subtitleBold,
+    subtitleItalic: subtitleItalic ?? this.subtitleItalic,
+    subtitleFontFamily: subtitleFontFamily ?? this.subtitleFontFamily,
     subtitleOutlineThickness: subtitleOutlineThickness ?? this.subtitleOutlineThickness,
+    subtitleTextColorValue: subtitleTextColorValue ?? this.subtitleTextColorValue,
+    subtitleOutlineColorValue: subtitleOutlineColorValue ?? this.subtitleOutlineColorValue,
+    subtitleBackgroundColorValue: subtitleBackgroundColorValue ?? this.subtitleBackgroundColorValue,
+    subtitleBackgroundOpacity: subtitleBackgroundOpacity ?? this.subtitleBackgroundOpacity,
+    subtitlePosition: subtitlePosition ?? this.subtitlePosition,
+    subtitleVerticalOffset: subtitleVerticalOffset ?? this.subtitleVerticalOffset,
+    subtitleAutoDetect: subtitleAutoDetect ?? this.subtitleAutoDetect,
     audioTimingOffsetMs: audioTimingOffsetMs ?? this.audioTimingOffsetMs,
     volumeBoostMultiplier: volumeBoostMultiplier ?? this.volumeBoostMultiplier,
     equalizerEnabled: equalizerEnabled ?? this.equalizerEnabled,
@@ -275,7 +331,15 @@ class PlayerPrefs {
     sleepFadeDurationSeconds: sleepFadeDurationSeconds ?? this.sleepFadeDurationSeconds,
     showNetworkSpeed: showNetworkSpeed ?? this.showNetworkSpeed,
     showDecoderInfo: showDecoderInfo ?? this.showDecoderInfo,
+    showPlaybackInfo: showPlaybackInfo ?? this.showPlaybackInfo,
+    showEpisodeInfo: showEpisodeInfo ?? this.showEpisodeInfo,
     vibrateOnGesture: vibrateOnGesture ?? this.vibrateOnGesture,
+    uiFontSize: uiFontSize ?? this.uiFontSize,
+    bookmarkVibrate: bookmarkVibrate ?? this.bookmarkVibrate,
+    cinematicModeOnLock: cinematicModeOnLock ?? this.cinematicModeOnLock,
+    gesturesInCinematic: gesturesInCinematic ?? this.gesturesInCinematic,
+    cinematicTapBehavior: cinematicTapBehavior ?? this.cinematicTapBehavior,
+    transparentModeFrosted: transparentModeFrosted ?? this.transparentModeFrosted,
   );
 
   // ── Load from SharedPreferences ─────────────────────────────────────────
@@ -318,7 +382,16 @@ class PlayerPrefs {
       subtitleTimingOffsetMs: s.getInt('${_p}sub_timing_ms')      ?? 0,
       subtitleEncoding:       s.getString('${_p}sub_encoding')    ?? 'auto',
       subtitleBold:           s.getBool('${_p}sub_bold')          ?? false,
+      subtitleItalic:         s.getBool('${_p}sub_italic')        ?? false,
+      subtitleFontFamily:     s.getString('${_p}sub_font_family') ?? 'Sans-Serif',
       subtitleOutlineThickness: s.getDouble('${_p}sub_outline')   ?? 2.0,
+      subtitleTextColorValue: s.getInt('${_p}sub_text_color')     ?? 0xFFFFFFFF,
+      subtitleOutlineColorValue: s.getInt('${_p}sub_outline_color') ?? 0xFF000000,
+      subtitleBackgroundColorValue: s.getInt('${_p}sub_bg_color') ?? 0xFF000000,
+      subtitleBackgroundOpacity: s.getDouble('${_p}sub_bg_opacity') ?? 0.0,
+      subtitlePosition:       s.getString('${_p}sub_position')    ?? 'bottom',
+      subtitleVerticalOffset: s.getDouble('${_p}sub_v_offset')    ?? 0.1,
+      subtitleAutoDetect:     s.getBool('${_p}sub_auto_detect')   ?? false,
       audioTimingOffsetMs:    s.getInt('${_p}audio_timing_ms')    ?? 0,
       volumeBoostMultiplier:  s.getDouble('${_p}vol_boost')       ?? 1.0,
       equalizerEnabled:       s.getBool('${_p}eq_enabled')        ?? false,
@@ -363,7 +436,15 @@ class PlayerPrefs {
       sleepFadeDurationSeconds: s.getInt('${_p}sleep_fade_secs')  ?? 30,
       showNetworkSpeed:       s.getBool('${_p}show_net_speed')    ?? false,
       showDecoderInfo:        s.getBool('${_p}show_decoder')      ?? false,
+      showPlaybackInfo:       s.getBool('${_p}show_playback_info') ?? false,
+      showEpisodeInfo:        s.getBool('${_p}show_episode_info') ?? true,
       vibrateOnGesture:       s.getBool('${_p}vibrate_gesture')   ?? true,
+      uiFontSize:             s.getDouble('${_p}ui_font_size')    ?? 1.0,
+      bookmarkVibrate:        s.getBool('${_p}bookmark_vibrate')  ?? true,
+      cinematicModeOnLock:    s.getBool('${_p}cinematic_on_lock') ?? false,
+      gesturesInCinematic:    s.getBool('${_p}gestures_cinematic') ?? true,
+      cinematicTapBehavior:   s.getString('${_p}cinematic_tap')   ?? 'pause_resume',
+      transparentModeFrosted: s.getBool('${_p}transparent_frosted') ?? false,
     );
   }
 
@@ -395,7 +476,16 @@ class PlayerPrefs {
       s.setInt('${_p}sub_timing_ms',       subtitleTimingOffsetMs),
       s.setString('${_p}sub_encoding',     subtitleEncoding),
       s.setBool('${_p}sub_bold',           subtitleBold),
+      s.setBool('${_p}sub_italic',         subtitleItalic),
+      s.setString('${_p}sub_font_family',  subtitleFontFamily),
       s.setDouble('${_p}sub_outline',      subtitleOutlineThickness),
+      s.setInt('${_p}sub_text_color',      subtitleTextColorValue),
+      s.setInt('${_p}sub_outline_color',   subtitleOutlineColorValue),
+      s.setInt('${_p}sub_bg_color',        subtitleBackgroundColorValue),
+      s.setDouble('${_p}sub_bg_opacity',   subtitleBackgroundOpacity),
+      s.setString('${_p}sub_position',     subtitlePosition),
+      s.setDouble('${_p}sub_v_offset',     subtitleVerticalOffset),
+      s.setBool('${_p}sub_auto_detect',    subtitleAutoDetect),
       s.setInt('${_p}audio_timing_ms',     audioTimingOffsetMs),
       s.setDouble('${_p}vol_boost',        volumeBoostMultiplier),
       s.setBool('${_p}eq_enabled',         equalizerEnabled),
@@ -440,7 +530,15 @@ class PlayerPrefs {
       s.setInt('${_p}sleep_fade_secs',     sleepFadeDurationSeconds),
       s.setBool('${_p}show_net_speed',     showNetworkSpeed),
       s.setBool('${_p}show_decoder',       showDecoderInfo),
+      s.setBool('${_p}show_playback_info', showPlaybackInfo),
+      s.setBool('${_p}show_episode_info',  showEpisodeInfo),
       s.setBool('${_p}vibrate_gesture',    vibrateOnGesture),
+      s.setDouble('${_p}ui_font_size',     uiFontSize),
+      s.setBool('${_p}bookmark_vibrate',   bookmarkVibrate),
+      s.setBool('${_p}cinematic_on_lock',  cinematicModeOnLock),
+      s.setBool('${_p}gestures_cinematic', gesturesInCinematic),
+      s.setString('${_p}cinematic_tap',    cinematicTapBehavior),
+      s.setBool('${_p}transparent_frosted',transparentModeFrosted),
     ]);
   }
 }
