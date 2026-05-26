@@ -1,31 +1,31 @@
 import 'package:flutter/material.dart';
 import '../constants.dart';
 
-extension JazzColors on BuildContext {
+extension RaddColors on BuildContext {
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
 
-  Color get jazzBg =>
+  Color get raddBg =>
       isDark ? AppColors.background : AppColors.lightBg;
 
   Color get jazzText =>
       isDark ? AppColors.textPrimary : AppColors.lightTextPrimary;
 
-  Color get jazzTextSecondary =>
+  Color get raddTextSecondary =>
       isDark ? AppColors.textSecondary : AppColors.lightTextSecondary;
 
-  Color get jazzTextMuted =>
+  Color get raddTextMuted =>
       isDark ? AppColors.textMuted : AppColors.lightTextMuted;
 
-  Color get jazzSurface =>
+  Color get raddSurface =>
       isDark ? AppColors.surface : AppColors.lightSurface;
 
-  Color get jazzCard =>
+  Color get raddCard =>
       isDark ? AppColors.card : AppColors.lightCard;
 
-  Color get jazzBorder =>
+  Color get raddBorder =>
       isDark ? AppColors.glassBorder : AppColors.lightBorder;
 
-  LinearGradient get jazzHeroGradient => LinearGradient(
+  LinearGradient get raddHeroGradient => LinearGradient(
     colors: [Colors.transparent, isDark ? AppColors.background : AppColors.lightBg],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,

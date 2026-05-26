@@ -53,11 +53,11 @@ android {
         release {
             def ksPath = System.getenv('KEYSTORE_PATH')
                 ?: keystoreProperties['storeFile']
-                ?: 'keystore/jazzmax.keystore'
+                ?: 'keystore/raddflix.keystore'
             storeFile file(ksPath)
             storeType (System.getenv('KEYSTORE_TYPE') ?: keystoreProperties['storeType'] ?: 'PKCS12')
             storePassword System.getenv('KEYSTORE_PASSWORD') ?: keystoreProperties['storePassword'] ?: ''
-            keyAlias System.getenv('KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'jazzmax'
+            keyAlias System.getenv('KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'raddflix'
             keyPassword System.getenv('KEY_PASSWORD') ?: keystoreProperties['keyPassword'] ?: ''
         }
     }

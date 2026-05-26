@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 
-class JazzTextField extends StatelessWidget {
+class RaddTextField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
   final String? hint;
@@ -13,7 +13,7 @@ class JazzTextField extends StatelessWidget {
   final void Function(String)? onChanged;
   final int maxLines;
 
-  const JazzTextField({
+  const RaddTextField({
     super.key,
     required this.controller,
     required this.label,

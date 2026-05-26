@@ -9,7 +9,7 @@ import '../models/subscription.dart';
 import '../providers/subscription_provider.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
-import '../widgets/jazz_text_field.dart';
+import '../widgets/radd_text_field.dart';
 import 'tid_status_screen.dart';
 
 // ── Payment method model (fetched from billing API) ──────────────────────────
@@ -199,7 +199,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
           const Text('After sending payment, enter the Transaction ID here for verification.',
               style: TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5)),
           const SizedBox(height: 14),
-          JazzTextField(
+          RaddTextField(
             controller: _tidCtrl,
             label: 'Transaction ID',
             hint: 'e.g. T123456789',
@@ -288,7 +288,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         borderRadius: BorderRadius.circular(AppRadius.md))));
 }
 
-// ── Plan Card ────────────────────────────────────────���────────────────────────
+// ── Plan Card ─────────────────────────────────────────────────────────────────
 class _PlanCard extends StatelessWidget {
   final SubscriptionPlan plan;
   final bool isPopular, isSelected;

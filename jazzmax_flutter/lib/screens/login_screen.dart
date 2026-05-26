@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
-import '../widgets/jazz_text_field.dart';
+import '../widgets/radd_text_field.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -100,7 +100,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Form(
                       key: _formKey,
                       child: Column(children: [
-                        JazzTextField(
+                        RaddTextField(
                           controller: _phoneCtrl,
                           label: 'Phone Number',
                           hint: '03001234567',
@@ -113,7 +113,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ).animate(delay: 200.ms).fadeIn(duration: 350.ms)
                             .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
                         const SizedBox(height: 14),
-                        JazzTextField(
+                        RaddTextField(
                           controller: _passCtrl,
                           label: 'Password',
                           obscureText: _obscure,
@@ -188,7 +188,7 @@ class _Logo extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: const LinearGradient(
-              colors: [AppColors.primary, Color(0xFF8B0000)],
+              colors: [Color(0xFFE8002D), Color(0xFF8B0000)],
               begin: Alignment.topLeft, end: Alignment.bottomRight,
             ),
             boxShadow: AppShadows.glow,
@@ -204,8 +204,8 @@ class _Logo extends StatelessWidget {
           text: const TextSpan(
             style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1.5, height: 1),
             children: [
-              TextSpan(text: 'ZENO', style: TextStyle(color: AppColors.textPrimary)),
-              TextSpan(text: '', style: TextStyle(color: AppColors.primary)),
+              TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
+              TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
             ],
           ),
         ),

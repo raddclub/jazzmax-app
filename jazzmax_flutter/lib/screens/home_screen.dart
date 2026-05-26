@@ -4,7 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:shimmer/shimmer.dart';
 import '../core/constants.dart';
-import '../core/theme/jazz_colors.dart';
+import '../core/theme/radd_colors.dart';
 import '../providers/auth_provider.dart';
 import '../providers/catalog_provider.dart';
 import '../models/catalog_item.dart';
@@ -352,7 +352,7 @@ class _HeroCard extends StatelessWidget {
                         child: const Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 48)))
                 : Container(color: AppColors.card),
             // Gradient
-            Builder(builder: (ctx) => DecoratedBox(decoration: BoxDecoration(gradient: ctx.jazzHeroGradient))),
+            Builder(builder: (ctx) => DecoratedBox(decoration: BoxDecoration(gradient: ctx.raddHeroGradient))),
             // Content
             Positioned(bottom: 0, left: 0, right: 0,
               child: Padding(

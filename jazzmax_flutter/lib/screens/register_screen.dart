@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
-import '../widgets/jazz_text_field.dart';
+import '../widgets/radd_text_field.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -93,7 +93,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       .animate(delay: 80.ms).fadeIn(duration: 400.ms),
                   const SizedBox(height: 32),
                   Form(key: _formKey, child: Column(children: [
-                    JazzTextField(controller: _phone, label: 'Phone Number',
+                    RaddTextField(controller: _phone, label: 'Phone Number',
                         hint: '03001234567', keyboardType: TextInputType.phone,
                         prefixIcon: Icons.phone_outlined,
                         validator: (v) {
@@ -104,7 +104,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         .animate(delay: 120.ms).fadeIn(duration: 350.ms)
                         .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
                     const SizedBox(height: 14),
-                    JazzTextField(controller: _pass, label: 'Password',
+                    RaddTextField(controller: _pass, label: 'Password',
                         obscureText: _obscure, prefixIcon: Icons.lock_outline_rounded,
                         suffixIcon: IconButton(
                           icon: Icon(_obscure ? Icons.visibility_off_outlined : Icons.visibility_outlined,
@@ -118,7 +118,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         .animate(delay: 180.ms).fadeIn(duration: 350.ms)
                         .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
                     const SizedBox(height: 14),
-                    JazzTextField(controller: _confirm, label: 'Confirm Password',
+                    RaddTextField(controller: _confirm, label: 'Confirm Password',
                         obscureText: _obscure, prefixIcon: Icons.lock_outlined,
                         validator: (v) {
                           if (v != _pass.text) return 'Passwords do not match';
