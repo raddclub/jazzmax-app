@@ -20,10 +20,10 @@ class DebugLogger {
         dir = await getExternalStorageDirectory();
       }
       dir ??= await getApplicationDocumentsDirectory();
-      _logFile = File('${dir.path}/jazzmax_debug.log');
+      _logFile = File('${dir.path}/zeno_debug.log');
       if (await _logFile!.exists()) await _logFile!.delete();
       _raw('=' * 70);
-      _raw('JAZZMAX DEBUG LOG  |  Session: ${DateTime.now().toIso8601String()}');
+      _raw('ZENO DEBUG LOG  |  Session: ${DateTime.now().toIso8601String()}');
       _raw('=' * 70);
     } catch (e) {
       print('[DebugLogger] init error: $e');
@@ -157,10 +157,10 @@ class DebugLogger {
     try {
       final path = _logFile?.path;
       if (path != null && await File(path).exists()) {
-        await Share.shareXFiles([XFile(path)], subject: 'JazzMAX Debug Log');
+        await Share.shareXFiles([XFile(path)], subject: 'ZENO Debug Log');
         return;
       }
     } catch (_) {}
-    await Share.share(getLastLines(500), subject: 'JazzMAX Debug Log');
+    await Share.share(getLastLines(500), subject: 'ZENO Debug Log');
   }
 }
