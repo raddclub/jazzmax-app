@@ -243,10 +243,10 @@ class JazzDriveService {
     // Parse records list from various response shapes
     List<dynamic> records = [];
     final rawBody = body['data'] ?? body;
+    final d = rawBody is Map<String, dynamic> ? rawBody : (body is Map<String, dynamic> ? body : <String, dynamic>{});
     if (rawBody is List) {
       records = rawBody as List<dynamic>;
-    } else if (rawBody is Map<String, dynamic>) {
-      final d = rawBody;
+    } else {
       for (final key in ['list', 'items', 'videos', 'records', 'files']) {
         if (d[key] is List) { records = d[key] as List; break; }
         if (body[key] is List) { records = body[key] as List; break; }
