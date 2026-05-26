@@ -19,7 +19,7 @@ RaddFlix is a Pakistani streaming platform. Jazz SIM users stream movies/dramas 
 ### Oracle Server
 - **IP:** `92.4.95.252`
 - **User:** `ubuntu`
-- **SSH key:** stored in `ORACLE_SSH_KEY` env var (base64-encoded, may have spaces — remove them when decoding)
+- **SSH key:** stored in `ORACLE_SSH_KEY` env var (paste the private key as-is from Oracle — no encoding needed)
 - **Project root:** `/opt/jazzmax/` (folder name is legacy, do not rename it)
 
 ### Services (managed by Supervisor)
