@@ -88,6 +88,11 @@ dependencies:
   # Disk space info for downloads screen
   disk_space_plus: ^0.2.0
 
+  # Player extended packages
+  gal: ^2.3.0
+  flutter_colorpicker: ^1.1.0
+  audio_session: ^0.1.21
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
