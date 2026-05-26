@@ -6,6 +6,61 @@ Format is defined in `agent-hub/SKILLS.md` Rule 8.
 
 ---
 
+## [2026-05-26 20:14 UTC] — Agent: Replit Agent (Session 4)
+
+### Task
+Comprehensive testing, issue resolution, and APK rebuild triggered by HANDOFF_2026_05_26.md.
+
+### Done
+
+#### Root Cause Fix — Build Blocker (BUG-005b)
+- Identified root cause of all recent APK build failures: `show_detail_screen.dart` lines 50-51 had Dart syntax errors introduced by a previous agent — semicolons placed inside comments (`// FIX BUG-005;`) made both `final pos` and `final dur` declarations invalid
+- Fixed and pushed via GitHub Contents API: both lines now correctly declare variables (commit `d0d3b9c9`)
+
+#### CI Verification
+- RaddFlix CI workflow (run 26472129137): API Health Check PASS, Flutter Analyze PASS — both clean on fixed code
+- APK Build (run 26472137136): ALL steps passed — produced `RaddFlix-1.0.0+1-build237.apk` (46.62MB, artifact ID 7225043922)
+
+#### API Bug Fix — BUG-001b (Oracle server)
+- Identified remaining bug: `/api/catalog/sync` returned episode `is_free` as Python `bool` (False), not `int` (0) — Flutter model expects int
+- Fixed live on Oracle: `_watch_prototype/routes/app_catalog.py` line 167: `"is_free": False` → `"is_free": 0`
+- Verified fix: episode `is_free` now returns `int` type
+- Pushed to GitHub: commit `e8abc9d7` to keep repo/server in sync
+
+#### Full Codebase Audit — All Systems Green
+- Read all 60+ Flutter Dart files in `raddflix_flutter/lib/`
+- Read all Oracle server routes: app_catalog, app_auth, app_subscription, app_search, app_plans, app_version, app_notifications, app_history
+- Read `build.gradle`, `AndroidManifest.xml`, `MainActivity.kt`, `proguard-rules.pro`
+- Oracle API smoke test — all endpoints responding correctly:
+  - `/api/config` → `{ api_base_url: "http://92.4.95.252" }` PASS
+  - `/api/catalog/version` → 69 titles, version 1779705973 PASS
+  - `/api/catalog/sync` → titles is_free type=int PASS, episodes is_free type=int PASS, share_url present PASS
+  - `/api/subscription/plans` → hd_access field present PASS, features list present PASS
+  - `/api/auth/me` (guest) → is_active field present PASS
+  - `/api/search` → id key present PASS, media_type key present PASS
+- SSH key working correctly (ED25519 PEM reconstructed from space-encoded env var)
+- Oracle services: both `jazzmax_radd` (pid 311749) and `jazzmax_watch` (pid 324738) RUNNING
+
+### Files Changed
+- `raddflix_flutter/lib/screens/show_detail_screen.dart` — BUG-005 Dart syntax fix (commit d0d3b9c9)
+- `_watch_prototype/routes/app_catalog.py` — BUG-001b episode is_free int fix (commit e8abc9d7)
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Build Artifact
+- APK: `RaddFlix-1.0.0+1-build237.apk` — 46.62MB
+- GitHub Actions Run: 26472137136 — conclusion: success
+- Download: GitHub Actions → Artifacts → `RaddFlix-1.0.0+1-build237.apk`
+
+### Notes for Next Agent
+- All 13 BUG-00x fixes confirmed live on Oracle; all API contracts match Flutter models
+- Root-level `lib/` folder is an old prototype with its own pubspec.yaml pointing to a Replit dev URL — does NOT affect build (workflow uses `working-directory: raddflix_flutter`). Safe to ignore or delete
+- SSH key decode: `ORACLE_SSH_KEY` env var stores PEM with spaces instead of newlines. Reconstruct by extracting body between header/footer, strip spaces, split into 64-char lines, chmod 600
+- `AppConstants.jazzDriveDbUpdateUrl` is still empty — needs JazzDrive upload + URL paste to enable zero-rated catalog sync fallback
+- `KEYSTORE_BASE64` GitHub secret not set — build uses auto-generated keystore. Save it as a GitHub secret for consistent APK signing
+
+---
+
+
 ## [2026-05-26 12:00 UTC] — Agent: Replit Agent (Session 3)
 
 ### Task
