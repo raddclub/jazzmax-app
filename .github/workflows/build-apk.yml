@@ -40,6 +40,28 @@ jobs:
         working-directory: raddflix_flutter
         run: flutter pub get
 
+
+      - name: Patch Gradle namespace for AGP 8 (fix legacy pub packages)
+        working-directory: raddflix_flutter
+        run: |
+          # AGP 8+ requires 'namespace' in every library module's build.gradle.
+          # Some pub.dev packages (gal, image_gallery_saver, saver_gallery, etc.) pre-date this.
+          # We patch any offending package in the pub cache before the build.
+          find ~/.pub-cache -name "build.gradle" -path "*/android/*" | while read f; do
+            if grep -qE "compileSdkVersion flutter\.compileSdkVersion|compileSdk flutter\.compileSdkVersion" "$f" 2>/dev/null && ! grep -q "namespace" "$f" 2>/dev/null; then
+              PKG=$(basename "$(dirname "$(dirname "$(dirname "$f")")")")
+              echo "Patching namespace for: $PKG  ($f)"
+              # Replace flutter.compileSdkVersion with a concrete value
+              sed -i 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 34/g' "$f"
+              sed -i 's/compileSdk flutter\.compileSdkVersion/compileSdk 34/g' "$f"
+              # Inject namespace after 'android {' opening brace
+              SAFE_PKG=$(echo "$PKG" | tr '-' '_' | tr '.' '_' | cut -c1-40)
+              sed -i "s/android {/android {\n    namespace \"com.patch.${SAFE_PKG}\"/" "$f"
+              echo "  Done."
+            fi
+          done
+          echo "Namespace patch complete."
+
       - name: Set up keystore
         working-directory: raddflix_flutter/android/app/keystore
         env:
