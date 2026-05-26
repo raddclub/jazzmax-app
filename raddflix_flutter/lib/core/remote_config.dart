@@ -4,27 +4,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
 import 'api/api_client.dart';
 
-/// Fetches server URL from a GitHub-hosted JSON file.
-/// To switch servers (Replit → Oracle, etc.) just update the JSON file —
-/// no APK rebuild required.
+/// Fetches server URL from the Oracle server itself.
+/// No GitHub dependency — works even when repo is private.
 ///
-/// Config file: https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_config.json
+/// Priority:
+///   1. Oracle server   → http://92.4.95.252/api/config   (primary)
+///   2. Last cached config in SharedPreferences
+///   3. Hardcoded AppConstants.apiBaseUrl (always works as final fallback)
+///
+/// To change the server URL: update the /api/config route in radd-hub/hub/routes/api.py
+/// No APK rebuild needed — Flutter reads this on every startup.
 class RemoteConfig {
-  static const String _configUrl =
-      'https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_config.json';
-  static const String _prefsKey = 'jm_remote_config';
+  static const String _configUrl = 'http://92.4.95.252/api/config';
+  static const String _prefsKey  = 'jm_remote_config';
 
   static Future<void> fetch() async {
     final prefs = await SharedPreferences.getInstance();
 
-    // 1. Try fetching fresh from GitHub raw
+    // 1. Try fetching fresh from Oracle server
     try {
       final dio = Dio();
       final res = await dio.get<dynamic>(
         _configUrl,
         options: Options(
           receiveTimeout: const Duration(seconds: 8),
-          sendTimeout: const Duration(seconds: 8),
+          sendTimeout:    const Duration(seconds: 8),
         ),
       );
       if (res.statusCode == 200 && res.data != null) {
@@ -55,7 +59,7 @@ class RemoteConfig {
       } catch (_) {}
     }
 
-    // 3. Use whatever hardcoded fallback is in AppConstants
+    // 3. Use hardcoded fallback (app always works even if server is unreachable)
     ApiClient.updateBaseUrl(AppConstants.apiBaseUrl);
   }
 }
