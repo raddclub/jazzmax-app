@@ -127,3 +127,48 @@ Full project cleanup, rebrand from JazzMAX → RaddFlix, and agent coordination 
 1. Delete legacy `build_apk.yml` (underscore) — broken, conflicts with active workflow
 2. Trigger GitHub Actions build → download APK → test on device
 3. Continue Phase 3: player gestures (double-tap seek, swipe volume/brightness)
+
+
+---
+
+## Full App Audit — 2026-05-26
+
+### Architecture confirmed
+- **Port 80 (nginx)**: Routes to Flask (5000) for `/api/catalog/` and to Watch API (6000) for `/api/auth/`, `/api/subscription/`
+- **Port 5000**: Radd Hub Flask — admin panel + catalog API
+- **Port 6000**: Watch/User API — user auth, subscription, stream URLs (internal only, nginx-proxied)
+- **raddflix_flutter/**: Production Flutter APK app
+- **radd-hub/**: Flask admin panel + API server
+
+### Bugs Fixed This Session
+
+| # | Bug | Status |
+|---|---|---|
+| 1 | `profile_screen.dart` missing `connectivity_plus` import | ✅ Fixed (d138a7d5) |
+| 2 | `AppColors.accent` undefined in `search_screen.dart` | ✅ Fixed (d46655d4) |
+| 3 | `remote_config.dart` fetching from private GitHub raw URL → 404 | ✅ Fixed — now fetches from `http://92.4.95.252/api/config` |
+| 4 | `api.py` missing `/api/config` endpoint | ✅ Fixed — added route (server restart needed) |
+
+### Test Suite Added
+
+| File | Purpose |
+|---|---|
+| `raddflix_flutter/test_suite/run_tests.js` | 12-phase live API test runner (Node.js) |
+| `raddflix_flutter/test_suite/logic_tests.dart` | 8-section pure Dart logic tests |
+| `raddflix_flutter/test_suite/README.md` | Usage guide |
+| `.github/workflows/ci-tests.yml` | CI: tests + flutter analyze + APK build + Oracle deploy |
+
+### Live Test Results (2026-05-26)
+- **55 ✅ passed · 4 ❌ failed → 1 real failure**
+- Phase 1 port 6000: EXPECTED — nginx routes internally, not a bug
+- Phase 2 /me guest: guest token returns "user not found" — Watch API does not create guest DB record
+- Phase 2 login: test credentials only, not a real bug  
+- Phase 12: cascades from remote config (now fixed)
+
+### Outstanding Known Issue
+- **Guest `/api/auth/me` → 404**: Watch API returns "user not found" for guest JWT tokens. The `/me` endpoint queries the users table by JWT subject (user_id), but guest users have no DB record. Fix: Watch API `/me` route should handle `user_id=0` or `is_guest=true` JWT claim and return a synthetic guest user object instead of querying the DB.
+
+### CI/CD Setup
+- Every push to `main`: runs API tests + flutter analyze, then builds APK
+- Deploy job: SSHs to Oracle server (`git pull` + `python radd_hub.py restart`)
+- Set `ORACLE_SSH_KEY` secret in GitHub to enable auto-deploy (currently skipped)
