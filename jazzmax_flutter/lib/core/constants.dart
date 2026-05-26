@@ -1,80 +1,76 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  static const String appName    = 'ZENO';
-  static const String tagline    = 'Sub Dekho, Dil Kholke';
-  static const String taglineEn  = 'Stream Everything. Feel Everything.';
-
+  static const String appName   = 'ZENO';
+  static const String tagline   = 'Sab Dekho, Dil Khol Ke';
+  static const String taglineEn = 'Stream Everything. Feel Everything.';
   static String apiBaseUrl = 'http://92.4.95.252';
-
-  static const String onboardingSeenKey   = 'zeno_onboarding_seen';
+  static const String onboardingSeenKey = 'zeno_onboarding_seen';
   static const Duration accessTokenValidity  = Duration(minutes: 15);
   static const Duration refreshTokenValidity = Duration(days: 90);
   static const Duration catalogSyncInterval  = Duration(hours: 6);
-  static const String catalogDbName          = 'zeno_catalog.db';
-  static const int    catalogDbVersion       = 10;
-  static const int    streamCacheTtlSeconds  = 21600;
-
-  static const String jazzDriveCloudBase  = 'https://cloud.jazzdrive.com.pk';
+  static const String catalogDbName    = 'zeno_catalog.db';
+  static const int    catalogDbVersion = 10;
+  static const int    streamCacheTtlSeconds = 21600;
+  static const String jazzDriveCloudBase   = 'https://cloud.jazzdrive.com.pk';
   static const String jazzDriveDbUpdateUrl = '';
-  static const Duration streamLinkTtl     = Duration(hours: 6);
+  static const Duration streamLinkTtl      = Duration(hours: 6);
 }
 
-// ── Brand Colors — ZENO ───────────────────────────────────────────────────────
 class AppColors {
-  // Primary — Electric Violet (ZENO signature)
-  static const Color primary      = Color(0xFF7B2FFF);
-  static const Color primaryDark  = Color(0xFF5A1FCC);
-  static const Color primaryGlow  = Color(0x407B2FFF);
-  static const Color primaryLight = Color(0xFF9D5FFF);
+  // ── Primary — ZENO Red ────────────────────────────────────────────────────
+  static const Color primary      = Color(0xFFE8002D);
+  static const Color primaryDark  = Color(0xFFB5001F);
+  static const Color primaryGlow  = Color(0x40E8002D);
+  static const Color primaryLight = Color(0xFFFF4D4D);
 
-  // Accent — Crimson (play buttons, highlights)
-  static const Color accent       = Color(0xFFE8002D);
-  static const Color accentGlow   = Color(0x40E8002D);
+  // ── Accent — ZENO Orange ─────────────────────────────────────────────────
+  static const Color accent     = Color(0xFFFF6B00);
+  static const Color accentGlow = Color(0x40FF6B00);
 
-  // Letter icon colors (Z E N O)
-  static const Color zColor = Color(0xFFE8002D);   // Z → play  (red)
-  static const Color eColor = Color(0xFF2F8BFF);   // E → eye   (blue)
-  static const Color nColor = Color(0xFFFFD000);   // N → bolt  (yellow)
-  static const Color oColor = Color(0xFF22C55E);   // O → people(green)
+  // ── Letter icon colors (semantic: Z=play, E=eye, N=bolt, O=people) ───────
+  static const Color zColor = Color(0xFFE8002D);  // Z → play   (red)
+  static const Color eColor = Color(0xFF2F8BFF);  // E → eye    (blue)
+  static const Color nColor = Color(0xFFFFD000);  // N → bolt   (yellow)
+  static const Color oColor = Color(0xFF22C55E);  // O → people (green)
 
-  // Backgrounds (Dark)
-  static const Color background    = Color(0xFF08080E);
-  static const Color backgroundAlt = Color(0xFF0D0D1A);
-  static const Color surface       = Color(0xFF0E0E1C);
-  static const Color surfaceHigh   = Color(0xFF161628);
-  static const Color card          = Color(0xFF1A1A2E);
-  static const Color cardBorder    = Color(0xFF252540);
+  // ── Backgrounds — pure cinematic dark (no purple/blue tints) ─────────────
+  static const Color background    = Color(0xFF0A0A0A);
+  static const Color backgroundAlt = Color(0xFF141414);
+  static const Color surface       = Color(0xFF1A1A1A);
+  static const Color surfaceHigh   = Color(0xFF242424);
+  static const Color card          = Color(0xFF1E1E1E);
+  static const Color cardBorder    = Color(0xFF2A2A2A);
 
-  // Glassmorphism
-  static const Color glass         = Color(0x0DFFFFFF);
-  static const Color glassBorder   = Color(0x14FFFFFF);
-  static const Color glassHigh     = Color(0x1AFFFFFF);
+  // ── Glassmorphism ─────────────────────────────────────────────────────────
+  static const Color glass       = Color(0x0DFFFFFF);
+  static const Color glassBorder = Color(0x14FFFFFF);
+  static const Color glassHigh   = Color(0x1AFFFFFF);
 
-  // AMOLED
+  // ── AMOLED ────────────────────────────────────────────────────────────────
   static const Color amoled        = Color(0xFF000000);
   static const Color amoledSurface = Color(0xFF0A0A0A);
   static const Color amoledCard    = Color(0xFF111111);
 
-  // Light theme
-  static const Color lightBg      = Color(0xFFF0F0F7);
+  // ── Light theme ───────────────────────────────────────────────────────────
+  static const Color lightBg      = Color(0xFFF5F5F5);
   static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightCard    = Color(0xFFF5F5FA);
-  static const Color lightBorder  = Color(0xFFE0E0EC);
+  static const Color lightCard    = Color(0xFFF8F8F8);
+  static const Color lightBorder  = Color(0xFFE0E0E0);
 
-  // Text
-  static const Color textPrimary        = Color(0xFFF2F2FF);
-  static const Color textSecondary      = Color(0xFFB0B0CC);
-  static const Color textMuted          = Color(0xFF6A6A90);
-  static const Color textDisabled       = Color(0xFF404060);
-  static const Color lightTextPrimary   = Color(0xFF0A0A1A);
-  static const Color lightTextSecondary = Color(0xFF444466);
-  static const Color lightTextMuted     = Color(0xFF888899);
+  // ── Text ──────────────────────────────────────────────────────────────────
+  static const Color textPrimary        = Color(0xFFFFFFFF);
+  static const Color textSecondary      = Color(0xFFAAAAAA);
+  static const Color textMuted          = Color(0xFF666666);
+  static const Color textDisabled       = Color(0xFF404040);
+  static const Color lightTextPrimary   = Color(0xFF0A0A0A);
+  static const Color lightTextSecondary = Color(0xFF444444);
+  static const Color lightTextMuted     = Color(0xFF888888);
 
   static const Color text   = textPrimary;
   static const Color border = glassBorder;
 
-  // Status
+  // ── Status ────────────────────────────────────────────────────────────────
   static const Color success     = Color(0xFF22C55E);
   static const Color successGlow = Color(0x2222C55E);
   static const Color error       = Color(0xFFEF4444);
@@ -83,37 +79,37 @@ class AppColors {
   static const Color warningGlow = Color(0x22F59E0B);
   static const Color info        = Color(0xFF3B82F6);
 
-  static const Color divider      = Color(0xFF1E1E35);
-  static const Color dividerLight = Color(0xFFE0E0F0);
+  static const Color divider      = Color(0xFF1E1E1E);
+  static const Color dividerLight = Color(0xFFE0E0E0);
 
-  // Gradients
+  // ── Gradients ─────────────────────────────────────────────────────────────
   static const LinearGradient primaryGradient = LinearGradient(
-    colors: [Color(0xFF7B2FFF), Color(0xFF9D5FFF)],
+    colors: [Color(0xFFE8002D), Color(0xFFFF6B00)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient darkGradient = LinearGradient(
-    colors: [Color(0xFF08080E), Color(0xFF0D0D22)],
+    colors: [Color(0xFF0A0A0A), Color(0xFF141414)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
   static const LinearGradient heroGradient = LinearGradient(
-    colors: [Colors.transparent, Color(0xFF08080E)],
+    colors: [Colors.transparent, Color(0xFF0A0A0A)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
     stops: [0.3, 1.0],
   );
 
   static const LinearGradient cardGradient = LinearGradient(
-    colors: [Color(0xFF161628), Color(0xFF0E0E1C)],
+    colors: [Color(0xFF1E1E1E), Color(0xFF141414)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient zenoGradient = LinearGradient(
-    colors: [Color(0xFF7B2FFF), Color(0xFF2F8BFF)],
+    colors: [Color(0xFFE8002D), Color(0xFFFF6B00)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
