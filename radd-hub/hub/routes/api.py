@@ -42,6 +42,25 @@ def ping():
     """Silent session-keepalive probe.  No auth, no DB hit, just 200 OK."""
     return jsonify({"ok": True, "ts": int(time.time())})
 
+# ---------------------------------------------------------------------------
+# App remote config — served to the Flutter app on startup (no auth required)
+# Replaces the GitHub raw URL which stopped working when the repo went private.
+# ---------------------------------------------------------------------------
+
+@bp.route('/api/config')
+def app_config():
+    """Return the Flutter app remote config (api_base_url, min_version_code).
+    No auth required — Flutter fetches this before the user logs in."""
+    from .. import config as _cfg
+    return jsonify({
+        'api_base_url': 'http://92.4.95.252',
+        'min_version_code': 1,
+        'update_url': 'https://github.com/raddclub/raddflix-app/releases/latest',
+        'note': 'Served from Oracle server — edit this route to change server URL',
+    })
+
+
+
 
 # ---------------------------------------------------------------------------
 # Health badges — lightweight status for every tool (polled by the header UI)
