@@ -12,27 +12,29 @@ import 'core/db/local_db.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Lock to portrait (player screen overrides to landscape when needed)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
 
+  // Initialize media_kit video engine
   MediaKit.ensureInitialized();
 
-  // Fetch remote server URL — falls back to hardcoded if network fails
-  try { await RemoteConfig.fetch(); } catch (_) {}
+  // Fetch server URL from GitHub config — no APK rebuild needed when server changes.
+  // Falls back to hardcoded AppConstants.apiBaseUrl if network/parse fails.
+  await RemoteConfig.fetch();
+  // Check for forced app updates / blocked APK on every cold start
+  await AppUpdateService.check();
 
-  // Check for forced updates — non-fatal
-  try { await AppUpdateService.check(); } catch (_) {}
-
-  // Boot zero-rated services — all non-fatal, app works without them
-  try { await PosterService.init(); } catch (_) {}
-  try { await JazzDriveService.loadCacheFromDb(); } catch (_) {}
-  try { await LocalDb.cleanExpiredStreamCache(); } catch (_) {}
+  // Boot zero-rated services
+  await PosterService.init();
+  await JazzDriveService.loadCacheFromDb();
+  await LocalDb.cleanExpiredStreamCache();
 
   runApp(
     const ProviderScope(
-      child: ZenoApp(),
+      child: RaddFlixApp(),
     ),
   );
 }

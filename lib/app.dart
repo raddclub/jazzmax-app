@@ -17,8 +17,8 @@ import 'screens/watchlist_screen.dart';
 import 'screens/history_screen.dart';
 import 'models/catalog_item.dart';
 
-class ZenoApp extends ConsumerWidget {
-  const ZenoApp({super.key});
+class RaddFlixApp extends ConsumerWidget {
+  const RaddFlixApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {

@@ -286,7 +286,7 @@ def _search_imdbapi(title: str, year: int, media_type: str) -> str | None:
                 params["year"] = str(year)
             r = req.get(f"{_IMDBAPI_BASE}/titles/search",
                        params=params, timeout=10,
-                       headers={"User-Agent": "JazzMAX/1.5"})
+                       headers={"User-Agent": "RaddFlix/1.5"})
             if r.status_code != 200:
                 continue
             results = r.json()

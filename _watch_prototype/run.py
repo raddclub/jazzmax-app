@@ -51,7 +51,7 @@ _allowed_origins = [
     "http://92.4.95.252",
     "https://92.4.95.252",
     # Add your custom domain here when you get one, e.g.:
-    # "https://jazzmax.pk",
+    # "https://raddflix.pk",
 ]
 # In development/emulator, allow all — controlled by env var
 _cors_origins = "*" if os.environ.get("CORS_ALLOW_ALL") else _allowed_origins
@@ -119,7 +119,7 @@ def _version_gate():
 @app.after_request
 def _security_headers(resp):
     # Flask adds Server header (nginx sets the rest globally)
-    resp.headers["Server"]  = "JazzMAX"
+    resp.headers["Server"]  = "RaddFlix"
     # Remove X-Powered-By if Flask adds it
     resp.headers.pop("X-Powered-By", None)
     return resp

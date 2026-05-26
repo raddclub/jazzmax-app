@@ -385,7 +385,7 @@ class _TidStatusScreenState extends State<TidStatusScreen>
       onPressed: () {
         // Could launch WhatsApp with deep link
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('WhatsApp support: Contact via ZENO help'),
+          content: Text('WhatsApp support: Contact via RaddFlix help'),
         ));
       },
       icon: const Icon(Icons.chat_rounded, size: 18),

@@ -1,4 +1,4 @@
-package com.jazzmax.app
+package com.raddflix.app
 
 import android.content.Context
 import com.google.android.gms.cast.framework.CastOptions

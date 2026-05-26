@@ -105,13 +105,13 @@ def _needs_force_update(version_code: int) -> tuple[bool, str]:
     min_code = _setting_int("app_min_version_code", 1)
     if version_code < min_code:
         current_name = _setting("app_current_version", "")
-        msg = f"Please update JazzMAX to version {current_name} to continue." if current_name else "A required update is available. Please update to continue."
+        msg = f"Please update RaddFlix to version {current_name} to continue." if current_name else "A required update is available. Please update to continue."
         return True, msg
 
     # Check deadline-based forced update
     deadline = _setting_int("app_force_update_at", 0)
     if deadline and int(time.time()) >= deadline:
-        msg = "A mandatory update is required. Please update JazzMAX to the latest version."
+        msg = "A mandatory update is required. Please update RaddFlix to the latest version."
         return True, msg
 
     return False, ""
@@ -152,7 +152,7 @@ def app_check():
     platform     = clean(str(data.get("platform")     or "android"), 16).lower()
 
     ip           = request.headers.get("X-Real-IP") or request.remote_addr or ""
-    update_url   = _setting("app_update_url", "https://play.google.com/store/apps/details?id=pk.jazzmax.app")
+    update_url   = _setting("app_update_url", "https://play.google.com/store/apps/details?id=pk.raddflix.app")
     current_ver  = _setting("app_current_version", "")
 
     # ── 1. Check if APK is tampered / cracked ─────────────────────────────────
@@ -163,7 +163,7 @@ def app_check():
                   detail=f"sig={sig_hash[:16]} ver={version_code} ip={ip}")
             crack_msg = _setting(
                 "app_crack_message",
-                "This version of JazzMAX is not authorized. Please download the official app."
+                "This version of RaddFlix is not authorized. Please download the official app."
             )
             return jsonify({
                 "ok":           False,
@@ -180,7 +180,7 @@ def app_check():
                   detail=f"sig={sig_hash[:16]} ver={version_code}")
             crack_msg = _setting(
                 "app_crack_message",
-                "This version of JazzMAX is not authorized. Please download the official app."
+                "This version of RaddFlix is not authorized. Please download the official app."
             )
             return jsonify({
                 "ok":           False,
@@ -265,7 +265,7 @@ def version_gate_middleware():
             return jsonify({
                 "error":           "update_required",
                 "force_update":    True,
-                "message":         "A required update is available. Please update JazzMAX.",
+                "message":         "A required update is available. Please update RaddFlix.",
                 "update_url":      _setting("app_update_url", ""),
                 "current_version": _setting("app_current_version", ""),
                 "code":            "FORCE_UPDATE",

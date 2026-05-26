@@ -20,7 +20,7 @@ import '../core/services/jazzdrive_service.dart';
 import '../core/debug/debug_logger.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
-const _pipChannel = MethodChannel('com.zeno.app/pip');
+const _pipChannel = MethodChannel('com.raddflix.app/pip');
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final String fileId;
@@ -700,7 +700,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                       width: 36, height: 36,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: AppColors.primary,
+                        color: Color(0xFFE8002D),
                       ),
                     ),
                     SizedBox(height: 12),
@@ -844,7 +844,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               onSkipCountdown: _playNextEpisode,
             ),
 
-          // ── Controls ��─
+          // ── Controls ──
           if (_showControls && !_longPressFast && !_showNextEpisode)
             _ControlsOverlay(
               title: _currentTitle,
@@ -1021,7 +1021,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONTROLS OVERLAY
-// ═════════════════════════════════════════════════════════════════════���═════════
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class _ControlsOverlay extends StatelessWidget {
   final String title;
@@ -1553,7 +1553,7 @@ class _DragIndicator extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════��═══════
+// ═══════════════════════════════════════════════════════════════════════════════
 // NEXT EPISODE OVERLAY  (unchanged)
 // ═══════════════════════════════════════════════════════════════════════════════
 class _NextEpisodeOverlay extends StatelessWidget {

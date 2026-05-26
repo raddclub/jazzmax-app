@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import '../core/constants.dart';
 import '../services/vault_service.dart';
 import '../core/security/device_id.dart';
@@ -261,7 +260,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ]),
                   const SizedBox(height: 32),
-                  Text('ZENO v1.0.0 · Pakistan ka entertainment, data-free',
+                  Text('RaddFlix v1.0.0 · Pakistan ka entertainment, data-free',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                   const SizedBox(height: 40),

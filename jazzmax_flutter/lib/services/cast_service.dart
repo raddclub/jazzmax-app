@@ -7,7 +7,7 @@ class CastDevice {
 
 class CastService {
   CastService._();
-  static const _ch = MethodChannel('com.zeno.app/cast');
+  static const _ch = MethodChannel('com.raddflix.app/cast');
 
   static Future<List<CastDevice>> discoverDevices() async {
     try {

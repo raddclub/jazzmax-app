@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 
-class ZenoBottomNav extends StatelessWidget {
+class RaddFlixBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const ZenoBottomNav({
+  const RaddFlixBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,

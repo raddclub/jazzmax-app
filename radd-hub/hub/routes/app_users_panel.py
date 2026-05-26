@@ -136,7 +136,7 @@ _HTML = """
 
 <div class="up-page">
   <h1>👤 App Users</h1>
-  <p class="sub">All registered JazzMAX app users and their subscription status</p>
+  <p class="sub">All registered RaddFlix app users and their subscription status</p>
 
   <!-- Stats -->
   <div class="stats-row">
@@ -172,7 +172,7 @@ _HTML = """
   {% if not users %}
   <div class="empty-state">
     No users found.<br>
-    <small>Users appear here after they register on the JazzMAX app.</small>
+    <small>Users appear here after they register on the RaddFlix app.</small>
   </div>
   {% endif %}
 

@@ -1,4 +1,4 @@
-package com.jazzmax.app
+package com.raddflix.app
 
 import android.app.PictureInPictureParams
 import android.media.MediaScannerConnection
@@ -21,9 +21,9 @@ import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
 
-    private val PIP_CHANNEL   = "com.jazzmax.app/pip"
-    private val MEDIA_CHANNEL = "com.jazzmax.app/media"
-    private val CAST_CHANNEL = "com.jazzmax.app/cast"
+    private val PIP_CHANNEL   = "com.raddflix.app/pip"
+    private val MEDIA_CHANNEL = "com.raddflix.app/media"
+    private val CAST_CHANNEL = "com.raddflix.app/cast"
 
     private var castContext: CastContext? = null
     private var castSession: CastSession? = null

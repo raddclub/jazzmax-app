@@ -23,10 +23,9 @@ class VaultService {
   static const _biometricKey = 'vault_biometric_enabled';
   static const _attemptsKey  = 'vault_failed_attempts';
   static const _lockUntilKey = 'vault_locked_until';
-  static const _pinLengthKey = 'vault_pin_length';
 
   static final _auth = LocalAuthentication();
-  static const _mediaChannel = MethodChannel('com.zeno.app/media');
+  static const _mediaChannel = MethodChannel('com.raddflix.app/media');
 
   /// Notify Android MediaStore that [path] was deleted so other apps stop seeing it.
   static Future<void> _removefromMediaStore(String path) async {
@@ -40,7 +39,7 @@ class VaultService {
 
   // ── PIN hashing ──────────────────────────────────────────────────────────
   static String _hashPin(String pin) {
-    final bytes = utf8.encode('zeno_vault_salt_$pin');
+    final bytes = utf8.encode('raddflix_vault_salt_$pin');
     return sha256.convert(bytes).toString();
   }
 

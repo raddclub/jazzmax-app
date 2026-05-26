@@ -93,7 +93,7 @@ _HTML = """
 
       <div class="field">
         <label>Message Body</label>
-        <textarea name="body" placeholder="e.g. Check out the latest additions to JazzMAX — Avatar: Fire and Ash is now available!" maxlength="300" required></textarea>
+        <textarea name="body" placeholder="e.g. Check out the latest additions to RaddFlix — Avatar: Fire and Ash is now available!" maxlength="300" required></textarea>
       </div>
 
       <div class="field">

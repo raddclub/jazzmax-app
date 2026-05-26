@@ -6,7 +6,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'core/constants.dart';
 import 'core/theme/theme_provider.dart';
 import 'core/theme/app_theme.dart';
-import 'core/debug/debug_logger.dart';
 import 'screens/splash_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
@@ -24,43 +23,17 @@ import 'screens/vault_screen.dart';
 import 'core/services/app_update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// ── Navigation Observer ───────────────────────────────────────────────────────
-class _DebugNavObserver extends NavigatorObserver {
-  @override
-  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    final name = route.settings.name ?? route.runtimeType.toString();
-    final prev = previousRoute?.settings.name ?? 'none';
-    DebugLogger.logNav(name, args: 'from=$prev');
-  }
-
-  @override
-  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
-    final from = route.settings.name ?? route.runtimeType.toString();
-    final to = previousRoute?.settings.name ?? 'none';
-    DebugLogger.logNav('<back', args: 'popped=$from  backTo=$to');
-  }
-
-  @override
-  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
-    final from = oldRoute?.settings.name ?? 'none';
-    final to = newRoute?.settings.name ?? newRoute?.runtimeType.toString() ?? 'none';
-    DebugLogger.logNav(to, args: 'replaced=$from');
-  }
-}
-
-class ZenoApp extends ConsumerWidget {
-  const ZenoApp({super.key});
+class RaddFlixApp extends ConsumerWidget {
+  const RaddFlixApp({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeProvider);
-    DebugLogger.logUi('ZenoApp', 'build — themeMode=${themeState.mode}');
     Animate.restartOnHotReload = true;
     return MaterialApp(
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: JazzThemeData.build(themeState.mode),
-      navigatorObservers: [_DebugNavObserver()],
       initialRoute: AppRoutes.splash,
       routes: {
         AppRoutes.splash:       (_) => const SplashScreen(),
@@ -78,8 +51,6 @@ class ZenoApp extends ConsumerWidget {
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.player) {
           final args = settings.arguments as Map<String, dynamic>;
-          DebugLogger.logNav(AppRoutes.player,
-              args: 'file_id=${args["file_id"]}  title=${args["title"]}');
           return PageRouteBuilder(
             pageBuilder: (_, __, ___) => PlayerScreen(
               fileId: args['file_id'] as String,
@@ -94,11 +65,9 @@ class ZenoApp extends ConsumerWidget {
           );
         }
         if (settings.name == AppRoutes.showDetail) {
-          final item = settings.arguments as CatalogItem;
-          DebugLogger.logNav(AppRoutes.showDetail,
-              args: 'id=${item.id}  title=${item.title}');
+          final item = settings.arguments;
           return PageRouteBuilder(
-            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item),
+            pageBuilder: (_, __, ___) => ShowDetailScreen(item: item as CatalogItem),
             transitionsBuilder: (_, anim, __, child) =>
                 SlideTransition(
                   position: Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
@@ -151,7 +120,6 @@ class _ForceUpdateGuardState extends State<_ForceUpdateGuard> {
     _checked = true;
     final r = AppUpdateService.lastResult;
     if ((r.forceUpdate || r.blocked) && mounted) {
-      DebugLogger.logWarn('UPDATE', 'Force update or blocked: forceUpdate=${r.forceUpdate}  blocked=${r.blocked}  msg=${r.message}');
       setState(() { _blocked = true; _result = r; });
     }
   }
@@ -172,7 +140,7 @@ class _ForceUpdateScreen extends StatelessWidget {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: const Color(0xFF08080E),
         body: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -180,38 +148,33 @@ class _ForceUpdateScreen extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo
-                Text(
-                  'ZENO',
-                  style: TextStyle(
-                    fontSize: 38,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -2,
-                    foreground: Paint()
-                      ..shader = const LinearGradient(
-                        colors: [Color(0xFFE8002D), Color(0xFFFF6B00), Color(0xFFFFF5F0)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ).createShader(const Rect.fromLTWH(0, 0, 150, 50)),
-                  ),
-                ),
+                RichText(text: const TextSpan(
+                  style: TextStyle(fontSize: 34, fontWeight: FontWeight.w900, letterSpacing: -1),
+                  children: [
+                    TextSpan(text: 'Jazz', style: TextStyle(color: Colors.white)),
+                    TextSpan(text: 'MAX', style: TextStyle(color: Color(0xFFE8002D))),
+                  ],
+                )),
                 const SizedBox(height: 56),
+                // Icon ring
                 Container(
                   width: 110, height: 110,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.primary.withOpacity(0.08),
+                    color: const Color(0xFFE8002D).withOpacity(0.08),
                     border: Border.all(
-                        color: AppColors.primary.withOpacity(0.25), width: 2),
+                        color: const Color(0xFFE8002D).withOpacity(0.25), width: 2),
                   ),
                   child: Icon(
                     result.blocked
                         ? Icons.block_rounded
                         : Icons.system_update_alt_rounded,
-                    color: AppColors.primary,
+                    color: const Color(0xFFE8002D),
                     size: 52,
                   ),
                 ),
                 const SizedBox(height: 36),
+                // Title
                 Text(
                   result.blocked ? 'Access Blocked' : 'Update Required',
                   style: const TextStyle(
@@ -220,17 +183,19 @@ class _ForceUpdateScreen extends StatelessWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
+                // Message
                 Text(
                   result.message.isNotEmpty
                       ? result.message
                       : result.blocked
-                          ? 'This version of ZENO is not authorized. Please download the official app.'
-                          : 'A required update is available. Please update ZENO to continue watching.',
+                          ? 'This version of RaddFlix is not authorized. Please download the official app.'
+                          : 'A required update is available. Please update RaddFlix to continue watching.',
                   style: const TextStyle(
                       color: Color(0xFF9090B0), fontSize: 15, height: 1.65),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 52),
+                // Update button
                 if (!result.blocked && result.updateUrl.isNotEmpty)
                   GestureDetector(
                     onTap: () async {
@@ -244,13 +209,13 @@ class _ForceUpdateScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 17),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [AppColors.primary, Color(0xFFFF6B00)],
+                          colors: [Color(0xFFE8002D), Color(0xFFFF5757)],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         ),
                         borderRadius: BorderRadius.circular(14),
                         boxShadow: [BoxShadow(
-                          color: AppColors.primary.withOpacity(0.4),
+                          color: const Color(0xFFE8002D).withOpacity(0.4),
                           blurRadius: 24, offset: const Offset(0, 10),
                         )],
                       ),
@@ -271,9 +236,9 @@ class _ForceUpdateScreen extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 17),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
+                      color: const Color(0xFF1A1A2E),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF2A2A2A)),
+                      border: Border.all(color: const Color(0xFF252540)),
                     ),
                     child: const Text('Contact Support',
                         textAlign: TextAlign.center,
@@ -281,6 +246,7 @@ class _ForceUpdateScreen extends StatelessWidget {
                             fontWeight: FontWeight.w600, fontSize: 15)),
                   ),
                 const SizedBox(height: 24),
+                // Version info
                 if (result.currentVersion.isNotEmpty)
                   Text('Latest version: ${result.currentVersion}',
                       style: const TextStyle(color: Color(0xFF505070), fontSize: 12)),

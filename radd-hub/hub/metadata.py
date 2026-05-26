@@ -267,7 +267,7 @@ def fetch_imdbapi(title: str, year: Optional[str] = None, media_type: str = "mov
                 "https://imdbapi.dev/api/v1/titles/search",
                 params=params,
                 timeout=10,
-                headers={"User-Agent": "JazzMAX/1.5"}
+                headers={"User-Agent": "RaddFlix/1.5"}
             )
             if r.status_code != 200:
                 continue

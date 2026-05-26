@@ -20,7 +20,7 @@ class LocalDb {
 
   static Future<Database> _openDb() async {
     final dir = await getApplicationDocumentsDirectory();
-    final path = p.join(dir.path, 'jazzmax_catalog.db');
+    final path = p.join(dir.path, 'raddflix_catalog.db');
 
     return openDatabase(
       path,

@@ -63,7 +63,7 @@ def send_push(token: str, title: str, body: str,
             "title":              title,
             "body":               body,
             "sound":              "default",
-            "android_channel_id": "jazzmax_alerts",
+            "android_channel_id": "raddflix_alerts",
             "click_action":       "FLUTTER_NOTIFICATION_CLICK",
         },
         "data":     data or {},
@@ -71,7 +71,7 @@ def send_push(token: str, title: str, body: str,
         "android": {
             "priority": "HIGH",
             "notification": {
-                "channel_id":             "jazzmax_alerts",
+                "channel_id":             "raddflix_alerts",
                 "notification_priority":  "PRIORITY_HIGH",
                 "default_sound":          True,
             },
@@ -157,7 +157,7 @@ def notify_subscription_activated(user_id: int, plan: str):
     send_push(
         token,
         title="Subscription Activated!",
-        body=f"Your JazzMAX {label} plan is now active. Enjoy unlimited streaming!",
+        body=f"Your RaddFlix {label} plan is now active. Enjoy unlimited streaming!",
         data={"event": "subscription_activated", "plan": plan},
     )
 
@@ -191,7 +191,7 @@ def notify_broadcast(title: str, body: str, tokens: list[str], data: dict | None
             "notification": {
                 "title": title, "body": body,
                 "sound": "default",
-                "android_channel_id": "jazzmax_alerts",
+                "android_channel_id": "raddflix_alerts",
             },
             "data":     data or {},
             "priority": "high",

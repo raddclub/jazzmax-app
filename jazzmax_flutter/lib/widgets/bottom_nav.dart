@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../core/constants.dart';
 
-class ZenoBottomNav extends StatelessWidget {
+class RaddFlixBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
-  const ZenoBottomNav({super.key, required this.currentIndex, required this.onTap});
+  const RaddFlixBottomNav({super.key, required this.currentIndex, required this.onTap});
 
   static const _items = [
     _NavItem(icon: Icons.home_outlined, active: Icons.home_rounded, label: 'Home'),

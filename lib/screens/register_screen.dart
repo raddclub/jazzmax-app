@@ -130,7 +130,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Join ZENO — free for Jazz SIM users',
+                  'Join RaddFlix — free for Jazz SIM users',
                   style: TextStyle(color: AppColors.textMuted, fontSize: 14),
                 ),
                 const SizedBox(height: 32),
