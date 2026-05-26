@@ -16,7 +16,7 @@ const SERVER      = 'http://92.4.95.252';
 const WATCH_PORT  = 6000;
 const ADMIN_PORT  = 5000;
 const JAZZDRIVE   = 'https://cloud.jazzdrive.com.pk';
-const REMOTE_CFG  = 'https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_config.json';
+const REMOTE_CFG  = 'http://92.4.95.252/api/config';
 
 // Test credentials (these are safe test accounts — change if needed)
 const TEST_PHONE  = '+923001234567';
