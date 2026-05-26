@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 /// power users. Instead, we FLAG it and disable screenshot security features
 /// that are meaningless on root (since root can bypass FLAG_SECURE anyway).
 class RootDetector {
-  static const _channel = MethodChannel('com.jazzmax.app/root');
+  static const _channel = MethodChannel('com.zeno.app/root');
 
   static Future<bool> isRooted() async {
     try {
