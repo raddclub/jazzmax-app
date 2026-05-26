@@ -1,4 +1,4 @@
-# JazzMAX ProGuard / R8 rules
+# RaddFlix ProGuard / R8 rules
 
 # Flutter wrapper
 -keep class io.flutter.app.** { *; }
@@ -33,8 +33,8 @@
 # Riverpod
 -keep class dev.rvr.** { *; }
 
-# Keep JazzMAX app models (prevent obfuscation of data classes)
--keep class com.jazzmax.app.** { *; }
+# Keep RaddFlix app models (prevent obfuscation of data classes)
+-keep class com.raddflix.app.** { *; }
 
 # Google Play Core — referenced by Flutter's FlutterPlayStoreSplitApplication
 # but not needed for sideloaded / direct APK distribution.
