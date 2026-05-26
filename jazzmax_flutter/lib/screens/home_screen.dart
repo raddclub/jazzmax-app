@@ -228,6 +228,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
         const SliverToBoxAdapter(child: SizedBox(height: 8)),
 
+        if (catalog.trending.isNotEmpty)
+          SliverToBoxAdapter(child: _ContentSection(
+            title: '🔥 Trending Now',
+            items: catalog.trending,
+          ).animate().fadeIn(duration: 400.ms)),
+
         if (catalog.recentlyWatched.isNotEmpty)
           SliverToBoxAdapter(child: _ContentSection(
             title: 'Continue Watching',
