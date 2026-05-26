@@ -18,10 +18,10 @@ Never assume a file's content. Always read it first.
 
 ## Rule 2 — SSH Connection Pattern
 
-Always decode the SSH key this way (spaces may be embedded in env var):
+Write the key directly to a file (it is stored as plain text in Replit Secrets):
 
 ```bash
-echo "$ORACLE_SSH_KEY" | tr -d ' ' | base64 -d > /tmp/oracle_key && chmod 600 /tmp/oracle_key
+printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key && chmod 600 /tmp/oracle_key
 ssh -i /tmp/oracle_key -o StrictHostKeyChecking=no ubuntu@92.4.95.252 "your command"
 ```
 
@@ -128,7 +128,7 @@ Anything the next agent should know. Warnings, incomplete items, etc.
 ## Rule 9 — Secrets Handling
 
 - `GITHUB_TOKEN` — GitHub personal access token (raddclub account)
-- `ORACLE_SSH_KEY` — base64-encoded SSH private key (may have spaces — strip them)
+- `ORACLE_SSH_KEY` — SSH private key pasted as plain text from Oracle (no encoding)
 - Never print secrets to console
 - Never write secrets into any file that gets committed to GitHub
 - Never hardcode IP, passwords, or keys anywhere in code
