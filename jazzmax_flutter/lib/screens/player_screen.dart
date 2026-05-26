@@ -17,6 +17,7 @@ import '../core/security/keystore.dart';
 import '../core/db/local_db.dart';
 import '../core/api/catalog_api.dart';
 import '../core/services/jazzdrive_service.dart';
+import '../core/debug/debug_logger.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
 const _pipChannel = MethodChannel('com.jazzmax.app/pip');
