@@ -22,7 +22,8 @@ class VaultService {
   static const _autoLockKey  = 'vault_auto_lock_seconds';
   static const _biometricKey = 'vault_biometric_enabled';
   static const _attemptsKey  = 'vault_failed_attempts';
-  static const _lockUntilKey = 'vault_locked_until';
+  static const _lockUntilKey  = 'vault_locked_until';
+  static const _pinLengthKey  = 'vault_pin_length';
 
   static final _auth = LocalAuthentication();
   static const _mediaChannel = MethodChannel('com.raddflix.app/media');
