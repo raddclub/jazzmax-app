@@ -26,7 +26,7 @@ class VaultService {
   static const _pinLengthKey = 'vault_pin_length';
 
   static final _auth = LocalAuthentication();
-  static const _mediaChannel = MethodChannel('com.jazzmax.app/media');
+  static const _mediaChannel = MethodChannel('com.zeno.app/media');
 
   /// Notify Android MediaStore that [path] was deleted so other apps stop seeing it.
   static Future<void> _removefromMediaStore(String path) async {
@@ -40,7 +40,7 @@ class VaultService {
 
   // ── PIN hashing ──────────────────────────────────────────────────────────
   static String _hashPin(String pin) {
-    final bytes = utf8.encode('jazzmax_vault_salt_$pin');
+    final bytes = utf8.encode('zeno_vault_salt_$pin');
     return sha256.convert(bytes).toString();
   }
 
