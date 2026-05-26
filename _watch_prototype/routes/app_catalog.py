@@ -123,12 +123,12 @@ def sync():
             "id":            r["id"],
             "title":         r["title"] or "",
             "year":          r["year"],
-            "media_type":    r["media_type"] or "movie",
+            "media_type":    ("show" if (r["media_type"] or "movie") in ("tv","series") else (r["media_type"] or "movie")),  # FIX BUG-002
             "description":   r["plot"] or r["overview"] or "",
             "rating":        r["rating"],
             "genres":        genres,
             "language":      r["language"] or "",
-            "is_free":       bool(r["is_free"]),
+            "is_free":       1 if r["is_free"] else 0,  # FIX BUG-001
             "runtime":       r["runtime"],
             "season_count":  r["season_count"],
             "episode_count": r["episode_count"],
@@ -163,7 +163,8 @@ def sync():
                 "season":   r["season"],
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
-                "is_free":  False,  # files table has no is_free column; use title-level is_free instead
+                "share_url": r["share_url"] or "",  # FIX BUG-009
+                "is_free":  False,  # files table has no is_free
             })
 
     return jsonify({
