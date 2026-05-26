@@ -402,9 +402,21 @@ def logout():
 @require_app_auth
 def me():
     user_id = g.app_user_id
+    # Guest tokens have no DB record — return synthetic profile
+    if getattr(g, "is_guest", False) or user_id == 0:
+        return jsonify({
+            "id":           0,
+            "phone":        "guest",
+            "device_id":    None,
+            "device_name":  None,
+            "created_at":   None,
+            "last_login_at":None,
+            "is_active":    True,
+            "subscription": {"plan": "free", "is_active": True, "expires_at": None},
+        })  # FIX BUG-012
     with db.conn() as c:
         user = c.execute(
-            "SELECT id, phone, device_id, device_name, created_at, last_login_at FROM app_users WHERE id=?",
+            "SELECT id, phone, device_id, device_name, created_at, last_login_at, is_active FROM app_users WHERE id=?",  # FIX BUG-012
             (user_id,)
         ).fetchone()
         sub = c.execute(
@@ -423,6 +435,7 @@ def me():
 
     return jsonify({
         "id":           user["id"],
+        "is_active":    bool(user["is_active"]),  # FIX BUG-012
         "phone":        user["phone"],
         "device_id":    user["device_id"],
         "device_name":  user["device_name"],
