@@ -185,7 +185,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
                         width: 52, height: 52,
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
-                            colors: [Color(0xFF7C5CFF), Color(0xFFE8002D)],
+                            colors: [Color(0xFF7C5CFF), AppColors.primary],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
