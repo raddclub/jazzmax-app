@@ -188,7 +188,7 @@ class _ForceUpdateScreen extends StatelessWidget {
                     letterSpacing: -2,
                     foreground: Paint()
                       ..shader = const LinearGradient(
-                        colors: [Color(0xFF9D5FFF), Color(0xFF7B2FFF), Color(0xFF2F8BFF)],
+                        colors: [Color(0xFFE8002D), Color(0xFFFF6B00), Color(0xFFFFF5F0)],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ).createShader(const Rect.fromLTWH(0, 0, 150, 50)),
@@ -244,7 +244,7 @@ class _ForceUpdateScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 17),
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [AppColors.primary, Color(0xFFFF5757)],
+                          colors: [AppColors.primary, Color(0xFFFF6B00)],
                           begin: Alignment.centerLeft,
                           end: Alignment.centerRight,
                         ),
@@ -271,9 +271,9 @@ class _ForceUpdateScreen extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 17),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A2E),
+                      color: const Color(0xFF1A1A1A),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: const Color(0xFF252540)),
+                      border: Border.all(color: const Color(0xFF2A2A2A)),
                     ),
                     child: const Text('Contact Support',
                         textAlign: TextAlign.center,
