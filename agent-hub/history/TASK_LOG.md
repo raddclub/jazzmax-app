@@ -488,3 +488,102 @@ READ `agent-hub/PLAYER_SPEC.md` FULLY before writing any player code.
 Implement in order: Phase 3A (gesture config) → 3B (controls customization) → 3C (subtitle) → 3D (cinematic) → 3E (audio) → 3F (advanced).
 The existing player code is in `raddflix_flutter/lib/screens/player_screen.dart` — read it first, build on top of it.
 New architecture files: `player_prefs.dart`, `player_prefs_provider.dart`, `player_settings_screen.dart` — create these new.
+
+---
+
+## [2026-05-26] — Session 6: Player Spec Update
+
+### Task
+User requested:
+1. Fix ORACLE_SSH_KEY — remove base64 requirement, use plain text key as-is from Oracle
+2. Make skip intro smart — series/drama/anime only, save intro time per series, auto-apply to all episodes of that series
+3. Add transparent/ghost player mode
+4. Brainstorm and add brand-new original features never seen in other players
+5. Remove skip silence (not feasible cleanly with MPV)
+6. Remove all iOS caveats (Android-only app)
+7. Compare RaddFlix player to MX Player, VLC, Nova, Just Player, KMPlayer
+
+### Done
+
+**1. Fixed ORACLE_SSH_KEY in 3 files:**
+- `agent-hub/scripts/install.sh` — removed base64 decode, now writes key with `printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key`
+- `agent-hub/README.md` — removed "base64-encoded" language from SSH key description
+- `agent-hub/SKILLS.md` — Rule 2 and Rule 9 updated: plain text key, no decoding
+
+**2. Updated `agent-hub/PLAYER_SPEC.md` (837 -> 1039 lines):**
+
+#### Smart Skip Intro (section 3.3) — FULLY REWRITTEN
+- Only shows for: series, drama, anime, donghua, cartoon, show
+- Never shows for: movie, song, clip, short, documentary, music_video
+- Never shows if video duration < 10 minutes
+- When user taps Skip: saves position as intro_end_seconds for that series_id (SharedPrefs JSON map)
+- All subsequent episodes of that series auto-show skip button at saved time (or auto-skip)
+- New file: smart_intro_store.dart
+- PlayerScreen needs new `content_type` parameter from catalog data
+
+#### Transparent / Ghost Player Mode (section 3.8) — NEW, NEVER SEEN BEFORE
+- Video plays at configurable opacity (20-100%) via Flutter Opacity widget
+- See through video to device content behind it
+- Controls use frosted glass (BackdropFilter)
+- Opacity quick-slider in bottom-left of player when active
+- Activated via ghost icon in top bar or quick settings panel
+
+#### Ambilight Glow Mode (section 3.9) — NEW, NEVER SEEN IN MOBILE STREAMING
+- Samples video frame edge colors every 400ms via player.screenshot()
+- Projects matching colored box-shadow glow around video edges
+- Animates smoothly as scene colors change
+- Settings: intensity, blur radius, sample rate
+- New files: ambilight_controller.dart, ambilight_glow_border.dart
+
+#### Binge Guard (section 3.10) — NEW
+- Tracks continuous active playback time
+- After configurable threshold (default 2h): friendly break overlay with session stats
+- Fully dismissable, never blocks content
+
+#### Sleep Fade (section 3.11) — NEW
+- Gradual volume fade in last N seconds before sleep timer stops (15s/30s/60s)
+- Far better UX than abrupt cutoff
+
+#### Scene Bookmarks (section 3.12) — NEW
+- Long-press seek bar -> emoji picker -> bookmark saved to SQLite at that timestamp
+- Emoji labels: heart, fire, laugh, wow, broken heart, pin, star, target
+- Colored dots appear on seek bar for each bookmark
+- Bookmark panel from top bar icon: list all, tap to seek, long-press to delete
+- New files: scene_bookmark_store.dart, scene_bookmarks_panel.dart
+
+#### Rage Skip (section 3.13) — NEW
+- Triple-tap center zone within 600ms -> skip forward 2 minutes (configurable)
+- Full-screen red flash + animated "RAGE SKIP +2:00" badge
+- Configurable: 1min / 2min / 3min / 5min
+
+#### Episode Recap Preview (section 3.14) — NEW
+- Opening episode N (N>1) of a series: bottom sheet offers to play last 60s of episode N-1
+- "Play Recap" or "Skip, I remember" options
+- Auto-dismisses after 8 seconds
+
+### Removed from Spec
+- Skip Silence — removed entirely (no native MPV support, too complex/unreliable)
+- All iOS caveats — app is Android-only, MPV filters work without restriction
+- Drag-to-reorder button editor — moved to Phase 4 (future), now Phase 3 has enable/disable + reorder arrows
+
+### Implementation Phases Added
+- Phase 3G (New Original Features in order): Sleep Fade, Rage Skip, Scene Bookmarks, Ambilight, Transparent Player, Binge Guard, Episode Recap
+- Phase 3H (Advanced): A-B loop, frame-by-frame, chapter markers, seek thumbnails, screenshot
+- Phase 4 (future): drag editor, OpenSubtitles, auto intro detection
+
+### Files Changed
+- `agent-hub/scripts/install.sh` — SSH key plain text fix
+- `agent-hub/README.md` — SSH key doc fix
+- `agent-hub/SKILLS.md` — Rule 2 + Rule 9 plain text SSH key
+- `agent-hub/PLAYER_SPEC.md` — full rewrite/expansion (7 new original features + smart intro + transparent player + cleanup)
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- ORACLE_SSH_KEY is plain text in Replit Secrets — use `printf '%s' "$ORACLE_SSH_KEY" > /tmp/oracle_key` (no base64 decode)
+- PlayerScreen needs a new `content_type` parameter — check how catalog data flows from home screen to player and add it
+- Smart intro requires SmartIntroStore (new file) + series_id passed to PlayerScreen
+- Ambilight uses player.screenshot() on a Timer — test on mid-range Android, throttle if CPU spikes
+- Transparent mode = simple Opacity widget, very easy win to implement first in Phase 3G
+- Phase order: 3A -> 3B -> 3C (smart intro) -> 3D (subtitles) -> 3E (cinematic) -> 3F (audio/video) -> 3G (new features) -> 3H (advanced)
+
+---
