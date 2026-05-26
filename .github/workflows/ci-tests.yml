@@ -187,7 +187,7 @@ jobs:
             exit 0
           fi
           mkdir -p ~/.ssh
-          printf '%s\n' "$ORACLE_SSH_KEY" > ~/.ssh/deploy_key
+          echo "$ORACLE_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H "$ORACLE_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
