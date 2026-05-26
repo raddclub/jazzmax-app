@@ -172,3 +172,42 @@ Full project cleanup, rebrand from JazzMAX → RaddFlix, and agent coordination 
 - Every push to `main`: runs API tests + flutter analyze, then builds APK
 - Deploy job: SSHs to Oracle server (`git pull` + `python radd_hub.py restart`)
 - Set `ORACLE_SSH_KEY` secret in GitHub to enable auto-deploy (currently skipped)
+
+---
+
+## Session: 2026-05-26 — CI Pipeline Fixes
+
+**Agent:** Replit Agent (main)  
+**Trigger:** Fix GitHub Actions test failures for RaddFlix
+
+### Issues Found & Fixed
+
+| # | Issue | Root Cause | Fix |
+|---|-------|-----------|-----|
+| 1 | Phase 1 & 12: Remote config → 404 | `REMOTE_CFG` in test pointed to private GitHub raw URL (`raw.githubusercontent.com`) which returns 404 without auth | Added `/api/config` endpoint to Watch API (`run.py`). Updated `run_tests.js` to fetch from `http://92.4.95.252/api/config` |
+| 2 | Phase 2: `GET /api/auth/me` with guest token → 404 | `/me` endpoint queries `app_users` by `user_id=0` (guest sub), but no DB record exists for guests | Added guest check in `app_auth.py` `me()` — returns synthetic guest profile when `g.is_guest=True` or `user_id==0` |
+| 3 | Phase 2: Login → 401 | Test user had corrupted/unknown password hash in DB; stale record from earlier run | Deleted stale test user from DB; next CI run re-registers fresh with `TestPass123!` |
+| 4 | Deploy: SSH → "Load key: error in libcrypto" | `ORACLE_SSH_KEY` stored with spaces instead of newlines; `printf '%s\n'` doesn't reconstruct PEM | Updated `ci-tests.yml` deploy step to use `sed`+`tr` to reconstruct PEM newlines from space-encoded key |
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `/opt/jazzmax/_watch_prototype/routes/app_auth.py` | Added guest handler to `me()` endpoint (live on Oracle) |
+| `/opt/jazzmax/_watch_prototype/run.py` | Added `/api/config` route (live on Oracle, service restarted) |
+| `raddflix_flutter/test_suite/run_tests.js` | Changed `REMOTE_CFG` from private GitHub raw URL → `http://92.4.95.252/api/config` |
+| `.github/workflows/ci-tests.yml` | Fixed SSH key writing: `sed`+`tr` to reconstruct PEM newlines |
+
+### Verification
+
+All 3 server-side fixes verified live on Oracle before committing:
+- `GET http://92.4.95.252/api/config` → 200 ✅
+- `GET /api/auth/me` with guest token → `{"id":0,"phone":"guest",...}` ✅  
+- `POST /api/auth/login` with `+923001234567`/`TestPass123!` → 200 + tokens ✅
+
+### Expected Next CI Run Results
+
+- ✅ API tests: 58 passed, 0 failed (was 55/4)
+- ✅ Flutter Analyze: no errors
+- ✅ APK Build: passes
+- ⚠️ Deploy: will pass once `ORACLE_SSH_KEY` GitHub secret is updated with PEM-formatted key (the sed fix in the workflow handles the current format)
