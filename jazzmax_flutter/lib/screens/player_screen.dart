@@ -49,6 +49,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // Controls
   bool _showControls = true;
+  bool _isLinkLoading = false;
   Timer? _hideTimer;
   bool _locked = false;
 
@@ -227,6 +228,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       return;
     }
 
+    // Show loading indicator while resolving stream URL
+    if (mounted) setState(() => _isLinkLoading = true);
+
     // Zero-rated path: on-device JazzDrive link generation
     // Works without internet bundle — Jazz SIM zero-rated access only
     final shareUrl = await LocalDb.getShareUrl(fileId);
@@ -234,11 +238,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       try {
         final link = await JazzDriveService.getStreamLink(fileId, shareUrl);
         await _player.open(Media(link.streamUrl));
-        setState(() { _ended = false; _position = Duration.zero; });
+        setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
         return;
       } catch (e) {
         DebugLogger.logError('PLAYER', 'JazzDrive link failed for $fileId', e);
-        // Fall through to Oracle server fallback
+        // Fall through to Oracle server fallback (keep _isLinkLoading=true)
       }
     }
 
@@ -246,10 +250,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     try {
       final url = await CatalogApi.getStreamUrl(fileId);
       await _player.open(Media(url));
-      setState(() { _ended = false; _position = Duration.zero; });
+      setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
     } catch (e) {
       DebugLogger.logError('PLAYER', 'All stream methods failed for $fileId', e);
       if (mounted) {
+        setState(() => _isLinkLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Could not load video. Check your connection.'),
         ));
@@ -680,6 +685,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   strokeWidth: 2,
                   strokeCap: StrokeCap.round,
                   valueColor: AlwaysStoppedAnimation<Color>(Colors.white70)),
+              ),
+            ),
+
+          // ── Link loading (JazzDrive/Oracle URL resolution) ──
+          if (_isLinkLoading)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 36, height: 36,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFFE8002D),
+                      ),
+                    ),
+                    SizedBox(height: 12),
+                    Text('Loading…',
+                        style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
               ),
             ),
 
