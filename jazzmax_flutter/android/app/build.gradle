@@ -32,7 +32,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace "com.jazzmax.app"
+    namespace "com.zeno.app"
     compileSdk 36
     ndkVersion flutter.ndkVersion
 
@@ -53,17 +53,17 @@ android {
         release {
             def ksPath = System.getenv('KEYSTORE_PATH')
                 ?: keystoreProperties['storeFile']
-                ?: 'keystore/jazzmax.keystore'
+                ?: 'keystore/zeno.keystore'
             storeFile file(ksPath)
             storeType (System.getenv('KEYSTORE_TYPE') ?: keystoreProperties['storeType'] ?: 'PKCS12')
             storePassword System.getenv('KEYSTORE_PASSWORD') ?: keystoreProperties['storePassword'] ?: ''
-            keyAlias System.getenv('KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'jazzmax'
+            keyAlias System.getenv('KEY_ALIAS') ?: keystoreProperties['keyAlias'] ?: 'zeno'
             keyPassword System.getenv('KEY_PASSWORD') ?: keystoreProperties['keyPassword'] ?: ''
         }
     }
 
     defaultConfig {
-        applicationId "com.jazzmax.app"
+        applicationId "com.zeno.app"
         minSdkVersion 21
         targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
