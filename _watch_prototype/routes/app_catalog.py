@@ -164,7 +164,7 @@ def sync():
                 "episode":  r["episode"],
                 "label":    f"S{r['season']:02d}E{r['episode']:02d}",
                 "share_url": r["share_url"] or "",  # FIX BUG-009
-                "is_free":  False,  # files table has no is_free
+                "is_free":  0,  # FIX BUG-001b: int not bool
             })
 
     return jsonify({
