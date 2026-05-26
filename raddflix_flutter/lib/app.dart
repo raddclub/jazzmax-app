@@ -19,6 +19,7 @@ import 'screens/search_screen.dart';
 import 'screens/show_detail_screen.dart';
 import 'screens/vault_lock_screen.dart';
 import 'screens/admin_queue_screen.dart';
+import 'screens/player_settings_screen.dart';
 import 'screens/vault_screen.dart';
 import 'core/services/app_update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -47,6 +48,7 @@ class RaddFlixApp extends ConsumerWidget {
         AppRoutes.search:       (_) => const SearchScreen(),
         AppRoutes.vault:         (_) => const VaultScreen(),
         AppRoutes.adminQueue:    (_) => const AdminQueueScreen(),
+        '/player-settings':      (_) => const PlayerSettingsScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == AppRoutes.player) {
@@ -58,6 +60,7 @@ class RaddFlixApp extends ConsumerWidget {
               localPath: args['local_path'] as String?,
               episodes: args['episodes'] as List<Map<String, dynamic>>?,
               episodeIndex: args['episode_index'] as int? ?? 0,
+              contentType: args['content_type'] as String? ?? 'series',
             ),
             transitionsBuilder: (_, anim, __, child) =>
                 FadeTransition(opacity: anim, child: child),
