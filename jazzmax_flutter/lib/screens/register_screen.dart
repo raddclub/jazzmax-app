@@ -88,7 +88,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                       .animate().fadeIn(duration: 400.ms)
                       .slideX(begin: -0.2, end: 0, duration: 400.ms, curve: AppCurves.standard),
                   const SizedBox(height: 6),
-                  const Text('Join JazzMAX — free for Jazz SIM users',
+                  const Text('Join ZENO — free for Jazz SIM users',
                       style: TextStyle(color: AppColors.textMuted, fontSize: 14))
                       .animate(delay: 80.ms).fadeIn(duration: 400.ms),
                   const SizedBox(height: 32),
