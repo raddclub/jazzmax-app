@@ -97,63 +97,80 @@ def generate_db_update():
         return jsonify({'error': 'Admin auth required'}), 401
 
     try:
+        import json as _json
         with _get_db() as conn:
-            # Get all published titles
-            titles = conn.execute("""
+            conn.row_factory = __import__("sqlite3").Row
+            # Titles — join to files for movie-level file_id and share_url
+            title_rows = conn.execute("""
                 SELECT t.id, t.title, t.year, t.media_type, t.poster, t.rating,
-                       t.genres, t.plot, t.is_free,
-                       f.id as file_id
+                       t.genres, t.plot, t.language, t.is_free, t.updated_at,
+                       f.id AS file_id, f.share_url AS file_share_url
                 FROM titles t
-                LEFT JOIN files f ON f.title_id=t.id AND f.is_primary=1
-                WHERE t.is_published=1
-                ORDER BY t.updated_at DESC
+                LEFT JOIN files f ON f.title_id = t.id
+                  AND (f.season IS NULL OR f.season = 0)
+                WHERE t.is_published = 1
+                GROUP BY t.id
+                ORDER BY t.id
             """).fetchall()
 
-            # Get all episodes for TV shows
-            episodes = conn.execute("""
-                SELECT e.id, e.title_id, e.season, e.episode, e.label, 
-                       e.quality, e.is_free, f.id as file_id
-                FROM episodes e
-                JOIN files f ON f.id=e.file_id
-                JOIN titles t ON t.id=e.title_id
-                WHERE t.is_published=1
-            """).fetchall()
+            title_ids = [r["id"] for r in title_rows]
+            titles_list = []
+            for r in title_rows:
+                genres = []
+                try:
+                    genres = _json.loads(r["genres"] or "[]")
+                    if not isinstance(genres, list):
+                        genres = [str(genres)]
+                except Exception:
+                    pass
+                titles_list.append({
+                    "id":          r["id"],
+                    "title":       r["title"] or "",
+                    "year":        r["year"],
+                    "media_type":  r["media_type"] or "movie",
+                    "poster_url":  r["poster"] or "",
+                    "rating":      float(r["rating"] or 0),
+                    "genres":      genres,
+                    "description": r["plot"] or "",
+                    "language":    r["language"] or "",
+                    "is_free":     1 if r["is_free"] else 0,
+                    "db_version":  int(r["updated_at"] or 0),
+                    "file_id":     r["file_id"],
+                    "share_url":   r["file_share_url"] or "",
+                })
 
-        import json
-        titles_list = []
-        for t in titles:
-            titles_list.append({
-                'id': t[0],
-                'title': t[1] or '',
-                'year': t[2] or 0,
-                'media_type': t[3] or 'movie',
-                'poster_url': t[4] or '',
-                'rating': float(t[5] or 0),
-                'genres': t[6] or '[]',
-                'description': t[7] or '',
-                'is_free': t[8] or 0,
-                'file_id': str(t[9]) if t[9] else None,
-            })
-
-        episodes_list = []
-        for ep in episodes:
-            episodes_list.append({
-                'id': ep[0],
-                'title_id': ep[1],
-                'season': ep[2] or 1,
-                'episode': ep[3] or 1,
-                'label': ep[4] or '',
-                'quality': ep[5] or '',
-                'is_free': ep[6] or 0,
-                'file_id': str(ep[7]) if ep[7] else None,
-            })
+            # Episodes — files table has season/episode columns
+            episodes_list = []
+            if title_ids:
+                placeholders = ",".join("?" * len(title_ids))
+                ep_rows = conn.execute(
+                    f"""
+                    SELECT id, title_id, filename, season, episode, share_url
+                    FROM files
+                    WHERE title_id IN ({placeholders})
+                      AND season IS NOT NULL AND season > 0
+                    ORDER BY title_id, season, episode
+                    """,
+                    title_ids
+                ).fetchall()
+                for r in ep_rows:
+                    episodes_list.append({
+                        "id":       r["id"],
+                        "title_id": r["title_id"],
+                        "file_id":  str(r["id"]),
+                        "season":   r["season"],
+                        "episode":  r["episode"],
+                        "label":    f"S{r['season']:02d}E{r['episode']:02d}",
+                        "share_url": r["share_url"] or "",
+                        "quality":  None,
+                        "is_free":  0,
+                    })
 
         update_data = {
             'version': int(time.time()),
             'generated_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
             'titles': titles_list,
             'episodes': episodes_list,
-            'removed_ids': [],
         }
 
         # Save locally
@@ -163,7 +180,7 @@ def generate_db_update():
             'radd-hub', 'data', 'db_update.json'
         )
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(update_data, f, ensure_ascii=False, indent=2)
+            _json.dump(update_data, f, ensure_ascii=False, indent=2)
 
         return jsonify({
             'success': True,
