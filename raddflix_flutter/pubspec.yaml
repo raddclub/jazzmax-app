@@ -82,6 +82,9 @@ dependencies:
   # Open URLs (for update dialog)
   url_launcher: ^6.3.0
 
+  # Share files and text (used in debug_logger.dart)
+  share_plus: ^10.0.2
+
   # Disk space info for downloads screen
   disk_space_plus: ^0.2.0
 
