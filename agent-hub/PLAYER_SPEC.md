@@ -1,7 +1,7 @@
 # RaddFlix Player — Supreme Customizable Player Specification
 > **Task for next agent:** Implement everything in this document into `player_screen.dart` and related files.
 > **Research basis:** MX Player, VLC, nPlayer, Infuse, KMPlayer, BSPlayer, Kodi, PowerDVD, Nova, Just Player, mpv, Vimu, PlayerXtreme, Plex, Jellyfin, Potplayer
-> **Last updated:** 2026-05-26 Session 5
+> **Last updated:** 2026-05-26 Session 6
 > **Status:** SPEC ONLY — no code written yet for new features
 
 ---
@@ -19,7 +19,7 @@ Current `player_screen.dart` already has:
 - ✅ Audio track selection panel
 - ✅ Subtitle track selection panel (embedded)
 - ✅ Sleep timer panel + badge
-- ✅ Skip intro button (fixed at 85s — needs to be dynamic)
+- ✅ Skip intro button (fixed at 85s — **needs to be replaced with smart version, see §3.3**)
 - ✅ Next episode countdown overlay
 - ✅ PiP via MethodChannel
 - ✅ Chromecast via MethodChannel
@@ -31,33 +31,48 @@ Build ON TOP of these. Do not remove them.
 
 ---
 
+## 0.1 Platform
+
+**Android only.** This app has no iOS users. Do not add any iOS-specific code, conditions, or comments. All MPV video and audio filters work without restriction on Android.
+
+---
+
 ## 1. Architecture — New Files to Create
 
 ```
 raddflix_flutter/lib/
 ├── screens/
-│   ├── player_screen.dart              ← existing, expand this
-│   └── player_settings_screen.dart     ← NEW: full player customization UI
+│   ├── player_screen.dart                  ← existing, expand this
+│   └── player_settings_screen.dart         ← NEW: full player customization UI
 ├── core/
 │   ├── player/
-│   │   ├── player_prefs.dart           ← NEW: all player preferences model + SharedPrefs persistence
-│   │   ├── player_prefs_provider.dart  ← NEW: Riverpod StateNotifier for player prefs
-│   │   ├── subtitle_service.dart       ← NEW: auto-detect + parse + style subtitles
-│   │   ├── ab_loop_controller.dart     ← NEW: A-B loop logic
-│   │   ├── equalizer_controller.dart   ← NEW: EQ state + media_kit EQ integration
-│   │   └── player_button_layout.dart   ← NEW: customizable button position model
+│   │   ├── player_prefs.dart               ← NEW: all player preferences model + SharedPrefs persistence
+│   │   ├── player_prefs_provider.dart      ← NEW: Riverpod StateNotifier for player prefs
+│   │   ├── subtitle_service.dart           ← NEW: auto-detect + parse + style subtitles
+│   │   ├── ab_loop_controller.dart         ← NEW: A-B loop logic
+│   │   ├── equalizer_controller.dart       ← NEW: EQ state + media_kit EQ integration
+│   │   ├── player_button_layout.dart       ← NEW: customizable button position model
+│   │   ├── smart_intro_store.dart          ← NEW: save/load intro times per series
+│   │   ├── ambilight_controller.dart       ← NEW: frame color sampling + glow state
+│   │   ├── binge_guard_controller.dart     ← NEW: session watch time tracker
+│   │   └── scene_bookmark_store.dart       ← NEW: save/load bookmarks to SQLite
 │   └── services/
-│       └── subtitle_search_service.dart ← NEW: OpenSubtitles API integration
+│       └── subtitle_search_service.dart    ← NEW: OpenSubtitles API integration (needs API key)
 ├── widgets/player/
-│   ├── player_gesture_layer.dart       ← NEW: extracted, configurable gesture zones
-│   ├── cinematic_overlay.dart          ← NEW: cinematic mode layer
-│   ├── subtitle_overlay.dart           ← NEW: styled subtitle rendering
-│   ├── seek_thumbnail.dart             ← NEW: thumbnail preview on seek
-│   ├── eq_panel.dart                   ← NEW: 10-band equalizer widget
-│   ├── ab_loop_panel.dart              ← NEW: A-B loop control widget
-│   ├── video_enhance_panel.dart        ← NEW: brightness/contrast/saturation/hue
-│   ├── player_button_editor.dart       ← NEW: drag-to-rearrange button layout editor
-│   └── player_controls_bar.dart        ← NEW: bottom control bar (customizable)
+│   ├── player_gesture_layer.dart           ← NEW: extracted, configurable gesture zones
+│   ├── cinematic_overlay.dart              ← NEW: cinematic mode layer
+│   ├── subtitle_overlay.dart               ← NEW: styled subtitle rendering
+│   ├── seek_thumbnail.dart                 ← NEW: thumbnail preview on seek (local files only)
+│   ├── eq_panel.dart                       ← NEW: 10-band equalizer widget
+│   ├── ab_loop_panel.dart                  ← NEW: A-B loop control widget
+│   ├── video_enhance_panel.dart            ← NEW: brightness/contrast/saturation/hue
+│   ├── player_button_editor.dart           ← NEW: enable/disable + reorder buttons
+│   ├── player_controls_bar.dart            ← NEW: bottom control bar (customizable)
+│   ├── ambilight_glow_border.dart          ← NEW: animated glow ring around video
+│   ├── transparent_player_overlay.dart     ← NEW: ghost/see-through player controls
+│   ├── scene_bookmarks_panel.dart          ← NEW: bookmark list + add bookmark UI
+│   ├── binge_guard_overlay.dart            ← NEW: take-a-break screen
+│   └── episode_recap_sheet.dart            ← NEW: "play last 60s of prev episode" prompt
 ```
 
 ---
@@ -75,101 +90,120 @@ class PlayerPrefs {
   bool swipeSeekEnabled;         // horizontal swipe = seek (default: true)
   bool doubleTapSeekEnabled;     // double-tap left/right to seek (default: true)
   int doubleTapSeekSeconds;      // 5/10/15/20/30 (default: 10)
-  bool longPressSpeedEnabled;    // long-press for 2× speed (default: true)
+  bool longPressSpeedEnabled;    // long-press for speed boost (default: true)
   double longPressSpeed;         // 1.5/2.0/2.5/3.0 (default: 2.0)
   bool pinchZoomEnabled;         // pinch to zoom (default: true)
   double swipeSensitivity;       // 0.5 – 2.0 (default: 1.0)
   double seekSensitivity;        // 0.5 – 2.0 (default: 1.0)
   double gestureZoneWidth;       // % of screen for left/right zones (default: 0.4 = 40%)
+  bool rageSkipEnabled;          // triple-tap center for mega-skip (default: true)
+  int rageSkipSeconds;           // 60/120/180/300 (default: 120)
 
   // ── CONTROL BAR SETTINGS ─────────────────────────────────────
-  List<String> topBarButtons;    // ordered list of visible top-bar button IDs
-  List<String> bottomBarButtons; // ordered list of visible bottom-bar button IDs
+  List<String> topBarButtons;
+  List<String> bottomBarButtons;
   double buttonSize;             // 0.8 – 1.4 scale (default: 1.0)
   double controlBarOpacity;      // 0.3 – 1.0 (default: 0.85)
   int autoHideSeconds;           // 2/3/5/10/0=never (default: 3)
-  bool showSeekBar;              // show/hide seek bar (default: true)
-  bool showTimeElapsed;          // show elapsed time (default: true)
-  bool showTimeRemaining;        // show remaining time (default: false)
-  bool showChapterMarkers;       // show chapter markers on seek bar (default: true)
-  bool showThumbnailPreview;     // thumbnail preview while scrubbing (default: true)
-  bool showBufferBar;            // show buffered amount on seek bar (default: true)
-  bool compactTopBar;            // single-row top bar vs expanded (default: false)
+  bool showSeekBar;
+  bool showTimeElapsed;
+  bool showTimeRemaining;
+  bool showChapterMarkers;
+  bool showThumbnailPreview;     // local/downloaded files only
+  bool showBufferBar;
+  bool compactTopBar;
   String seekBarThumbStyle;      // 'dot' / 'line' / 'circle' (default: 'circle')
-  String controlsPosition;       // 'bottom' / 'sides' (future, default: 'bottom')
-
-  // ── AVAILABLE BUTTON IDs (can be enabled/disabled/repositioned) ──
-  // Top bar: 'back' 'title' 'audio' 'subtitle' 'ratio' 'speed'
-  //          'pip' 'cast' 'sleep' 'rotate' 'screenshot' 'more'
-  // Bottom bar: 'seek_back' 'play_pause' 'seek_forward' 'next_ep'
-  //             'lock' 'seek_bar' 'time' 'ab_loop' 'boost_volume' 'eq'
 
   // ── SUBTITLE SETTINGS ────────────────────────────────────────
-  bool subtitleAutoDetect;       // auto-detect .srt/.ass in same folder (default: true)
+  bool subtitleAutoDetect;       // auto-detect .srt/.ass in same folder — local files only
   String subtitleEncoding;       // 'utf-8' / 'latin1' / 'windows-1252' / 'auto' (default: 'auto')
   double subtitleFontSize;       // 10 – 40 (default: 18)
-  String subtitleFontFamily;     // 'Sans-Serif' / 'Serif' / 'Monospace' / 'system' (default: 'Sans-Serif')
-  bool subtitleBold;             // (default: false)
-  bool subtitleItalic;           // (default: false)
+  String subtitleFontFamily;     // 'Sans-Serif' / 'Serif' / 'Monospace' (default: 'Sans-Serif')
+  bool subtitleBold;
+  bool subtitleItalic;
   Color subtitleTextColor;       // (default: Colors.white)
   Color subtitleOutlineColor;    // (default: Colors.black)
   double subtitleOutlineThickness; // 0 – 4 (default: 2.0)
-  Color subtitleBackgroundColor; // (default: Colors.transparent)
+  Color subtitleBackgroundColor;
   double subtitleBackgroundOpacity; // 0 – 1 (default: 0.0)
   String subtitlePosition;       // 'bottom' / 'top' / 'center' (default: 'bottom')
-  double subtitleVerticalOffset; // % from edge (default: 0.1 = 10%)
+  double subtitleVerticalOffset; // % from edge (default: 0.1)
   int subtitleTimingOffsetMs;    // -5000 – +5000 ms (default: 0)
-  bool subtitleEnabled;          // global on/off (default: true)
+  bool subtitleEnabled;
 
   // ── AUDIO SETTINGS ───────────────────────────────────────────
   int audioTimingOffsetMs;       // -5000 – +5000 ms (default: 0)
-  double volumeBoost;            // 1.0 – 3.0 (100% – 300%) (default: 1.0)
-  bool equalizerEnabled;         // (default: false)
-  String equalizerPreset;        // 'flat'/'rock'/'pop'/'bass'/'movie'/'custom' (default: 'flat')
-  List<double> equalizerBands;   // 10 values: -12.0 to +12.0 dB (default: all 0.0)
-  bool audioNormalization;       // (default: false)
+  double volumeBoost;            // 1.0 – 3.0 (100%–300%) (default: 1.0)
+  bool equalizerEnabled;
+  String equalizerPreset;        // 'flat'/'rock'/'pop'/'bass'/'movie'/'voice'/'custom' (default: 'flat')
+  List<double> equalizerBands;   // 10 values: -12.0 to +12.0 dB
+  bool audioNormalization;
   bool stereoMono;               // false=stereo, true=mono (default: false)
-  double audioBalance;           // -1.0 (left) to 1.0 (right) (default: 0.0)
+  double audioBalance;           // -1.0 (left) to +1.0 (right) (default: 0.0)
+  bool dialogueBoostEnabled;     // voice clarity mode — boosts 300Hz–3kHz (default: false)
 
   // ── VIDEO ENHANCEMENT ────────────────────────────────────────
-  double brightness;             // -0.5 – +0.5 (default: 0.0 = system)
+  double brightness;             // -0.5 – +0.5 (default: 0.0)
   double contrast;               // -0.5 – +0.5 (default: 0.0)
   double saturation;             // -0.5 – +0.5 (default: 0.0)
   double hue;                    // -180 – +180 degrees (default: 0.0)
-  bool nightMode;                // warm tint overlay (default: false)
+  bool nightMode;
   double nightModeIntensity;     // 0.1 – 1.0 (default: 0.5)
-  bool sharpnessEnabled;         // (default: false)
+  bool sharpnessEnabled;
   double sharpness;              // 0.0 – 1.0 (default: 0.3)
 
   // ── PLAYBACK SETTINGS ────────────────────────────────────────
-  double playbackSpeed;          // 0.25/0.5/0.75/1.0/1.25/1.5/1.75/2.0/2.5/3.0/4.0 (default: 1.0)
-  bool rememberSpeed;            // persist speed across sessions (default: false)
-  bool rememberPosition;         // resume from last position (default: true)
-  bool autoPlayNext;             // auto-play next episode (default: true)
+  double playbackSpeed;
+  bool rememberSpeed;
+  bool rememberPosition;
+  bool autoPlayNext;
   int nextEpisodeCountdown;      // 5/10/15 seconds (default: 10)
-  bool skipSilence;              // auto-skip quiet sections (default: false)
-  double skipSilenceThreshold;   // volume level that counts as silence 0.01-0.1 (default: 0.03)
-  bool hwDecoderEnabled;         // hardware decoding (default: true)
-  bool backgroundPlayEnabled;    // audio continues in background (default: false)
-  bool preventScreenOff;         // keep screen on during playback (default: true)
-  bool autoRotate;               // auto-rotate based on video aspect (default: true)
+  bool hwDecoderEnabled;
+  bool backgroundPlayEnabled;
+  bool preventScreenOff;
+  bool autoRotate;
+
+  // ── SMART SKIP INTRO ─────────────────────────────────────────
+  // Series intro times are stored separately in SmartIntroStore (SharedPrefs JSON map)
+  // Key: series_id (String), Value: intro_end_seconds (int)
+  bool autoSkipIntroEnabled;     // auto-skip without showing button (default: false)
+  bool showSkipIntroButton;      // show button when intro time is known (default: true)
+
+  // ── TRANSPARENT / GHOST PLAYER ───────────────────────────────
+  bool transparentModeEnabled;          // (default: false)
+  double transparentModeOpacity;        // 0.2 – 1.0 (default: 0.5)
+  bool transparentModeFrostedControls;  // frosted glass on control overlay (default: true)
+
+  // ── AMBILIGHT MODE ───────────────────────────────────────────
+  bool ambilightEnabled;                // (default: false)
+  double ambilightIntensity;            // 0.3 – 1.0 (default: 0.7)
+  double ambilightBlurRadius;           // 20 – 80 (default: 40)
+  int ambilightSampleIntervalMs;        // 200 – 1000ms (default: 400)
+
+  // ── BINGE GUARD ──────────────────────────────────────────────
+  bool bingeGuardEnabled;               // (default: false)
+  int bingeGuardThresholdMinutes;       // 60/90/120/180 (default: 120)
+
+  // ── SLEEP FADE ───────────────────────────────────────────────
+  bool sleepFadeEnabled;                // fade volume before stop (default: true)
+  int sleepFadeDurationSeconds;         // 15/30/60 (default: 30)
+
+  // ── SCENE BOOKMARKS ──────────────────────────────────────────
+  // Bookmarks are stored in SQLite, not SharedPrefs (see SceneBookmarkStore)
+  bool bookmarkVibrate;                 // haptic when bookmark saved (default: true)
 
   // ── MODES ────────────────────────────────────────────────────
-  bool cinematicModeOnLock;      // lock button activates cinematic mode (default: false)
-  bool gesturesInCinematic;      // gestures still work in cinematic (default: true)
-  String cinematicTapBehavior;   // 'pause_resume' / 'show_controls' (default: 'pause_resume')
+  bool cinematicModeOnLock;
+  bool gesturesInCinematic;
+  String cinematicTapBehavior;          // 'pause_resume' / 'show_controls' (default: 'pause_resume')
 
   // ── UI APPEARANCE ─────────────────────────────────────────────
-  String accentColor;            // hex color for seek bar + icons (default: '#E8002D')
-  double uiFontSize;             // 0.8 – 1.2 scale for UI labels (default: 1.0)
-  bool showEpisodeInfo;          // episode number in header (default: true)
-  bool showNetworkSpeed;         // show KB/s for streams (default: false)
-  bool showDecoderInfo;          // HW/SW badge (default: false)
-  bool vibrateOnGesture;         // haptic on double-tap (default: true)
-
-  // ── QUICK TOGGLES (shown in player ≥ controls) ───────────────
-  // These are master toggles user can flip from the player settings button
-  // (accessible via the 'more' button or a gear icon in top bar)
+  String accentColor;                   // hex (default: '#E8002D')
+  double uiFontSize;                    // 0.8 – 1.2 scale (default: 1.0)
+  bool showEpisodeInfo;
+  bool showNetworkSpeed;
+  bool showDecoderInfo;
+  bool vibrateOnGesture;
 }
 ```
 
@@ -187,7 +221,7 @@ class PlayerPrefs {
 └─────────────────────────────────────────┘
 ```
 
-**Gestures:**
+**All gestures:**
 | Gesture | Action | Configurable |
 |---|---|---|
 | Swipe up/down left zone | Brightness ±% | ✅ disable, sensitivity |
@@ -196,600 +230,529 @@ class PlayerPrefs {
 | Double-tap left zone | Seek back N seconds | ✅ N = 5/10/15/20/30 |
 | Double-tap right zone | Seek forward N seconds | ✅ N = 5/10/15/20/30 |
 | Double-tap center | Play/Pause | ✅ enable/disable |
-| Single tap center | Show/hide controls | ✅ always |
-| Long-press | 2× speed (hold) | ✅ disable, speed value |
+| Single tap center | Show/hide controls | always |
+| Long-press | Speed boost (hold) | ✅ disable, speed value |
 | Pinch | Zoom in/out | ✅ disable |
-| Two-finger swipe up/down | Zoom discrete | ✅ |
+| Triple-tap center | Rage Skip | ✅ enable/disable, seconds |
 | Swipe from left edge | Chapter prev | ✅ enable/disable |
 | Swipe from right edge | Chapter next | ✅ enable/disable |
 
 **Visual feedback:**
 - Brightness/volume: centered pill with icon + bar + % value
-- Seek: centered pill with `MM:SS (±Ns)` and left/right arrow animation
+- Seek: centered pill with `MM:SS (±Ns)` and arrow animation
 - Zoom: top-center badge showing `1.2×`
 - Double-tap: ripple animation + seek flash overlay
+- **Rage Skip**: full-width red flash + "RAGE SKIP ⚡ +2:00" badge
 
 ---
 
 ### 3.2 Cinematic Mode
 
-**What it is:** Complete UI blackout — zero chrome, zero distractions. Inspired by Infuse's cinematic mode and Kodi's full-screen mode.
+Cinematic mode is a "pure focus" state — UI completely disappears, only video remains. Gestures still work.
+
+**Entry:**
+- Tap the lock button (if `prefs.cinematicModeOnLock = true`)
+- OR tap a dedicated "Cinematic" button in top bar
 
 **Behavior:**
-- All controls hidden (seek bar, buttons, title, time — everything)
-- Screen stays on (wakelock)
-- Single tap: either pause/resume OR show controls (user-configurable)
-- Gestures still work (brightness, volume, seek)
-- **Lock button single-tap** → enters cinematic mode (configurable)
-- While in cinematic: swipe from any edge shows a minimal unlock strip
-- Unlock strip: just lock icon + play/pause icon, auto-hides in 2s
-- Exit cinematic: tap unlock strip lock icon, or press Android back
-- **Visual:** Fade-to-black animation (300ms) when entering
+- All controls, seek bar, top bar hidden completely
+- Status bar hidden
+- Black bars behind video are fully black (no UI chrome)
+- Gestures still active (brightness, volume, seek)
+- If `cinematicTapBehavior = 'pause_resume'`: single tap = play/pause (no controls shown)
+- If `cinematicTapBehavior = 'show_controls'`: single tap shows controls for 2s then hides
 
-**Cinematic mode indicator:**
-- When entering: brief "Cinematic Mode" text fades in/out over center
-- Sleep timer badge still shows (top-right, very subtle)
+**Exit:**
+- Swipe from bottom edge → shows a minimal strip (seek bar + play/pause + time) for 3s
+- Tap lock/cinematic button again
 
 ---
 
-### 3.3 Subtitle System
+### 3.3 Smart Skip Intro
 
-**Auto-detection (like MX Player):**
-1. On file open, extract video file path/name (strip extension)
-2. Search same directory for: `filename.srt`, `filename.en.srt`, `filename.ass`, `filename.ssa`, `filename.vtt`, `filename.sub`, `filename.smi`, `filename.ttml`
-3. Also search for any `.srt`/`.ass` files in same folder
-4. Show detected files in subtitle track list under "External" section
-5. Auto-load if only one found and `subtitleAutoDetect` is true
-6. For network streams: check if server provides subtitle URL alongside video URL
+**Rules — when to show:**
+- ✅ Show for: `series`, `drama`, `anime`, `donghua`, `cartoon`, `show`
+- ❌ Never show for: `movie`, `song`, `clip`, `short`, `documentary`, `music_video`
+- ❌ Never show if video duration < 10 minutes
+- The content type comes from the catalog data passed to `PlayerScreen`
 
-**Supported formats:** SRT, ASS, SSA, VTT, SUB, SMI, TTML, LRC, XML/TTML  
-(media_kit handles embedded MKV subs; external files need parsing)
+**Smart per-series memory (`SmartIntroStore`):**
+```dart
+class SmartIntroStore {
+  // Key: series_id (String)
+  // Value: intro_end_seconds (int)
+  // Stored: SharedPrefs as JSON map under 'player_intro_times'
 
-**Subtitle styling panel** (accessible from subtitle button long-press or settings):
-```
-┌─── Subtitle Style ─────────────────────────────┐
-│ Font Size        [──●────────] 18px             │
-│ Font Family      [Sans-Serif ▼]                 │
-│ Bold [✓]  Italic [ ]                            │
-│                                                 │
-│ Text Color       [████ White  ▼]                │
-│ Outline Color    [████ Black  ▼]                │
-│ Outline Thickness [──●────] 2px                 │
-│                                                 │
-│ Background       [████ None   ▼]                │
-│ Background Opacity [────●───] 0%                │
-│                                                 │
-│ Position         [Bottom ●] [Top] [Center]      │
-│ Vertical Offset  [────●────] 10%                │
-│                                                 │
-│ Timing Offset    [-500ms ──●── +500ms]          │
-│                  Current: +0ms                  │
-│                                                 │
-│ Encoding         [Auto-detect ▼]                │
-│                                                 │
-│         [Reset to defaults]  [Done]             │
-└─────────────────────────────────────────────────┘
+  Future<int?> getIntroTime(String seriesId);
+  Future<void> saveIntroTime(String seriesId, int seconds);
+  Future<void> clearIntroTime(String seriesId);
+}
 ```
 
-**Subtitle timing adjustment:** Also accessible via a quick ± button while subs are active (show +500ms / -500ms quick buttons in controls)
+**Flow:**
+1. User is watching episode of a series
+2. If `SmartIntroStore` has a saved intro time for this `series_id`:
+   - At that timestamp: show "Skip Intro" button (or auto-skip if `autoSkipIntroEnabled`)
+   - Small "Reset" icon next to button lets user clear the saved time
+3. If no saved time yet:
+   - No skip intro button shown by default
+   - After first play, show one-time tooltip: "Long-press seek bar to set intro end time"
+   - When user manually taps Skip Intro at any point: save current position as intro time for this series
+4. Saved intro times apply to ALL episodes of that series (they all have the same intro)
 
-**Online subtitle search (Phase 2 — optional):**
-- Via OpenSubtitles API (free tier)
-- Search by movie/show name + language
-- Download and apply directly
-
----
-
-### 3.4 Audio System
-
-**Audio delay panel:**
-```
-Audio Sync: [-5000ms ──●── +5000ms]
-            Current: +0ms
-[−500ms]  [−100ms]  [−50ms]  [+50ms]  [+100ms]  [+500ms]
-```
-
-**10-Band Equalizer:**
-```
-┌─── Equalizer ───────────────────────────────────────┐
-│ [✓ Enabled]    Preset: [Rock ▼]                     │
-│                                                     │
-│ +12dB  ┤   │   │   │   │   │   │   │   │   │       │
-│  +6dB  ┤   █   │   │   │   │   │   │   │   │       │
-│   0dB  ┼───────────────────────────────────────     │
-│  -6dB  ┤   │   │   │   │   │   │   │   █   │       │
-│ -12dB  ┤   │   │   │   │   │   │   │   │   │       │
-│       60 170 310 600  1K  3K  6K 12K 14K 16K Hz    │
-│                                                     │
-│ Presets: [Flat][Rock][Pop][Bass][Movie][Treble]     │
-│          [Classical][Jazz][Custom]                   │
-│                                                     │
-│ Bass Boost: [──●────] 0dB                           │
-│ Audio Norm: [ ] Normalize volume                    │
-│ Volume Boost: [──●────] 100%  (up to 300%)         │
-│ Balance:    L [────●────] R                         │
-│                                                     │
-│              [Reset]        [Done]                  │
-└─────────────────────────────────────────────────────┘
-```
-Note: media_kit supports setting EQ via MPV's `af` (audio filter) command: `player.setProperty('af', 'equalizer=f=60:width_type=o:width=2:g=6.0,...')`
-
-**Presets (dB values per band: 60/170/310/600/1K/3K/6K/12K/14K/16K Hz):**
-- Flat: [0,0,0,0,0,0,0,0,0,0]
-- Rock: [+5,+3,0,0,-2,+3,+5,+5,+4,+3]
-- Pop: [0,0,+2,+4,+4,+2,0,-1,-1,0]
-- Bass Boost: [+8,+7,+5,+3,0,0,0,0,0,0]
-- Movie/Cinema: [+3,+2,0,0,0,+2,+3,+3,+2,+1]
-- Classical: [0,0,0,0,0,0,-3,-4,-4,-5]
-- Jazz: [+3,+2,0,+3,+4,+3,+1,+2,+3,+2]
-- Treble: [0,0,0,0,0,+3,+5,+6,+6,+7]
-
----
-
-### 3.5 Video Enhancement
-
-Panel (accessible from long-press on fit/ratio button, or from settings):
-```
-┌─── Picture ──────────────────────────────────────┐
-│ Brightness  [-50% ──●── +50%]  Current: 0%       │
-│ Contrast    [-50% ──●── +50%]  Current: 0%       │
-│ Saturation  [-50% ──●── +50%]  Current: 0%       │
-│ Hue         [-180° ──●── +180°] Current: 0°      │
-│ Sharpness   [Off ──────●──] 30%                  │
-│                                                  │
-│ Night Mode  [✓]  Intensity [────●────] 50%       │
-│ (adds warm amber tint for dark-room viewing)     │
-│                                                  │
-│              [Reset All]    [Done]               │
-└──────────────────────────────────────────────────┘
-```
-Implementation: media_kit/mpv supports `vf` (video filter):
-- Brightness/Contrast/Saturation/Hue: `eq=brightness=X:contrast=Y:saturation=Z:gamma=1`
-- Night mode: `colorchannelmixer=0.9:0.1:0.05:0:0.01:0.8:0.05:0:0:0:0.7:0` (amber tint)
-- Sharpness: `unsharp=lx=3:ly=3:la=X`
-
----
-
-### 3.6 A-B Loop
-
-**What it is:** User sets a start point (A) and end point (B). Player loops that section forever.  
-Used for: language learning, studying scenes, repeating a song section.
+**Manual set:**
+- Long-press seek bar → context menu with "Set intro end here" option
+- Saves current position as intro_end_seconds for this series
 
 **UI:**
-- A-B Loop button in bottom bar (can be hidden via customization)
-- First tap: sets A point → button shows "[A] →" with A timestamp
-- Second tap: sets B point → button shows "[A→B]" looping badge, loop begins
-- Third tap: clears both → "A-B" icon resets
-
-**Visual while looping:**
-- Seek bar shows a colored region between A and B markers
-- Loop icon badge visible in top bar (replaces nothing, just appears)
-- When playback hits B, instantly seeks to A
-
----
-
-### 3.7 Speed Control (Enhanced)
-
-**Available speeds:** 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0  
-**Custom speed:** Slider from 0.25 to 4.0 in 0.05 increments  
-**Quick access:** Long-press speed button for direct slider  
-**Remember speed:** Option to persist speed per title or globally
-
-**Speed indicator:**
-- When speed ≠ 1×: small badge on seek bar area showing current speed  
-- During long-press fast: "2.0× Speed" badge at top center
+```
+┌─────────────────────────────────────────────┐
+│                                              │
+│                                   [Skip Intro ↺]  │
+│                                              │
+└─────────────────────────────────────────────┘
+```
+Bottom-right corner, pill button. Tapping skips to `intro_end_seconds`. Long-pressing the button → "Clear saved time for this series".
 
 ---
 
-### 3.8 Frame-by-Frame
+### 3.4 A-B Loop
 
-- Previous frame: available via `player.state.position - Duration(milliseconds: 42)` (approx 1/24fps)
-- Next frame: accessible via MPV `frame-step` command: `player.setProperty('pause', 'yes')` then `player.command(['frame-step'])`
-- Surface: two small buttons (‹ ›) appear when playback is paused and user long-presses the pause button
-- Auto-hide when play resumes
+User sets point A (start) and point B (end). Player loops between them until user cancels.
 
----
+**UI (bottom control bar when active):**
+```
+[A●] ──────────────────────── [●B]  [✕ Loop]
+```
+- Tap A-B button → set A at current position, button turns orange
+- Tap again → set B at current position, loop begins, button turns red
+- Tap again → clear loop
 
-### 3.9 Chapter Support
-
-- media_kit exposes `player.state.tracks` — check for chapter data
-- Chapters displayed as tick marks on seek bar
-- Long-press seek bar → chapter list popup
-- Swipe from screen edges (configurable) → prev/next chapter
-- Chapter name shown briefly in top-center when seeking between chapters
-
----
-
-### 3.10 Skip Silence
-
-- media_kit/mpv: `player.setProperty('af', 'silencedetect=n=-30dB:d=0.5')`  
-  (Listen for `silence_start`/`silence_end` log events, seek forward)
-- Toggle from player settings or quick toggle
-- Visual: "Skipped Xs of silence" toast when triggered
-- Threshold configurable (very quiet vs moderate silence)
+**Behavior:**
+- When position reaches B: seek back to A and continue
+- Seek bar shows A and B markers as colored dots
 
 ---
 
-### 3.11 Screenshot
+### 3.5 Subtitle System
 
-- `player.screenshot()` — returns `Uint8List?`
-- Save to device gallery: use `image_gallery_saver` or `gal` package
-- Button: available in top bar (optional, can be hidden)
-- Toast: "Screenshot saved" with thumbnail preview
+**Auto-detect (local files only):**
+- Scan same directory as video for `.srt` `.ass` `.ssa` `.vtt` `.sub`
+- Add found files to subtitle track list
+- For streaming URLs: not applicable (no local directory)
+
+**Styling panel (accessible from subtitle track button → "Style" tab):**
+- Font size slider (10–40)
+- Font family picker (Sans-Serif / Serif / Monospace)
+- Bold / Italic toggles
+- Text color picker (flutter_colorpicker)
+- Outline color + thickness slider
+- Background color + opacity slider
+- Position: Bottom / Top / Center
+- Vertical offset slider
+
+**Timing:**
+- Subtitle delay slider: -5000ms to +5000ms (shown in subtitle panel)
+- Changes take effect immediately via MPV `sub-delay` property
+
+**Encoding:**
+- Auto-detect via charset detection
+- Manual override: UTF-8 / Latin-1 / Windows-1252
 
 ---
 
-### 3.12 Seek Thumbnail Preview
+### 3.6 Audio System
 
-**What it is:** As user drags the seek bar, a small thumbnail image appears above the thumb showing the frame at that position. Like YouTube or MX Player.
+**Equalizer (10-band):**
+- Bands: 60Hz / 170Hz / 310Hz / 600Hz / 1kHz / 3kHz / 6kHz / 12kHz / 14kHz / 16kHz
+- Gain: -12dB to +12dB per band
+- Presets: Flat / Rock / Pop / Bass Boost / Movie / Voice / Custom
+- Applied via MPV `af=equalizer=...` filter chain
+
+**Dialogue Boost (Voice Clarity Mode):**
+- One-tap toggle in quick settings panel
+- Applies a fixed EQ preset targeting human voice frequencies:
+  - 60Hz: 0dB, 170Hz: 0dB, 310Hz: +2dB, 600Hz: +4dB
+  - 1kHz: +5dB, 3kHz: +4dB, 6kHz: +2dB, 12kHz: 0dB, 14kHz: 0dB, 16kHz: 0dB
+- Cannot be active at the same time as custom EQ (one overrides the other)
+- Perfect for Pakistani dramas where dialogue clarity matters
+
+**Volume Boost:**
+- System volume at max + MPV volume property above 100
+- Range: 100%–300%
+- `VolumeController.instance.maxVolume()` + `player.setProperty('volume', '${boost * 100}')`
+
+**Audio delay:** MPV `audio-delay` property, -5000ms to +5000ms
+
+**Audio normalization:** MPV `dynaudnorm` filter, toggle on/off
+
+**Stereo/Mono + Balance:** MPV `pan` audio filter
+
+---
+
+### 3.7 Video Enhancement
+
+Applied via MPV `vf=eq=brightness=X:contrast=Y:saturation=Z:gamma=1.0` filter.
+
+| Setting | Range | MPV property |
+|---|---|---|
+| Brightness | -0.5 – +0.5 | `eq=brightness=` |
+| Contrast | -0.5 – +0.5 | `eq=contrast=` |
+| Saturation | -0.5 – +0.5 | `eq=saturation=` |
+| Hue | -180 – +180° | `eq=hue=` (convert to 0.0–1.0 for MPV) |
+| Night Mode | warm amber tint | `colorchannelmixer` filter |
+| Sharpness | 0.0 – 1.0 | `unsharp` filter |
+
+All filters stack: combine all active filters into one `vf=` string and set once.
+
+Night mode MPV string:
+```dart
+'colorchannelmixer=rr=0.9:rg=0.1:rb=0.05:gr=0.01:gg=0.8:gb=0.05:br=0:bg=0:bb=0.7'
+```
+
+---
+
+### 3.8 Transparent / Ghost Player Mode ★ NEW — Never Seen Before
+
+A mode where the video plays at a configurable opacity, letting you see through it. The control overlay uses frosted glass. Think "watching while working" — video ghosted over your home screen content.
+
+**Activation:**
+- Button in top bar (ghost icon) OR in quick settings panel
+- Entering this mode does NOT pause playback
+
+**Behavior:**
+```
+┌────────────────────────────────────────┐
+│  [Opacity slider]  20% ──●────── 100%  │
+│                                        │
+│  ░░░░░ VIDEO (semi-transparent) ░░░░░  │
+│  ░░░░░ (device content shows  ) ░░░░░  │
+│  ░░░░░ through behind video   ) ░░░░░  │
+│                                        │
+│  [Frosted glass control bar]           │
+└────────────────────────────────────────┘
+```
 
 **Implementation:**
-- `video_thumbnail` package: `VideoThumbnail.thumbnailData(video: path, timeMs: ms, quality: 50, maxWidth: 120)`
-- Generate thumbnail on seek bar drag start, update every 500ms during drag
-- Cache up to 20 thumbnails in memory
-- Show above seek bar thumb: rounded `Image` widget 120×68px
-- Only works for local files and cached streams (not live streams)
+```dart
+// Wrap VideoWidget in Opacity
+Opacity(
+  opacity: prefs.transparentModeOpacity,  // 0.2 – 1.0
+  child: Video(controller: _videoCtrl),
+)
+
+// Controls use BackdropFilter frosted glass
+ClipRRect(
+  child: BackdropFilter(
+    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+    child: Container(
+      color: Colors.black.withOpacity(0.3),
+      child: _ControlsBar(),
+    ),
+  ),
+)
+```
+
+**Opacity quick-slider:**
+- Shown as a horizontal mini-slider directly in the player when transparent mode is active
+- Position: bottom-left corner, small pill
+- Range: 20% – 100%
+
+**Use cases users love:**
+- Watch a drama while pretending to look at something else
+- Watch while reading chat messages behind the video
+- Create a "wallpaper" effect with looping video content
 
 ---
 
-### 3.13 Playback History & Resume
+### 3.9 Ambilight Glow Mode ★ NEW — Never Seen Before in Mobile Streaming
 
-- On player open: check `watch_positions` SQLite table for last position
-- If position > 5% and < 90%: show resume prompt — "Resume from 23:45?" [Resume] [Start Over]
-- Auto-save position every 5 seconds during playback
-- On player close: save final position immediately
-- Clear position when video reaches > 90% watched (mark as complete)
+Inspired by Philips Ambilight TVs. The player samples the colors at the edges of the current video frame and projects a matching colored glow around the outside of the video. The glow updates in real time as the scene changes.
+
+**What it looks like:**
+```
+    🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦
+  🟦                            🟦
+  🟦  ┌──────────────────────┐  🟦   ← glow matches current
+  🟦  │   VIDEO PLAYING      │  🟦     scene colors
+  🟦  │   (sunset scene)     │  🟦
+  🟦  └──────────────────────┘  🟦
+  🟫🟫                        🟫🟫
+    🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫🟫
+```
+
+**Implementation (`AmbiLightController`):**
+```dart
+class AmbiLightController {
+  Timer? _sampleTimer;
+  Color _topColor = Colors.black;
+  Color _bottomColor = Colors.black;
+  Color _leftColor = Colors.black;
+  Color _rightColor = Colors.black;
+
+  void start(Player player, int intervalMs) {
+    _sampleTimer = Timer.periodic(Duration(milliseconds: intervalMs), (_) async {
+      final frame = await player.screenshot(); // Uint8List?
+      if (frame == null) return;
+      // Decode image and sample edge pixel strips
+      final img = await decodeImageFromList(frame);
+      _topColor = await _sampleStrip(img, edge: 'top');
+      _bottomColor = await _sampleStrip(img, edge: 'bottom');
+      _leftColor = await _sampleStrip(img, edge: 'left');
+      _rightColor = await _sampleStrip(img, edge: 'right');
+      notifyListeners();
+    });
+  }
+}
+```
+
+**The glow widget (`AmbiLightGlowBorder`):**
+```dart
+// Wrap the entire player in a Container with animated gradient box shadow
+AnimatedContainer(
+  duration: Duration(milliseconds: 300),
+  decoration: BoxDecoration(
+    boxShadow: [
+      BoxShadow(color: _ctrl.topColor.withOpacity(intensity), blurRadius: blur, offset: Offset(0, -blur/2)),
+      BoxShadow(color: _ctrl.bottomColor.withOpacity(intensity), blurRadius: blur, offset: Offset(0, blur/2)),
+      BoxShadow(color: _ctrl.leftColor.withOpacity(intensity), blurRadius: blur, offset: Offset(-blur/2, 0)),
+      BoxShadow(color: _ctrl.rightColor.withOpacity(intensity), blurRadius: blur, offset: Offset(blur/2, 0)),
+    ],
+  ),
+  child: VideoPlayerStack(),
+)
+```
+
+**Settings:**
+- Intensity: 30% – 100%
+- Blur radius: 20px – 80px
+- Sample rate: every 200ms / 400ms / 800ms (default: 400ms)
+- Toggle: in quick settings panel
 
 ---
 
-## 4. Button Customization System
+### 3.10 Binge Guard ★ NEW
 
-### 4.1 Button IDs and Defaults
+Tracks total continuous watch time in the current app session. After a user-set threshold, shows a friendly break reminder screen. Fully dismissable — never blocks content.
 
-**Top bar (left to right):**
-```
-DEFAULT: [back] [title...........] [audio] [subtitle] [ratio] [speed] [sleep] [more]
-OPTIONAL: screenshot, rotate-lock, decoder-info, cast, pip (moved from default)
-```
+**Trigger:**
+- After N minutes of active playback (paused time does not count)
+- Default threshold: 2 hours (configurable: 1h / 1.5h / 2h / 3h / off)
 
-**Bottom bar (left to right):**
+**Break screen overlay (full-screen, semi-transparent):**
 ```
-DEFAULT: [lock] [seek_back] [play_pause] [seek_forward] [next_ep] [ab_loop] [time]
-OPTIONAL: eq, boost_volume, screenshot, pip, cast
-```
-
-**Seek bar area (always shown if `showSeekBar: true`):**
-```
-[time_elapsed] [────────●────────] [time_remaining]
-```
-
-### 4.2 Button Layout Editor UI
-
-Accessible via: Settings → Player → Customize Controls
-
-```
-┌── Customize Controls ──────────────────────────────┐
-│                                                    │
-│  TOP BAR PREVIEW:                                  │
-│  ┌──────────────────────────────────────────────┐  │
-│  │ ← │          Title         │ 🔊│📝│▣│⚡│ ⋮ │  │
-│  └──────────────────────────────────────────────┘  │
-│                                                    │
-│  BOTTOM BAR PREVIEW:                               │
-│  ┌──────────────────────────────────────────────┐  │
-│  │ 🔒│ ⟪15│  ▶  │15⟫│ ⏭│[A-B]│  00:23/45:00  │  │
-│  └──────────────────────────────────────────────┘  │
-│                                                    │
-│  AVAILABLE BUTTONS (drag to bars above):           │
-│  [ Screenshot ] [ EQ ] [ PiP ] [ Cast ] [ Boost ] │
-│  [ Decoder ]  [ Rotate ]  [ Chapters ]             │
-│                                                    │
-│  Button Size:    S [●──] M [─●─] L [──●]           │
-│  Bar Opacity:    [────●────] 85%                   │
-│  Auto-hide:      [3s ●] 5s / 10s / Never           │
-│                                                    │
-│          [Reset to defaults]  [Done ✓]             │
-└────────────────────────────────────────────────────┘
+┌────────────────────────────────────────┐
+│                                        │
+│        👀  You've watched              │
+│         2 hours straight!              │
+│                                        │
+│    🎬  12 episodes today               │
+│    ⏱  First episode: 6:30 PM          │
+│    👁  Total today: 3h 20m             │
+│                                        │
+│    [Take a 10min break]                │
+│    [Keep watching — I'm fine]          │
+│                                        │
+└────────────────────────────────────────┘
 ```
 
-Implementation note: Use `ReorderableListView` for drag-to-reorder. Store button order as `List<String>` in `PlayerPrefs`. Render buttons in order. If button not in list → hidden.
+- "Take a break" → pauses player, exits to app home
+- "Keep watching" → dismisses, resets timer (so next reminder is N hours later)
+- Stats are for current app session only, never stored permanently
 
 ---
 
-## 5. Player Settings Screen (`player_settings_screen.dart`)
+### 3.11 Sleep Fade ★ NEW — Smarter Sleep Timer
 
-Full settings screen — accessed via gear icon in player top bar (or from app Settings > Player).
+The current sleep timer stops abruptly. Sleep Fade makes it gradual and pleasant.
+
+**Behavior (when `sleepFadeEnabled = true`):**
+1. Sleep timer is set (e.g., 30 minutes)
+2. At T-30 seconds: badge shows "Sleeping in 30s..."
+3. MPV volume smoothly fades from current → 0 over the fade duration
+4. At T-0: playback pauses, volume restored to original
+5. Optional: at T-60s show a soft "Going to sleep soon..." toast
+
+**Implementation:**
+```dart
+void _startSleepFade(int secondsUntilSleep) {
+  final steps = prefs.sleepFadeDurationSeconds; // 15/30/60
+  final originalVolume = _currentVolume;
+  final stepInterval = Duration(milliseconds: (steps * 1000) ~/ 100);
+  
+  Timer.periodic(stepInterval, (t) {
+    if (!mounted) { t.cancel(); return; }
+    final progress = t.tick / 100.0;
+    final newVol = originalVolume * (1.0 - progress);
+    player.setProperty('volume', '${(newVol * 100).toInt()}');
+    if (t.tick >= 100) {
+      t.cancel();
+      player.pause();
+      player.setProperty('volume', '${(originalVolume * 100).toInt()}'); // restore
+    }
+  });
+}
+```
+
+**Settings:** fade duration: 15s / 30s / 60s. Toggle on/off.
+
+---
+
+### 3.12 Scene Bookmarks ★ NEW
+
+Save any moment in a video with an emoji label. Browse all bookmarks for an episode in a slide-up panel.
+
+**Adding a bookmark:**
+- Long-press the seek bar at any position → "Bookmark this moment" snackbar appears with emoji picker
+- Emoji options: ❤️ 🔥 😂 😮 💔 📌 ⭐ 🎯
+- Tap an emoji → bookmark saved with current timestamp + emoji + content_id + episode_id
+
+**Viewing bookmarks:**
+- Seek bar shows small colored dot for each saved bookmark
+- Tap the bookmark icon in top bar → slide-up panel:
+  ```
+  ┌─── Bookmarks ──────────────────────────────┐
+  │  ❤️  24:15  (tap to seek)                  │
+  │  🔥  47:32                                  │
+  │  😂  1:02:10                                │
+  │  ────────────────                           │
+  │  [+ Add bookmark at current time]          │
+  └────────────────────────────────────────────┘
+  ```
+- Tap any bookmark → seeks to that position
+- Long-press bookmark → delete
+
+**Storage (`SceneBookmarkStore` → SQLite):**
+```dart
+// Table: scene_bookmarks
+// Columns: id, content_id, episode_id, position_ms, emoji, created_at
+```
+
+---
+
+### 3.13 Rage Skip ★ NEW
+
+Triple-tap the center of the player to instantly skip forward a large amount (default: 2 minutes). For when a scene gets boring and you just want to move past it.
+
+**Activation:** Triple-tap center zone within 600ms
+
+**Visual feedback:**
+- Full-screen red flash for 200ms
+- Large animated badge: `"RAGE SKIP ⚡  +2:00"` slides in from center, fades out in 1 second
+
+**Implementation:**
+```dart
+int _centerTapCount = 0;
+Timer? _tapResetTimer;
+
+void _onCenterTap() {
+  _centerTapCount++;
+  _tapResetTimer?.cancel();
+  _tapResetTimer = Timer(Duration(milliseconds: 600), () => _centerTapCount = 0);
+  
+  if (_centerTapCount >= 3) {
+    _centerTapCount = 0;
+    _tapResetTimer?.cancel();
+    final skipTo = _position + Duration(seconds: prefs.rageSkipSeconds);
+    _player.seek(skipTo > _duration ? _duration : skipTo);
+    _showRageSkipAnimation();
+    HapticFeedback.heavyImpact();
+  }
+}
+```
+
+**Settings:** enable/disable, skip duration: 1min / 2min / 3min / 5min
+
+---
+
+### 3.14 Episode Recap Preview ★ NEW
+
+Before starting episode N (when N > 1), offer to play the last 60 seconds of the previous episode as a recap. Optional, dismissable, never auto-plays.
+
+**When it appears:**
+- Opening episode 2, 3, 4… of a series
+- Only shown if episode N-1 was previously watched (has a saved position = near end)
+- Bottom sheet slides up at the START of the new episode (after first 2 seconds)
+
+**UI:**
+```
+┌─── Quick Recap? ───────────────────────────┐
+│  Play the last minute of Episode 5?        │
+│  (Ep 5: Drama Title — 44:10 – 45:10)       │
+│                                            │
+│  [▶ Play Recap (1:00)]   [Skip, I remember]│
+└────────────────────────────────────────────┘
+```
+
+**Behavior:**
+- "Play Recap" → seeks current player to (duration - 60s) of previous episode URL, plays for 60s, then auto-jumps to episode N from beginning
+- "Skip, I remember" → dismisses sheet, episode N plays normally
+- Sheet auto-dismisses after 8 seconds if no input
+
+---
+
+## 4. PlayerSettingsScreen Layout
+
+Full settings screen opened via gear icon → "Full Settings →" from quick panel.
 
 ```
-Player Settings
+PlayerSettingsScreen (full page)
 ├── Gestures
-│   ├── Enable gestures (master toggle)
-│   ├── Swipe for brightness (on/off)
-│   ├── Swipe for volume (on/off)
-│   ├── Swipe to seek (on/off)
-│   ├── Double-tap seek seconds (5/10/15/20/30)
-│   ├── Long-press speed (1.5×/2×/2.5×/3×)
-│   ├── Swipe sensitivity (slider)
-│   └── Seek sensitivity (slider)
-│
+│   ├── Master gesture toggle
+│   ├── Brightness swipe (enable/sensitivity)
+│   ├── Volume swipe (enable/sensitivity)
+│   ├── Seek swipe (enable/sensitivity)
+│   ├── Double-tap seek seconds
+│   ├── Long-press speed
+│   ├── Gesture zone width
+│   └── Rage Skip (enable/seconds)
 ├── Controls
-│   ├── Customize controls (→ button layout editor)
-│   ├── Button size (S/M/L)
-│   ├── Control bar opacity (slider)
-│   ├── Auto-hide timer (2s/3s/5s/10s/Never)
-│   ├── Show seek bar (on/off)
-│   ├── Show elapsed time (on/off)
-│   ├── Show remaining time (on/off)
-│   ├── Show chapter markers (on/off)
-│   └── Seek thumbnail preview (on/off)
-│
+│   ├── Button size
+│   ├── Control bar opacity
+│   ├── Auto-hide timer
+│   ├── Show/hide each button (checkboxes)
+│   └── Seek bar options (thumb style, buffer bar, time format)
 ├── Subtitles
-│   ├── Auto-detect subtitle files (on/off)
-│   ├── Style → (→ subtitle style panel)
-│   ├── Default encoding (Auto/UTF-8/Latin/Windows-1252)
-│   └── Default timing offset (slider)
-│
+│   ├── Font size / family / bold / italic
+│   ├── Text color / outline / background
+│   ├── Position + vertical offset
+│   ├── Timing offset
+│   └── Auto-detect (local files)
 ├── Audio
-│   ├── Audio delay (slider, persists across sessions)
-│   ├── Volume boost (slider 100%-300%)
-│   ├── Equalizer → (→ EQ panel)
-│   ├── Audio normalization (on/off)
-│   ├── Stereo/Mono (toggle)
-│   └── Audio balance (L-R slider)
-│
-├── Picture
-│   ├── Picture settings → (→ video enhance panel)
-│   └── Night mode (quick toggle + intensity slider)
-│
+│   ├── Equalizer (10-band + presets)
+│   ├── Dialogue Boost toggle
+│   ├── Volume boost slider
+│   ├── Audio delay
+│   ├── Normalization
+│   └── Stereo/Mono + balance
+├── Video
+│   ├── Brightness / Contrast / Saturation / Hue sliders
+│   ├── Night Mode (toggle + intensity)
+│   └── Sharpness
+├── New Features
+│   ├── Ambilight (toggle + intensity + blur + speed)
+│   ├── Transparent Player (toggle + opacity slider)
+│   ├── Binge Guard (toggle + threshold)
+│   ├── Sleep Fade (toggle + duration)
+│   └── Rage Skip (toggle + seconds)
 ├── Playback
-│   ├── Remember playback speed (on/off)
-│   ├── Resume from last position (on/off)
-│   ├── Auto-play next episode (on/off)
-│   ├── Next episode countdown (5s/10s/15s)
-│   ├── Skip silence (on/off + threshold slider)
-│   ├── Hardware decoder (on/off)
-│   ├── Background play (on/off)
-│   └── Keep screen on (on/off)
-│
-├── Cinematic Mode
-│   ├── Lock button → cinematic mode (on/off)
-│   ├── Gestures in cinematic (on/off)
-│   └── Tap in cinematic: pause/resume OR show controls (choice)
-│
-├── Appearance
-│   ├── Accent color (color picker — 8 presets + custom hex)
-│   ├── UI font size (slider 0.8×–1.2×)
-│   ├── Show episode info in header (on/off)
-│   ├── Show network speed (on/off)
-│   ├── Haptic feedback (on/off)
-│   └── Seek bar thumb style (dot/line/circle)
-│
-└── Reset All Settings
+│   ├── Speed + remember speed
+│   ├── Resume position
+│   ├── Auto-play next episode
+│   ├── Next episode countdown
+│   ├── Hardware decoder
+│   └── Background audio
+└── Appearance
+    ├── Accent color picker
+    ├── UI font scale
+    └── Info badges (network speed, decoder info)
 ```
 
 ---
 
-## 6. Supported Formats
+## 5. Quick Settings Panel (In-Player)
 
-media_kit uses libmpv under the hood. It supports virtually everything. Document this for users:
-
-**Video containers:** MKV, MP4, AVI, MOV, WMV, FLV, 3GP, WebM, TS, M2TS, MPEG, OGV, M4V, RMVB, ASF, VOB, DIVX
-**Video codecs:** H.264, H.265/HEVC, VP8, VP9, AV1, MPEG-4, MPEG-2, Xvid, DivX, RMVB, WMV  
-**Audio codecs:** AAC, MP3, AC3/Dolby Digital, DTS, EAC3/Dolby Digital Plus, Opus, Vorbis, FLAC, PCM, TrueHD  
-**Subtitle formats (embedded):** SRT, ASS/SSA, VTT, SUBRIP, PGS (image), VobSub  
-**Subtitle formats (external):** SRT, ASS, SSA, VTT, SUB, SMI, TTML, LRC  
-**Streaming protocols:** HTTP, HTTPS, HLS (m3u8), DASH, RTMP, RTSP, MMS
-
----
-
-## 7. Modes Summary Table
-
-| Mode | How to enter | What's hidden | Gestures | Controls |
-|---|---|---|---|---|
-| **Normal** | Default | Nothing | All | Full |
-| **Cinematic** | Lock btn (configurable) | Everything | ✅ Still work | Single swipe shows strip |
-| **Locked** | Lock button (default) | All except lock btn | ✅ Still work | Just unlock button |
-| **Background** | Home button | Screen off | Volume | Audio only |
-| **PiP** | PiP button | Full screen | None | Mini controls |
-| **Cast** | Cast button | Device screen | Volume | Cast mini bar |
-
----
-
-## 8. UI Design Guidelines
-
-**Style:** AMOLED black (#000000 base), RaddFlix red (#E8002D) accent. Match existing app design system (AppColors, AppRadius, AppDurations, AppCurves from constants.dart).
-
-**Control bar background:** Gradient from black (full opacity) at edges → transparent in center for the top bar. Solid black-with-opacity for bottom bar.
-
-**Animations:**
-- Controls show: 200ms fadeIn + slideY(bottom 0.1→0)
-- Controls hide: 300ms fadeOut
-- Panels (speed/eq/etc.): slideX from right (200ms, AppCurves.standard)
-- Mode transitions: 300ms fade
-
-**Typography:**
-- Time display: `Roboto Mono` or system monospace — prevents layout shift as time changes
-- All other text: app font system
-
-**Touch targets:** Minimum 44×44dp for all tappable elements. Control bar icons: 22–28dp icon inside 44dp touch area.
-
-**Seek bar:**
-- Height: 3dp normal, 5dp while dragging
-- Thumb: 12dp circle, expands to 16dp when dragging
-- Buffered: white at 25% opacity
-- Played: accent color (#E8002D)
-- A-B region: accent color at 40% opacity fill
-
----
-
-## 9. Implementation Priority Order
-
-The next agent should implement in this order:
-
-### Phase 3A — Gesture Enhancements (lowest effort, highest impact)
-1. Make double-tap seek seconds configurable (currently hardcoded 15s)
-2. Add gesture sensitivity settings
-3. Configurable long-press speed value
-4. Save gesture prefs to SharedPreferences via `player_prefs.dart`
-
-### Phase 3B — Controls Customization (medium effort, very visible)
-1. Create `PlayerPrefs` model + `PlayerPrefsProvider`
-2. Create `PlayerSettingsScreen` (flat list, all toggles)
-3. Button show/hide (no drag yet — just enable/disable checkboxes)
-4. Auto-hide timer setting
-5. Seek bar options (show/hide, elapsed/remaining)
-
-### Phase 3C — Subtitle System (high impact for Pakistani drama audience)
-1. Auto-detect subtitle files from same folder
-2. Subtitle timing offset (±ms) slider in subtitle panel
-3. Subtitle font size + color in subtitle style panel
-4. External subtitle file picker (already exists — enhance UI)
-
-### Phase 3D — Cinematic Mode (killer feature, medium effort)
-1. Cinematic mode overlay widget
-2. Lock button behavior (configurable: cinematic vs just-lock)
-3. Gesture-still-works logic in cinematic
-4. Edge-swipe to show minimal strip
-
-### Phase 3E — Audio System (medium effort)
-1. Audio delay offset slider
-2. Volume boost (MPV `volume` property above 100)
-3. 10-band EQ widget + presets
-4. Audio normalization toggle
-
-### Phase 3F — Advanced Features (high effort, Phase 4+)
-1. A-B Loop
-2. Skip silence
-3. Frame-by-frame
-4. Chapter markers on seek bar
-5. Seek thumbnail preview
-6. Video enhancement (brightness/contrast/saturation/hue/night mode)
-7. Button layout drag editor
-8. Screenshot
-
----
-
-## 10. Implementation Notes & Gotchas
-
-### media_kit / MPV specific commands
-```dart
-// Set MPV property
-await player.setProperty('key', 'value');
-
-// Run MPV command
-await player.command(['command', 'arg1', 'arg2']);
-
-// Equalizer (audio filter)
-// Format: f=FREQ:width_type=o:width=2:g=GAIN
-await player.setProperty('af', 
-  'equalizer=f=60:width_type=o:width=2:g=5.0,'
-  'equalizer=f=170:width_type=o:width=2:g=3.0,'
-  // ... all 10 bands
-);
-
-// Volume boost above 100% (MPV supports up to 1000)
-await player.setProperty('volume', '150'); // 150%
-
-// Video filters (brightness/contrast/saturation/hue)
-await player.setProperty('vf', 'eq=brightness=0.1:contrast=1.1:saturation=1.2:gamma=1.0');
-
-// Night mode (warm amber tint via color channel mixer)
-await player.setProperty('vf', 
-  'colorchannelmixer=rr=0.9:rg=0.1:rb=0.05:'
-  'gr=0.01:gg=0.8:gb=0.05:'
-  'br=0:bg=0:bb=0.7');
-
-// Audio delay (milliseconds)
-await player.setProperty('audio-delay', '0.5'); // +500ms
-
-// Hardware decoder
-await player.setProperty('hwdec', hwEnabled ? 'auto' : 'no');
-
-// Playback speed  
-await player.setRate(speed);
-
-// Frame step
-await player.command(['frame-step']);    // next frame
-await player.command(['frame-back-step']); // prev frame
-
-// Screenshot
-final screenshot = await player.screenshot(); // returns Uint8List?
-```
-
-### Subtitle auto-detection
-```dart
-// Extract base path from video URL/path
-String basePath = videoPath.replaceAll(RegExp(r'\.[^.]+$'), '');
-String dir = path.dirname(videoPath);
-
-// Check for subtitle files
-final extensions = ['.srt', '.ass', '.ssa', '.vtt', '.sub', '.smi'];
-for (final ext in extensions) {
-  final file = File('$basePath$ext');
-  if (await file.exists()) {
-    // Add to subtitle tracks list
-  }
-}
-
-// Also scan directory
-final dir = Directory(path.dirname(videoPath));
-final files = await dir.list().where((f) => 
-  extensions.any((ext) => f.path.endsWith(ext))).toList();
-```
-
-### Volume boost + system volume
-```dart
-// Current VolumeController controls system volume (0.0–1.0)
-// For boost beyond 100%, use MPV volume property instead
-// MPV volume 100 = system volume 100%, MPV volume 150 = +50% software amplification
-// Combine: system at max, MPV at boost level
-VolumeController.instance.maxVolume();
-await player.setProperty('volume', '${(boostLevel * 100).toInt()}');
-```
-
-### SharedPrefs persistence pattern
-```dart
-// In PlayerPrefsProvider (Riverpod StateNotifier)
-class PlayerPrefsNotifier extends StateNotifier<PlayerPrefs> {
-  static const _prefix = 'player_';
-  
-  Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    state = PlayerPrefs(
-      doubleTapSeekSeconds: prefs.getInt('${_prefix}dbl_tap_seek') ?? 10,
-      // ...
-    );
-  }
-  
-  Future<void> save(PlayerPrefs newPrefs) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('${_prefix}dbl_tap_seek', newPrefs.doubleTapSeekSeconds);
-    // ...
-    state = newPrefs;
-  }
-}
-```
-
----
-
-## 11. Packages to Add
-
-Add to `pubspec.yaml`:
-```yaml
-# Screenshot save to gallery
-gal: ^2.3.0
-
-# Color picker for subtitle/accent color settings
-flutter_colorpicker: ^1.1.0
-```
-
-All other packages needed (media_kit, file_picker, shared_preferences, screen_brightness, volume_controller) are already in pubspec.yaml.
-
----
-
-## 12. Quick Customization Access (In-Player)
-
-From the player, the ⚙ (settings) button in top bar opens a **quick panel** (bottom sheet, not full screen) with the most common toggles:
+Gear icon in top bar → bottom sheet:
 
 ```
 ┌─── Player Settings ──────────────────────────────┐
@@ -797,40 +760,280 @@ From the player, the ⚙ (settings) button in top bar opens a **quick panel** (b
 │  Subtitles     [═════●   On]   Style →           │
 │  Sub Size      [────●────] 18px                  │
 │  Speed         [0.75 / 1.0● / 1.25 / 1.5 / 2.0] │
+│  Dialogue Boost [●       Off]                    │
 │  Night Mode    [●         Off]                   │
 │  Volume Boost  [──●──────] 100%                  │
+│  Ambilight     [●         Off]                   │
+│  Transparent   [●         Off]  Opacity →        │
 │  Auto-Hide     [3s ●] 5s / 10s                   │
 │  Cinematic     [●         Off]                   │
+│  Binge Guard   [═══════● On]                     │
 │                                                  │
 │  [ Full Settings →]          [Done]              │
 └──────────────────────────────────────────────────┘
 ```
 
-"Full Settings →" opens `PlayerSettingsScreen` as a full page.
+---
+
+## 6. Supported Formats
+
+| Type | Formats |
+|---|---|
+| Video | MP4, MKV, AVI, MOV, FLV, WMV, WEBM, TS, M2TS |
+| Audio | MP3, AAC, AC3, DTS, FLAC, OGG, OPUS |
+| Subtitles | SRT, ASS, SSA, VTT, SUB, SMI |
+| Streaming | HLS (m3u8), HTTP MP4 direct link |
 
 ---
 
-## 13. Files to Modify in Existing Code
+## 7. Player Modes Summary
 
-1. **`player_screen.dart`** — read `PlayerPrefs` at build time, pass prefs to gesture handler and controls overlay. Use `ref.watch(playerPrefsProvider)` at the top.
-2. **`player_screen.dart` `_GestureLayer`** — replace hardcoded `15` with `prefs.doubleTapSeekSeconds`, replace hardcoded `2.0` speed with `prefs.longPressSpeed`.
-3. **`player_screen.dart` lock button handler** — check `prefs.cinematicModeOnLock`, enter cinematic vs just-lock.
-4. **`app.dart` routes** — add route for `PlayerSettingsScreen`: `'/player-settings': (_) => const PlayerSettingsScreen()`
-5. **`pubspec.yaml`** — add `gal` and `flutter_colorpicker`
+| Mode | Controls | Gestures | Status bar |
+|---|---|---|---|
+| Normal | Visible (auto-hide) | ✅ | Hidden |
+| Cinematic | Hidden | ✅ | Hidden |
+| Locked | Hidden | ❌ | Hidden |
+| Transparent | Frosted glass | ✅ | Hidden |
+| Background | — | — | System |
+| PiP | Mini controls | ❌ | System |
 
 ---
 
-## 14. Testing Checklist (agent must verify before pushing)
+## 8. Skip Intro — Content Type Reference
 
-- [ ] All existing gestures still work after refactor
+| content_type value | Show skip intro? |
+|---|---|
+| `series` | ✅ Yes |
+| `drama` | ✅ Yes |
+| `anime` | ✅ Yes |
+| `donghua` | ✅ Yes |
+| `cartoon` | ✅ Yes |
+| `show` | ✅ Yes |
+| `movie` | ❌ No |
+| `song` | ❌ No |
+| `clip` | ❌ No |
+| `short` | ❌ No |
+| `documentary` | ❌ No |
+| `music_video` | ❌ No |
+| duration < 10min | ❌ No (regardless of type) |
+
+The `content_type` field must be passed from catalog data into `PlayerScreen` as a parameter.
+
+---
+
+## 9. Implementation Priority Order
+
+### Phase 3A — Foundation (do this first)
+1. Create `player_prefs.dart` + `PlayerPrefs` model
+2. Create `player_prefs_provider.dart` (Riverpod StateNotifier)
+3. Wire `ref.watch(playerPrefsProvider)` into `player_screen.dart`
+4. Replace hardcoded gesture values with prefs values
+
+### Phase 3B — Controls & Settings UI
+1. Create `player_settings_screen.dart`
+2. Quick settings bottom sheet (gear icon)
+3. Button show/hide checkboxes
+4. Auto-hide timer + seek bar options
+
+### Phase 3C — Smart Skip Intro
+1. Create `smart_intro_store.dart`
+2. Pass `content_type` parameter to PlayerScreen
+3. Implement content-type check (show only for series types)
+4. Save intro time when user taps skip
+5. Auto-show/auto-skip for known series
+
+### Phase 3D — Subtitle System
+1. Subtitle timing offset slider
+2. Subtitle style panel (font, color, outline, position)
+3. Auto-detect for local files
+
+### Phase 3E — Cinematic Mode
+1. `cinematic_overlay.dart` widget
+2. Lock button behavior (configurable)
+3. Gesture-in-cinematic logic
+
+### Phase 3F — Audio & Video Enhancement
+1. Audio delay slider
+2. Volume boost
+3. 10-band EQ + Dialogue Boost
+4. Video filters (brightness/contrast/saturation/hue/night mode)
+5. Audio normalization
+
+### Phase 3G — New Original Features (implement in this order)
+1. **Sleep Fade** — easiest, high impact, 50 lines of code
+2. **Rage Skip** — very fast to implement, users will love it
+3. **Scene Bookmarks** — SQLite + seek bar dots + panel
+4. **Ambilight Mode** — screenshot sampling + glow widget
+5. **Transparent Player** — Opacity widget + BackdropFilter
+6. **Binge Guard** — timer + overlay screen
+7. **Episode Recap Preview** — needs prev episode URL access
+
+### Phase 3H — Advanced
+1. A-B Loop
+2. Frame-by-frame
+3. Chapter markers on seek bar
+4. Seek thumbnail preview (local files only)
+5. Screenshot to gallery
+
+### Phase 4 (future, not this agent)
+- Button drag-to-reorder editor (complex Flutter UI)
+- OpenSubtitles search (needs API key from user)
+- Auto intro time detection (audio fingerprinting — very complex)
+
+---
+
+## 10. Implementation Notes & MPV Commands
+
+```dart
+// Equalizer (audio filter)
+await player.setProperty('af', 
+  'equalizer=f=60:width_type=o:width=2:g=${bands[0]},'
+  'equalizer=f=170:width_type=o:width=2:g=${bands[1]},'
+  'equalizer=f=310:width_type=o:width=2:g=${bands[2]},'
+  'equalizer=f=600:width_type=o:width=2:g=${bands[3]},'
+  'equalizer=f=1000:width_type=o:width=2:g=${bands[4]},'
+  'equalizer=f=3000:width_type=o:width=2:g=${bands[5]},'
+  'equalizer=f=6000:width_type=o:width=2:g=${bands[6]},'
+  'equalizer=f=12000:width_type=o:width=2:g=${bands[7]},'
+  'equalizer=f=14000:width_type=o:width=2:g=${bands[8]},'
+  'equalizer=f=16000:width_type=o:width=2:g=${bands[9]}',
+);
+
+// Video filters (combine all active filters into one vf= call)
+String buildVfString(PlayerPrefs prefs) {
+  final parts = <String>[];
+  final hasBCH = prefs.brightness != 0 || prefs.contrast != 0 
+               || prefs.saturation != 0 || prefs.hue != 0;
+  if (hasBCH) {
+    parts.add('eq=brightness=${prefs.brightness}:contrast=${1.0 + prefs.contrast}:'
+              'saturation=${1.0 + prefs.saturation}:hue=${prefs.hue / 180.0}');
+  }
+  if (prefs.nightMode) {
+    final i = prefs.nightModeIntensity;
+    parts.add('colorchannelmixer=rr=${0.9+i*0.05}:rg=${0.1*i}:rb=${0.05*i}:'
+              'gr=${0.01*i}:gg=${0.8+i*0.05}:gb=${0.05*i}:br=0:bg=0:bb=${0.7+i*0.1}');
+  }
+  if (prefs.sharpnessEnabled) {
+    parts.add('unsharp=la=${prefs.sharpness * 2}:ca=${prefs.sharpness}');
+  }
+  return parts.join(',');
+}
+await player.setProperty('vf', buildVfString(prefs));
+
+// Volume boost above 100%
+VolumeController.instance.maxVolume();
+await player.setProperty('volume', '${(prefs.volumeBoost * 100).toInt()}');
+
+// Audio delay
+await player.setProperty('audio-delay', '${prefs.audioTimingOffsetMs / 1000.0}');
+
+// Subtitle delay
+await player.setProperty('sub-delay', '${prefs.subtitleTimingOffsetMs / 1000.0}');
+
+// Hardware decoder
+await player.setProperty('hwdec', prefs.hwDecoderEnabled ? 'auto' : 'no');
+
+// Playback speed
+await player.setRate(prefs.playbackSpeed);
+
+// Frame step
+await player.command(['frame-step']);
+await player.command(['frame-back-step']);
+
+// Screenshot (for ambilight + gallery save)
+final Uint8List? frame = await player.screenshot();
+```
+
+**SharedPrefs persistence pattern:**
+```dart
+class PlayerPrefsNotifier extends StateNotifier<PlayerPrefs> {
+  static const _prefix = 'player_';
+  
+  Future<void> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = PlayerPrefs(
+      doubleTapSeekSeconds: prefs.getInt('${_prefix}dbl_tap_seek') ?? 10,
+      gestureZoneWidth: prefs.getDouble('${_prefix}gesture_zone') ?? 0.4,
+      rageSkipEnabled: prefs.getBool('${_prefix}rage_skip') ?? true,
+      rageSkipSeconds: prefs.getInt('${_prefix}rage_skip_sec') ?? 120,
+      dialogueBoostEnabled: prefs.getBool('${_prefix}dialogue_boost') ?? false,
+      ambilightEnabled: prefs.getBool('${_prefix}ambilight') ?? false,
+      transparentModeEnabled: prefs.getBool('${_prefix}transparent') ?? false,
+      transparentModeOpacity: prefs.getDouble('${_prefix}transparent_opacity') ?? 0.5,
+      bingeGuardEnabled: prefs.getBool('${_prefix}binge_guard') ?? false,
+      sleepFadeEnabled: prefs.getBool('${_prefix}sleep_fade') ?? true,
+      // ... all other fields
+    );
+  }
+}
+```
+
+**Subtitle auto-detection (local files only):**
+```dart
+// Only run this when widget.localPath != null
+String basePath = localPath.replaceAll(RegExp(r'\.[^.]+$'), '');
+final extensions = ['.srt', '.ass', '.ssa', '.vtt', '.sub', '.smi'];
+for (final ext in extensions) {
+  final file = File('$basePath$ext');
+  if (await file.exists()) {
+    // Add to subtitle tracks list
+  }
+}
+```
+
+---
+
+## 11. Packages to Add to `pubspec.yaml`
+
+```yaml
+# Screenshot save to gallery (for screenshot feature)
+gal: ^2.3.0
+
+# Color picker (subtitle color + accent color)
+flutter_colorpicker: ^1.1.0
+```
+
+All other needed packages are already in `pubspec.yaml`:
+- `media_kit`, `media_kit_video` — video player + MPV
+- `shared_preferences` — settings persistence
+- `screen_brightness`, `volume_controller` — gesture controls
+- `file_picker` — external subtitle picker
+- `video_thumbnail` — seek thumbnails (local files)
+- `sqflite`, `path_provider` — scene bookmarks storage
+- `flutter_animate` — animations (rage skip, ambilight)
+
+---
+
+## 12. Files to Modify in Existing Code
+
+1. **`player_screen.dart`** — add `content_type` parameter, wire PlayerPrefs, add new feature widgets
+2. **`player_screen.dart` gesture handler** — replace hardcoded values with prefs values, add rage skip
+3. **`player_screen.dart` lock button** — check `cinematicModeOnLock`, enter cinematic or lock
+4. **`player_screen.dart` skip intro** — replace with SmartIntroStore logic
+5. **`app.dart` routes** — add `'/player-settings': (_) => const PlayerSettingsScreen()`
+6. **`pubspec.yaml`** — add `gal` and `flutter_colorpicker`
+7. **Wherever PlayerScreen is called** — pass `content_type` from catalog data
+
+---
+
+## 13. Testing Checklist
+
+Before pushing, verify each item:
+
+- [ ] All existing gestures (brightness, volume, seek, double-tap, long-press, zoom) still work
 - [ ] PlayerPrefs loads from SharedPrefs on cold start
-- [ ] Changing double-tap seconds in settings takes effect immediately in player
-- [ ] Subtitle auto-detect finds .srt file in same folder as local video
-- [ ] Subtitle timing offset slider shows change immediately
-- [ ] Cinematic mode: controls completely hidden, single tap pause/resumes
-- [ ] Cinematic mode: swipe brightness/volume still works
-- [ ] Cinematic mode: swipe from edge shows minimal strip, auto-hides
-- [ ] Lock mode: still works as before (backward compatible)
-- [ ] Speed options all work (0.25×–4.0×)
-- [ ] Settings screen: all toggles save and persist across player open/close
+- [ ] Gesture sensitivity changes take effect immediately
+- [ ] Skip intro shows for drama/anime, does NOT show for movies and songs
+- [ ] Skip intro time saved per series — applies to next episode automatically
+- [ ] Cinematic mode: controls hidden, single tap pause/resumes, gestures still work
+- [ ] Lock mode: still works as before
+- [ ] Transparent mode: video opacity changes in real time with slider
+- [ ] Ambilight: glow color changes with video scene (test with colorful content)
+- [ ] Dialogue Boost: voice sounds clearer (enable on a drama scene)
+- [ ] Sleep Fade: volume fades smoothly before sleep timer ends
+- [ ] Rage Skip: triple-tap center skips forward N minutes with animation
+- [ ] Scene Bookmark: long-press seek bar → bookmark saved → dot appears on seek bar
+- [ ] Binge Guard: fires at correct threshold (test with low threshold like 1 min for dev)
+- [ ] Settings screen: all toggles save and persist across player sessions
 - [ ] Build passes: `flutter analyze` shows no errors
+
