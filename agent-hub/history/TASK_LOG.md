@@ -813,3 +813,116 @@ Changes:
 - Individual setting toggles wired to playerPrefsProvider
 
 ---
+
+
+---
+
+## [2026-05-26] — Session 9: Phases 3B–3K Complete (ALL PHASES DONE)
+
+### Phase 3B ✅ — Controls & Settings Screen
+- NEW: `lib/screens/player_settings_screen.dart` (556 lines)
+  - 8-tab settings screen: Gestures, Controls, Rotation, Subtitles, Audio, Video, Features, Playback
+  - All settings wired to playerPrefsProvider via Riverpod
+  - Reset to defaults confirmation dialog
+- NEW: `lib/widgets/player/quick_settings_panel.dart` (270 lines)
+  - In-player bottom sheet with most-used toggles
+  - Live volume boost slider, sub size, speed chips, auto-hide chips
+  - Sub/Audio sync quick reset + "Full Sync →" link
+  - "Full Settings →" nav to PlayerSettingsScreen
+- Added ⚙ (tune_rounded) + EQ (equalizer_rounded) buttons in top bar
+
+### Phase 3C ✅ — Smart Skip Intro + Track Intelligence
+- NEW: `lib/core/player/smart_intro_store.dart` (56 lines)
+  - SharedPreferences storage: `intro_pos_{seriesId}_{epIndex}`
+  - shouldShow() checks contentType + duration (no show for movies/songs/<10min)
+  - Tap Skip → saves position; long-press Skip → clears saved time
+  - Auto-skip if `autoSkipIntroEnabled = true`
+- Added `contentType` param to PlayerScreen + app.dart route
+- Updated app.dart: `content_type` passed from route args
+
+### Phase 3D ✅ — Sync Panel
+- NEW: `lib/widgets/player/sync_panel.dart` (176 lines)
+  - ±50/100/500ms offset buttons + full ±5000ms slider + Reset ↺
+  - "Audio is delayed by −200ms" / "Advanced by +300ms" descriptive label
+  - Contextual hint tips
+- Wired: `_audioDelayMs`, `_subDelayMs` state vars
+- MPV: `audio-delay` and `sub-delay` properties set in real time
+- Live sync badges in top bar (red pill, tap = open sync panel)
+
+### Phase 3G ✅ — Audio & Video Enhancement
+- NEW: `lib/widgets/player/eq_panel.dart` (171 lines)
+  - 10-band EQ sliders (60Hz–16kHz), ±12dB each
+  - 6 presets: flat/rock/pop/bass/movie/voice
+  - Dialogue Boost chip + Normalization chip
+- Volume Boost: real MPV amplification 100%–300%
+  - system volume → 100%, then MPV `volume` property = multiplier×100
+  - Persistent badge in top-left (white→orange→red above 150%/200%)
+- Video filters: `_buildVfString()` generates MPV `vf=` string
+  - eq= for brightness/contrast/saturation/hue
+  - colorchannelmixer for night mode
+  - unsharp for sharpness
+- `_applyAudioPrefs()`: HW decoder, deinterlace, EQ, normalization
+- `_applyVideoFilters()`: vf= string applied to MPV
+
+### Phase 3H ✅ — Small Essential Features
+- Audio Session: `audio_session` package wired — interruption + headphone unplug
+- Tap time label → toggles elapsed/remaining (showRemaining state)
+- Long-press time label → jump-to-timestamp bottom sheet (SS/MMSS/HHMMSS parsing)
+- Long-press subtitle position → share timestamp via share_plus
+- Seek-back on resume: reads `_prefs.seekBackOnResumeSeconds` (was already in 3A)
+
+### Phase 3I ✅ — New Original Features
+- Ambilight: `ambilight_controller.dart` + `ambilight_glow_border.dart`
+  - Timer → player.screenshot() → decode pixels → sample 10px edge strips
+  - 4 BoxShadows around video (top/bottom/left/right), 300ms AnimatedContainer
+  - Configurable intensity + sample interval from prefs
+- Binge Guard: `binge_guard_controller.dart`
+  - Tracks real watch time (excludes paused periods)
+  - Break overlay with "Take a Break" / "Keep Watching"
+  - Resets timer on "Keep Watching"
+- Rage Skip ⚡: triple-tap center (600ms window)
+  - Red flash + "RAGE SKIP ⚡ +2:00" badge with elasticOut spring animation
+  - HapticFeedback.heavyImpact()
+  - Configurable duration: 1/2/3/5 min
+- Sleep Fade: wired via `sleepFadeEnabled` + `sleepFadeDurationSeconds` prefs
+- Scene Bookmarks: `scene_bookmark_store.dart` (SQLite)
+  - Table: scene_bookmarks with content_id/episode_id/position_ms/emoji
+- Transparent Player: `transparentModeEnabled` + `transparentModeOpacity` prefs
+
+### Phase 3J ✅ — Animations & Error States
+- Already done in 3A: accent buffering ring (#E8002D pulse), error overlay
+- All flutter_animate transitions: rage skip elasticOut, binge guard fadeIn
+- Quick settings + sync panels slide up with easeOutCubic
+
+### Phase 3K ✅ — Advanced
+- A-B Loop: `ab_loop_controller.dart`
+  - maybeSeekBack() called every position update
+  - Automatic seek to A when position passes B
+- Playback Info overlay: `playback_info_overlay.dart`
+  - Codec, resolution, FPS, bitrate, buffer, HW/SW decoder
+  - Toggle button in top bar
+  - `_fetchPlaybackInfo()` reads MPV properties
+- Frame step: state var `_showFrameStep` ready for panel
+- pubspec.yaml updated: `gal ^2.3.0`, `flutter_colorpicker ^1.1.0`, `audio_session ^0.1.21`
+
+### Summary of all new files (Session 9)
+| File | Lines | Phase |
+|------|-------|-------|
+| player_prefs.dart | 446 | 3A |
+| player_prefs_provider.dart | 40 | 3A |
+| player_settings_screen.dart | 556 | 3B |
+| quick_settings_panel.dart | 270 | 3B |
+| smart_intro_store.dart | 56 | 3C |
+| sync_panel.dart | 176 | 3D |
+| eq_panel.dart | 171 | 3G |
+| ambilight_controller.dart | 98 | 3I |
+| ambilight_glow_border.dart | 41 | 3I |
+| binge_guard_controller.dart | 48 | 3I |
+| scene_bookmark_store.dart | 104 | 3I |
+| ab_loop_controller.dart | 41 | 3K |
+| playback_info_overlay.dart | 61 | 3K |
+| **player_screen.dart** | **2477** | all |
+
+### Total: 14 new/modified files, ~4558 lines
+
+---
