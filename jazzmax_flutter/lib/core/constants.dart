@@ -14,8 +14,19 @@ class AppConstants {
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'jazzmax_catalog.db';
-  static const int catalogDbVersion = 8;
-  static const int streamCacheTtlSeconds = 21600;
+  static const int catalogDbVersion = 10;
+  static const int streamCacheTtlSeconds = 21600; // 6 hours
+
+  // ── JazzDrive (zero-rated CDN) ─────────────────────────────────────────────
+  static const String jazzDriveCloudBase = 'https://cloud.jazzdrive.com.pk';
+
+  /// Share URL for the zero-rated db_update.json file hosted on JazzDrive.
+  /// Set this once the db_update.json is uploaded to JazzDrive.
+  /// Empty = zero-rated catalog fallback disabled (uses Oracle server only).
+  static const String jazzDriveDbUpdateUrl = '';
+
+  /// Stream link cache TTL. Same link reused for both watch + download within TTL.
+  static const Duration streamLinkTtl = Duration(hours: 6);
 }
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
@@ -61,7 +72,7 @@ class AppColors {
   static const Color lightTextSecondary = Color(0xFF444466);
   static const Color lightTextMuted     = Color(0xFF888899);
 
-  // Shorthand aliases used across screens
+  // Shorthand aliases
   static const Color text      = textPrimary;
   static const Color border    = glassBorder;
 
@@ -249,7 +260,7 @@ class ApiPaths {
   static String playUrl(String fileId)    => '/watch/api/play/$fileId';
 
   static const String adminQueue         = '/api/queue/status';
-  static const String publicMethods       = '/api/payment-methods';
+  static const String publicMethods      = '/api/payment-methods';
 
   static const String notifications      = '/api/notifications/';
   static const String notificationsRead  = '/api/notifications/read';
