@@ -1,4 +1,4 @@
-name: Build JazzMAX APK
+name: Build ZENO APK
 
 on:
   push:
@@ -35,54 +35,51 @@ jobs:
           channel: "stable"
           cache: true
 
-      - name: Flutter version
-        run: flutter --version
-
       - name: Flutter pub get
         working-directory: jazzmax_flutter
         run: flutter pub get
 
       - name: Set up keystore
-        working-directory: jazzmax_flutter/android/app/keystore
+        working-directory: jazzmax_flutter/android/app
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
+          mkdir -p keystore
           if [ -n "$KEYSTORE_B64" ]; then
             echo "Restoring keystore from secret..."
-            echo "$KEYSTORE_B64" | base64 -d > jazzmax.keystore
+            echo "$KEYSTORE_B64" | base64 -d > keystore/zeno.keystore
             echo "Keystore restored OK"
           else
-            echo "No KEYSTORE_BASE64 found - generating new keystore..."
+            echo "Generating new keystore..."
             keytool -genkeypair \
-              -alias jazzmax \
+              -alias zeno \
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000 \
-              -keystore jazzmax.keystore \
-              -storepass "${KS_PASS:-JazzMAX_2024_Store}" \
-              -keypass "${KEY_PASS:-JazzMAX_2024_Key}" \
-              -dname "CN=JazzMAX,OU=Mobile,O=Radd Club,L=Karachi,ST=Sindh,C=PK" \
+              -keystore keystore/zeno.keystore \
+              -storepass "${KS_PASS:-ZENO_2025_Store}" \
+              -keypass "${KEY_PASS:-ZENO_2025_Key}" \
+              -dname "CN=ZENO,OU=Mobile,O=Radd Club,L=Karachi,ST=Sindh,C=PK" \
               -noprompt
-            echo "Keystore generated. Save this as KEYSTORE_BASE64 GitHub secret:"
-            base64 -w 0 jazzmax.keystore
           fi
 
       - name: Build release APK
         working-directory: jazzmax_flutter
         env:
-          KEYSTORE_PATH: keystore/jazzmax.keystore
+          KEYSTORE_PATH: keystore/zeno.keystore
+          KEYSTORE_TYPE: JKS
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_ALIAS: zeno
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: flutter build apk --release
 
-      - name: Rename APK with version
+      - name: Rename APK
         id: apk
         run: |
-          VERSION=$(grep "version:" jazzmax_flutter/pubspec.yaml | awk '{print $2}' | tr -d "'" | tr -d '"')
-          APK_NAME="JazzMAX-${VERSION}-build${{ github.run_number }}.apk"
+          VERSION=$(grep "version:" jazzmax_flutter/pubspec.yaml | awk '{print $2}' | tr -d "\047" | tr -d \'\")
+          APK_NAME="ZENO-${VERSION}-build${{ github.run_number }}.apk"
           cp jazzmax_flutter/build/app/outputs/flutter-apk/app-release.apk "$APK_NAME"
           echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
           ls -lh "$APK_NAME"
@@ -99,12 +96,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          name: JazzMAX ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: ZENO ${{ github.event.inputs.release_tag || github.ref_name }}
           draft: false
           prerelease: false
           files: ${{ steps.apk.outputs.apk_name }}
           body: |
-            ## JazzMAX APK
+            ## ZENO App
+            Sub Dekho, Dil Kholke
             Built from commit ${{ github.sha }}
             Install on Android 5.0+
         env:
