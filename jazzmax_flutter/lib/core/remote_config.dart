@@ -8,10 +8,10 @@ import 'api/api_client.dart';
 /// To switch servers (Replit → Oracle, etc.) just update the JSON file —
 /// no APK rebuild required.
 ///
-/// Config file: https://raw.githubusercontent.com/raddclub/jazzmax-app/main/raddflix_config.json
+/// Config file: https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_config.json
 class RemoteConfig {
   static const String _configUrl =
-      'https://raw.githubusercontent.com/raddclub/jazzmax-app/main/raddflix_config.json';
+      'https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_config.json';
   static const String _prefsKey = 'jm_remote_config';
 
   static Future<void> fetch() async {

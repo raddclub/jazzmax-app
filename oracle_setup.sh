@@ -5,13 +5,13 @@
 #  Run this on your Oracle server in Termius:
 #
 #    bash <(curl -fsSL -H "Authorization: token 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" \
-#      "https://raw.githubusercontent.com/raddclub/jazzmax-app/main/oracle_setup.sh")
+#      "https://raw.githubusercontent.com/raddclub/raddflix-app/main/oracle_setup.sh")
 #
 # ═══════════════════════════════════════════════════════════════
 set -e
 
 GITHUB_TOKEN="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"
-GITHUB_REPO="raddclub/jazzmax-app"
+GITHUB_REPO="raddclub/raddflix-app"
 PROJECT_DIR="/opt/jazzmax"
 ORACLE_IP="92.4.95.252"
 FLASK_PORT=8000

@@ -1,12 +1,12 @@
 #!/bin/bash
 # ╔══════════════════════════════════════════════════════════════════════════════╗
-# ║              JazzMAX — New Account Setup Script v2.0                        ║
+# ║              RaddFlix — New Account Setup Script v2.0                        ║
 # ║                                                                              ║
 # ║  Run ONE command in Replit Shell (GITHUB_TOKEN must be set as Secret first) ║
 # ║                                                                              ║
 # ║   curl -fsSL \                                                               ║
 # ║     -H "Authorization: token $GITHUB_TOKEN" \                               ║
-# ║     "https://raw.githubusercontent.com/raddclub/jazzmax-app/main/setup_new_account.sh" \
+# ║     "https://raw.githubusercontent.com/raddclub/raddflix-app/main/setup_new_account.sh" \
 # ║     | bash                                                                   ║
 # ║                                                                              ║
 # ║  Or if already cloned:  bash setup_new_account.sh                           ║
@@ -15,12 +15,12 @@
 set -e
 
 GITHUB_USER="raddclub"
-GITHUB_REPO="jazzmax-app"
+GITHUB_REPO="raddflix-app"
 WORKSPACE="/home/runner/workspace"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════╗"
-echo "║         JazzMAX — Account Setup v2.0                  ║"
+echo "║         RaddFlix — Account Setup v2.0                  ║"
 echo "╚════════════════════════════════════════════════════════╝"
 echo ""
 

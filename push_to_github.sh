@@ -17,12 +17,12 @@
 set -e
 
 GITHUB_USER="raddclub"
-GITHUB_REPO="jazzmax-app"
+GITHUB_REPO="raddflix-app"
 WORKSPACE="/home/runner/workspace"
 
 echo ""
 echo "╔══════════════════════════════════════════════════╗"
-echo "║         JazzMAX → GitHub Push                    ║"
+echo "║         RaddFlix → GitHub Push                    ║"
 echo "╚══════════════════════════════════════════════════╝"
 echo ""
 
@@ -108,7 +108,7 @@ fi
 # ── Step 4: Configure git identity (needed on fresh Replit accounts) ──────────
 echo ""
 echo "▶ Step 4/5 — Configuring git identity..."
-git config user.email "rehan@jazzmax.app" 2>/dev/null || true
+git config user.email "rehan@raddflix.app" 2>/dev/null || true
 git config user.name "Muhammad Rehan" 2>/dev/null || true
 echo "  ✓ Identity set"
 
@@ -123,7 +123,7 @@ git add -A
 if git diff --cached --quiet; then
     echo "  ✓ Nothing new to commit — already up to date"
 else
-    COMMIT_MSG="JazzMAX update — $(date '+%Y-%m-%d %H:%M')"
+    COMMIT_MSG="RaddFlix update — $(date '+%Y-%m-%d %H:%M')"
     git commit -m "$COMMIT_MSG"
     echo "  ✓ Committed: $COMMIT_MSG"
 fi
