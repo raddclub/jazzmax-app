@@ -108,7 +108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ? _buildShimmer()
             : _buildContent(catalog),
       ),
-      bottomNavigationBar: JazzMaxBottomNav(
+      bottomNavigationBar: ZenoBottomNav(
         currentIndex: _navIndex,
         onTap: (i) {
           setState(() => _navIndex = i);
