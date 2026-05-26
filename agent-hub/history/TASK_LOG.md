@@ -926,3 +926,50 @@ Changes:
 ### Total: 14 new/modified files, ~4558 lines
 
 ---
+
+---
+
+## [2026-05-26] Phase 3 — Player Feature Completion
+
+**Agent:** Main Agent (session continuation)
+**Commit:** ca018605c20de52845e25a32c97277753ec76293
+
+### What was done
+Completed all missing Phase 3 player features per PLAYER_SPEC.md.
+
+#### New Widget Files Created (7):
+| File | Description |
+|------|-------------|
+| `cinematic_overlay.dart` | Full-screen cinematic mode; swipe up → minimal seek strip, auto-hides 3s |
+| `track_badges.dart` | Active audio pill (🎵 Lang), subtitle pill (CC Lang/Off), track count badge |
+| `ab_loop_panel.dart` | A-B loop UI — orange A dot / red B dot on seek bar, clear button |
+| `scene_bookmarks_panel.dart` | Emoji bookmarks panel + seek bar emoji dots + `showBookmarkEmojiPicker()` sheet |
+| `video_enhance_panel.dart` | Brightness/Contrast/Saturation/Hue/Night Mode/Sharpness sliders |
+| `subtitle_overlay.dart` | Custom subtitle rendering using all PlayerPrefs style settings |
+| `transparent_player_layer.dart` | Vertical opacity slider for transparent player mode |
+
+#### Modified Files (2):
+
+**player_screen.dart** (2478 → 2748 lines):
+- Added imports for all 7 new widgets + `gal` package
+- New state: `_cinematicMode`, `_showVideoEnhance`, `_showTransparentSlider`
+- New methods: `_toggleCinematic()`, `_addBookmarkAtPosition()`, `_deleteBookmark()`, `_takeScreenshot()`
+- Top bar: 5 new icon buttons (video enhance, cinematic, screenshot, AB loop, bookmarks)
+- Track pills rendered next to title using `AudioTrackBadge` / `SubTrackBadge` / `TrackCountBadge`
+- Seek bar: emoji bookmark dots + orange A / red B loop dots
+- Add Bookmark button next to Subtitle File button
+- New overlays: `CinematicOverlay`, `SceneBookmarksPanel`, `AbLoopPanel`, `VideoEnhancePanel`, `TransparentPlayerSlider`
+- `_TracksPanel` fixed: `activeIndex` param added, active track highlighted in red with ✓ icon
+- `_scheduleHide` updated to include new panels in "don't hide" set
+
+**player_settings_screen.dart** (557 → 665 lines):
+- TabController: 8 → 10 tabs
+- SubtitlesTab completed: italic toggle, font family chooser, background opacity, subtitle position (Bottom/Center/Top), vertical offset slider, auto-detect toggle
+- New **Track Memory** tab: rememberAudioTrack, rememberSubtitleTrack, autoSelectAudioByLocale, showActiveTrackBadge, showTrackCountBadge
+- New **Appearance** tab: accent color display, UI font scale, info overlay toggles, haptics section
+
+### Phase 4 items (out of scope — deferred)
+- `player_button_editor.dart` (customizable toolbar)
+- OpenSubtitles search integration
+- Auto intro detection via ML
+
