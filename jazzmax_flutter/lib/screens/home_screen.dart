@@ -27,7 +27,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final ScrollController _scroll = ScrollController();
   bool _scrolled = false;
 
-  // Hidden debug panel — tap JazzMAX logo 5 times quickly
+  // Hidden debug panel — tap ZENO logo 5 times quickly
   int _debugTaps = 0;
   DateTime? _lastDebugTap;
 
@@ -265,7 +265,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                         textAlign: TextAlign.center),
                     const SizedBox(height: 24),
-                    const Text('Tap JazzMAX logo 5× for debug info',
+                    const Text('Tap ZENO logo 5× for debug info',
                         style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
                   ]),
                 ),
@@ -344,7 +344,7 @@ class _DebugPanelState extends State<_DebugPanel> {
       decoration: const BoxDecoration(
         color: Color(0xFF0A0A14),
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(top: BorderSide(color: Color(0xFFE8002D), width: 2)),
+        border: Border(top: BorderSide(color: AppColors.primary, width: 2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,9 +353,9 @@ class _DebugPanelState extends State<_DebugPanel> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
             child: Row(children: [
-              const Icon(Icons.bug_report_rounded, color: Color(0xFFE8002D), size: 22),
+              const Icon(Icons.bug_report_rounded, color: AppColors.primary, size: 22),
               const SizedBox(width: 10),
-              const Text('JazzMAX Debug Log',
+              const Text('ZENO Debug Log',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17)),
               const Spacer(),
               // Copy path button
@@ -431,7 +431,7 @@ class _DebugPanelState extends State<_DebugPanel> {
                       : const Icon(Icons.share_rounded, size: 16),
                   label: Text(_sharing ? 'Sharing…' : 'Share File'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFE8002D),
+                    backgroundColor: const AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: _sharing ? null : () async {
