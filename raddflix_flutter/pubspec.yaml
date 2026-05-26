@@ -89,7 +89,7 @@ dependencies:
   disk_space_plus: ^0.2.0
 
   # Player extended packages
-  gal: ^2.3.0
+  image_gallery_saver: ^2.0.3
   flutter_colorpicker: ^1.1.0
   audio_session: ^0.1.21
 

@@ -35,7 +35,7 @@ import 'dart:math' as math;
 import 'package:audio_session/audio_session.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:gal/gal.dart';
+import 'package:image_gallery_saver/image_gallery_saver.dart';
 import '../widgets/player/cinematic_overlay.dart';
 import '../widgets/player/scene_bookmarks_panel.dart';
 import '../widgets/player/ab_loop_panel.dart';
@@ -491,7 +491,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     try {
       final frame = await _player.screenshot();
       if (frame == null) return;
-      await Gal.putImageBytes(frame, name: 'raddflix_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final result = await ImageGallerySaver.saveImage(
+        frame,
+        name: 'raddflix_${DateTime.now().millisecondsSinceEpoch}',
+        isReturnImagePathOfIOS: false,
+      );
+      if (result['isSuccess'] != true) throw Exception('Save failed');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Screenshot saved to gallery'),
             duration: Duration(seconds: 2)));
