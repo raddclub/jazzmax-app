@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  static const String appName = 'JazzMAX';
+  static const String appName = 'ZENO';
   static const String tagline = 'Pakistan ka entertainment, data-free';
 
   /// Runtime-mutable: updated by RemoteConfig.fetch() on every app start.
@@ -14,7 +14,7 @@ class AppConstants {
   static const Duration refreshTokenValidity = Duration(days: 30);
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
-  static const String catalogDbName = 'jazzmax_catalog.db';
+  static const String catalogDbName = 'zeno_catalog.db';
   static const int catalogDbVersion = 6;
 }
 
