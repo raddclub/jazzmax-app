@@ -47,8 +47,8 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
     final prog = <String, double>{};
     for (final p in progList) {
       if (p['file_id'] != null && p['duration_ms'] != null && (p['duration_ms'] as int) > 0) {
-        final pos = (p['position_ms'] as int? ?? 0)  // FIX BUG-005;
-        final dur = (p['duration_ms'] as int?)! // FIX BUG-005;
+        final pos = (p['position_ms'] as int? ?? 0); // BUG-005 fix
+        final dur = (p['duration_ms'] as int? ?? 0); // BUG-005 fix
         prog[p['file_id'].toString()] = (pos / dur).clamp(0.0, 1.0);
       }
     }
