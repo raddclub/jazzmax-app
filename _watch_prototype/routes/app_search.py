@@ -88,16 +88,16 @@ def search():
             pass
 
         results.append({
-            "title_id":   r["title_id"],
+            "id":        r["title_id"],  # FIX BUG-004
             "title":      r["title"],
             "year":       r["year"],
-            "type":       r["media_type"],
+            "media_type": ("show" if r["media_type"] in ("tv","series") else (r["media_type"] or "movie")),  # FIX BUG-003
             "poster":     r["poster"],
             "rating":     r["rating"],
             "plot":       r["plot"] or r["overview"],
             "genres":     genres,
             "language":   r["language"],
-            "is_free":    bool(r["is_free"]),
+            "is_free":    1 if r["is_free"] else 0,  # FIX BUG-001
             "file_id":    r["file_id"],
         })
 
