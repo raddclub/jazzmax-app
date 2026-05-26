@@ -19,6 +19,21 @@ import '../core/api/catalog_api.dart';
 import '../core/services/jazzdrive_service.dart';
 import '../core/debug/debug_logger.dart';
 import '../core/player/player_prefs.dart';
+import '../core/player/player_prefs_provider.dart';
+import '../core/player/smart_intro_store.dart';
+import '../core/player/ambilight_controller.dart';
+import '../core/player/binge_guard_controller.dart';
+import '../core/player/scene_bookmark_store.dart';
+import '../core/player/ab_loop_controller.dart';
+import '../widgets/player/sync_panel.dart';
+import '../widgets/player/eq_panel.dart';
+import '../widgets/player/quick_settings_panel.dart';
+import '../widgets/player/ambilight_glow_border.dart';
+import '../widgets/player/playback_info_overlay.dart';
+import '../screens/player_settings_screen.dart';
+import 'dart:math' as math;
+import 'package:audio_session/audio_session.dart';
+import 'package:share_plus/share_plus.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
 const _pipChannel = MethodChannel('com.raddflix.app/pip');
@@ -29,6 +44,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final String? localPath;
   final List<Map<String, dynamic>>? episodes;
   final int episodeIndex;
+  final String contentType; // 'series'|'drama'|'anime'|'movie'|'song'|etc.
 
   const PlayerScreen({
     super.key,
@@ -37,6 +53,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.localPath,
     this.episodes,
     this.episodeIndex = 0,
+    this.contentType = 'series',
   });
 
   @override
@@ -146,6 +163,56 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // PlayerPrefs (loaded async — defaults used until ready)
   PlayerPrefs _prefs = const PlayerPrefs();
 
+  // ── Phase 3B: Quick Settings / EQ panels ─────────────────────────────────
+  bool _showQuickSettings = false;
+  bool _showEqPanel = false;
+  bool _showAudioSyncPanel = false;
+  bool _showSubSyncPanel = false;
+
+  // ── Phase 3C: Smart Skip Intro ────────────────────────────────────────────
+  int? _savedIntroEnd; // seconds — loaded from SmartIntroStore
+
+  // ── Phase 3D: Sync ────────────────────────────────────────────────────────
+  int _audioDelayMs = 0;
+  int _subDelayMs   = 0;
+
+  // ── Phase 3G: Enhancement ────────────────────────────────────────────────
+  double _volumeBoost = 1.0; // 1.0–3.0 = 100%–300%
+
+  // ── Phase 3I: Ambilight ───────────────────────────────────────────────────
+  AmbilightController? _ambilightCtrl;
+  AmbilightColors _ambilightColors = const AmbilightColors();
+
+  // ── Phase 3I: Binge Guard ─────────────────────────────────────────────────
+  BingeGuardController? _bingeGuardCtrl;
+  bool _showBingeGuard = false;
+  int  _bingeWatchedMins = 0;
+
+  // ── Phase 3I: Rage Skip ───────────────────────────────────────────────────
+  bool  _rageSkipActive = false;
+  int   _tapCount = 0;
+  Timer? _tapTimer;
+
+  // ── Phase 3I: Scene Bookmarks ─────────────────────────────────────────────
+  List<SceneBookmark> _bookmarks = [];
+  bool _showBookmarksPanel = false;
+
+  // ── Phase 3K: A-B Loop ────────────────────────────────────────────────────
+  final AbLoopController _abLoop = AbLoopController();
+  bool _showAbPanel = false;
+
+  // ── Phase 3K: Playback Info ───────────────────────────────────────────────
+  bool _showPlaybackInfo = false;
+  String _piCodec = '—', _piRes = '—', _piFps = '—',
+         _piBitrate = '—', _piBuffer = '—', _piDecoder = 'HW';
+
+  // ── Phase 3K: Frame Step ─────────────────────────────────────────────────
+  bool _showFrameStep = false;
+
+  // ── Track Intelligence ────────────────────────────────────────────────────
+  int _activeAudioIdx = 0;
+  int _activeSubIdx   = 0;
+
   @override
   void initState() {
     super.initState();
@@ -159,6 +226,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _scheduleHide();
     _initBrightnessVolume();
     _loadPrefs();
+    _initAudioSession();
+    _loadSmartIntro();
+    _loadBookmarks();
   }
 
   @override
@@ -194,8 +264,271 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     setState(() => _prefs = loaded);
     // Apply rotation mode from prefs
     _applyRotation(loaded.rotationMode);
-    // Apply long-press speed from prefs
-    // (long-press handler reads _prefs.longPressSpeed directly)
+    // Apply volume boost from prefs
+    if (loaded.volumeBoostMultiplier > 1.0) _applyVolumeBoost(loaded.volumeBoostMultiplier);
+    _volumeBoost = loaded.volumeBoostMultiplier;
+    // Apply audio + video prefs
+    _applyAudioPrefs(loaded);
+    _applyVideoFilters(loaded);
+    // Init binge guard + ambilight from prefs
+    _initBingeGuard();
+    _initAmbilight();
+  }
+
+  Future<void> _initAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.video());
+      session.interruptionEventStream.listen((event) {
+        if (!mounted) return;
+        if (event.begin) {
+          _player.pause();
+        } else if (event.type == AudioInterruptionType.pause && !_userPaused) {
+          _player.play();
+        }
+      });
+      // Pause on headphone unplug
+      session.becomingNoisyEventStream.listen((_) {
+        if (mounted && !_userPaused) _player.pause();
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _loadSmartIntro() async {
+    if (!SmartIntroStore.shouldShow(
+        contentType: widget.contentType,
+        totalDuration: _duration)) return;
+    final seriesId = widget.fileId.split('/').first;
+    final end = await SmartIntroStore.getIntroEnd(
+        seriesId: seriesId, epIndex: _currentEpIdx);
+    if (mounted) setState(() => _savedIntroEnd = end);
+  }
+
+  Future<void> _loadBookmarks() async {
+    final bm = await SceneBookmarkStore.getAll(
+        contentId: widget.fileId,
+        episodeId: widget.episodes != null ? _currentEpIdx.toString() : null);
+    if (mounted) setState(() => _bookmarks = bm);
+  }
+
+  // Build MPV vf= filter string from prefs
+  String _buildVfString(PlayerPrefs p) {
+    final parts = <String>[];
+    if (p.brightness != 0 || p.contrast != 0 || p.saturation != 0 || p.hue != 0) {
+      parts.add('eq=brightness=${p.brightness}:contrast=${1 + p.contrast}'
+          ':saturation=${1 + p.saturation}:hue=${p.hue / 180.0}');
+    }
+    if (p.nightMode) {
+      final i = p.nightModeIntensity;
+      parts.add('colorchannelmixer='
+          'rr=${(0.9 + i * 0.05).toStringAsFixed(3)}'
+          ':rg=${(0.1 * i).toStringAsFixed(3)}'
+          ':rb=${(0.05 * i).toStringAsFixed(3)}'
+          ':gr=${(0.01 * i).toStringAsFixed(3)}'
+          ':gg=${(0.8 + i * 0.05).toStringAsFixed(3)}'
+          ':gb=${(0.05 * i).toStringAsFixed(3)}'
+          ':br=0:bg=0:bb=${(0.7 + i * 0.1).toStringAsFixed(3)}');
+    }
+    if (p.sharpnessEnabled) {
+      parts.add('unsharp=la=${(p.sharpness * 2).toStringAsFixed(2)}'
+          ':ca=${p.sharpness.toStringAsFixed(2)}');
+    }
+    return parts.join(',');
+  }
+
+  Future<void> _applyAudioPrefs(PlayerPrefs p) async {
+    // Hardware decoder
+    await _player.setProperty('hwdec', p.hwDecoderEnabled ? 'auto' : 'no');
+    // Deinterlace
+    await _player.setProperty('deinterlace', p.deinterlaceEnabled ? 'yes' : 'no');
+    // Audio normalization
+    if (p.audioNormalization) {
+      await _player.setProperty('af', 'dynaudnorm');
+    }
+    // Equalizer bands
+    if (p.equalizerEnabled && !p.dialogueBoostEnabled) {
+      final b = p.equalizerBands;
+      final eqStr = [60,170,310,600,1000,3000,6000,12000,14000,16000]
+          .asMap().entries
+          .map((e) => 'equalizer=f=${e.key < b.length ? [60,170,310,600,1000,3000,6000,12000,14000,16000][e.key] : 60}:width_type=o:width=2:g=${e.key < b.length ? b[e.key].toStringAsFixed(1) : "0"}')
+          .join(',');
+      await _player.setProperty('af', eqStr);
+    } else if (p.dialogueBoostEnabled) {
+      // Fixed voice-clarity EQ
+      await _player.setProperty('af',
+          'equalizer=f=310:width_type=o:width=2:g=2,'
+          'equalizer=f=600:width_type=o:width=2:g=4,'
+          'equalizer=f=1000:width_type=o:width=2:g=5,'
+          'equalizer=f=3000:width_type=o:width=2:g=4,'
+          'equalizer=f=6000:width_type=o:width=2:g=2');
+    }
+  }
+
+  Future<void> _applyVideoFilters(PlayerPrefs p) async {
+    final vf = _buildVfString(p);
+    await _player.setProperty('vf', vf);
+  }
+
+  void _applyVolumeBoost(double multiplier) {
+    _volumeBoost = multiplier;
+    // Step 1: system volume to max
+    VolumeController().setVolume(1.0);
+    // Step 2: MPV internal amplification (100 = normal, 300 = 3×)
+    _player.setProperty('volume', '${(multiplier * 100).toInt()}');
+  }
+
+  Future<void> _applyAudioSync(int ms) async {
+    _audioDelayMs = ms;
+    await _player.setProperty('audio-delay', '${ms / 1000.0}');
+  }
+
+  Future<void> _applySubSync(int ms) async {
+    _subDelayMs = ms;
+    await _player.setProperty('sub-delay', '${ms / 1000.0}');
+  }
+
+  Future<void> _fetchPlaybackInfo() async {
+    try {
+      final codec  = await _player.getProperty('video-codec');
+      final width  = await _player.getProperty('width');
+      final height = await _player.getProperty('height');
+      final fps    = await _player.getProperty('fps');
+      final bits   = await _player.getProperty('video-bitrate');
+      final buf    = await _player.getProperty('demuxer-cache-duration');
+      final hwdec  = await _player.getProperty('hwdec-current');
+      if (!mounted) return;
+      setState(() {
+        _piCodec   = codec ?? '—';
+        _piRes     = (width != null && height != null) ? '${width}×${height}' : '—';
+        _piFps     = fps != null ? '${double.tryParse(fps)?.toStringAsFixed(1) ?? fps} fps' : '—';
+        _piBitrate = bits != null ? '${(int.tryParse(bits) ?? 0) ~/ 1000} kbps' : '—';
+        _piBuffer  = buf != null ? '${double.tryParse(buf)?.toStringAsFixed(1) ?? buf}s' : '—';
+        _piDecoder = (hwdec != null && hwdec.isNotEmpty && hwdec != 'no') ? 'HW' : 'SW';
+      });
+    } catch (_) {}
+  }
+
+  /// Triple-tap center = Rage Skip
+  void _handleCenterTap() {
+    if (!_prefs.rageSkipEnabled) { _toggleControls(); return; }
+    _tapCount++;
+    _tapTimer?.cancel();
+    if (_tapCount >= 3) {
+      _tapCount = 0;
+      final skipSecs = _prefs.rageSkipSeconds;
+      _seekRelative(skipSecs);
+      HapticFeedback.heavyImpact();
+      setState(() => _rageSkipActive = true);
+      Future.delayed(const Duration(milliseconds: 1200), () {
+        if (mounted) setState(() => _rageSkipActive = false);
+      });
+    } else {
+      _tapTimer = Timer(const Duration(milliseconds: 600), () {
+        _tapCount = 0;
+        _toggleControls();
+      });
+    }
+  }
+
+  void _shareTimestamp() {
+    final pos = _fmtDur(_position);
+    Share.share('Watching ${widget.title} at $pos on RaddFlix');
+  }
+
+  Future<void> _showJumpToTime() async {
+    final ctrl = TextEditingController();
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1A1A2E),
+      builder: (_) => Padding(
+        padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('Jump to Timestamp',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            const Text('Enter time as SS, MMSS, or HHMMSS',
+                style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              style: const TextStyle(color: Colors.white, fontSize: 20),
+              textAlign: TextAlign.center,
+              decoration: const InputDecoration(
+                hintText: '4520 → 45:20',
+                hintStyle: TextStyle(color: Colors.white38),
+                border: OutlineInputBorder(),
+                enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.white24)),
+                focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Color(0xFFE8002D))),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(children: [
+              Expanded(child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'))),
+              const SizedBox(width: 8),
+              Expanded(child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE8002D)),
+                  onPressed: () => Navigator.pop(context, ctrl.text),
+                  child: const Text('Go', style: TextStyle(color: Colors.white)))),
+            ]),
+          ]),
+        ),
+      ),
+    );
+    if (result == null || result.isEmpty) return;
+    final n = int.tryParse(result);
+    if (n == null) return;
+    Duration target;
+    if (result.length <= 2) {
+      target = Duration(seconds: n);
+    } else if (result.length <= 4) {
+      final m = n ~/ 100; final s = n % 100;
+      target = Duration(minutes: m, seconds: s);
+    } else {
+      final h = n ~/ 10000; final m = (n % 10000) ~/ 100; final s = n % 100;
+      target = Duration(hours: h, minutes: m, seconds: s);
+    }
+    _player.seek(target);
+  }
+
+  void _initBingeGuard() {
+    _bingeGuardCtrl?.dispose();
+    if (!_prefs.bingeGuardEnabled) return;
+    _bingeGuardCtrl = BingeGuardController(
+      thresholdMinutes: _prefs.bingeGuardThresholdMinutes,
+      onThreshold: () {
+        if (mounted) {
+          _player.pause();
+          setState(() {
+            _showBingeGuard = true;
+            _bingeWatchedMins = _bingeGuardCtrl?.watchedMinutes ?? 0;
+          });
+        }
+      },
+    );
+  }
+
+  void _initAmbilight() {
+    _ambilightCtrl?.dispose();
+    if (!_prefs.ambilightEnabled) return;
+    _ambilightCtrl = AmbilightController(
+      player: _player,
+      intervalMs: _prefs.ambilightSampleIntervalMs,
+      onUpdate: (colors) {
+        if (mounted) setState(() => _ambilightColors = colors);
+      },
+    );
+    _ambilightCtrl!.start();
   }
 
   void _applyRotation(String mode) {
@@ -270,6 +603,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!mounted) return;
       _position = p;
       _positionNotifier.value = p;
+      // A-B Loop
+      final seekBack = _abLoop.maybeSeekBack(p);
+      if (seekBack != null) _player.seek(seekBack);
       if (p.inSeconds % 10 == 0 && _duration.inMilliseconds > 0) {
         LocalDb.saveWatchPosition(
             fileId: widget.fileId,
@@ -290,6 +626,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player.stream.playing.listen((p) {
       if (!mounted) return;
       setState(() => _playing = p);
+      if (p) { _bingeGuardCtrl?.onPlay(); }
+      else   { _bingeGuardCtrl?.onPause(); }
     });
     _player.stream.buffer.listen((b) {
       if (!mounted) return;
@@ -318,10 +656,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       }
     });
 
-    _skipIntroTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted && _duration.inSeconds > 85) {
+    // Smart skip intro: load saved position or show at 85s default
+    _skipIntroTimer = Timer(const Duration(seconds: 5), () async {
+      if (!mounted) return;
+      if (!SmartIntroStore.shouldShow(
+          contentType: widget.contentType,
+          totalDuration: _duration)) return;
+      if (!_prefs.showSkipIntroButton) return;
+      final seriesId = widget.fileId.split('/').first;
+      final saved = await SmartIntroStore.getIntroEnd(
+          seriesId: seriesId, epIndex: _currentEpIdx);
+      setState(() { _savedIntroEnd = saved; });
+      if (_duration.inSeconds > 60) {
         setState(() => _skipIntroVisible = true);
-        Timer(const Duration(seconds: 7), () {
+        if (_prefs.autoSkipIntroEnabled && saved != null) {
+          _player.seek(Duration(seconds: saved));
+          setState(() => _skipIntroVisible = false);
+          return;
+        }
+        Timer(const Duration(seconds: 8), () {
           if (mounted) setState(() => _skipIntroVisible = false);
         });
       }
@@ -412,13 +765,25 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     });
     _openMedia(nextFileId);
     _skipIntroTimer?.cancel();
-    _skipIntroTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted && _duration.inSeconds > 85) {
-        setState(() => _skipIntroVisible = true);
-        Timer(const Duration(seconds: 7), () {
-          if (mounted) setState(() => _skipIntroVisible = false);
-        });
+    _skipIntroTimer = Timer(const Duration(seconds: 5), () async {
+      if (!mounted) return;
+      if (!SmartIntroStore.shouldShow(
+          contentType: widget.contentType,
+          totalDuration: _duration)) return;
+      if (!_prefs.showSkipIntroButton) return;
+      final seriesId = widget.fileId.split('/').first;
+      final saved = await SmartIntroStore.getIntroEnd(
+          seriesId: seriesId, epIndex: _currentEpIdx);
+      if (!mounted) return;
+      setState(() { _savedIntroEnd = saved; _skipIntroVisible = _duration.inSeconds > 60; });
+      if (_prefs.autoSkipIntroEnabled && saved != null && _duration.inSeconds > 60) {
+        _player.seek(Duration(seconds: saved));
+        setState(() => _skipIntroVisible = false);
+        return;
       }
+      Timer(const Duration(seconds: 8), () {
+        if (mounted) setState(() => _skipIntroVisible = false);
+      });
     });
   }
 
@@ -637,6 +1002,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _nextEpTimer?.cancel();
     _sleepTimer?.cancel();
     _seekThumbDebounce?.cancel();
+    _jazzRetryTimer?.cancel();
+    _tapTimer?.cancel();
+    _ambilightCtrl?.dispose();
+    _bingeGuardCtrl?.dispose();
     if (_position.inMilliseconds > 0 && _duration.inMilliseconds > 0) {
       LocalDb.saveWatchPosition(
           fileId: widget.fileId,
@@ -655,12 +1024,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _scheduleHide() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 3), () {
+    final secs = _prefs.autoHideSeconds;
+    if (secs <= 0) return; // never auto-hide
+    _hideTimer = Timer(Duration(seconds: secs), () {
       if (mounted &&
           !_showSpeedPicker &&
           !_showSubtitleMenu &&
           !_showAudioMenu &&
-          !_showSleepMenu) {
+          !_showSleepMenu &&
+          !_showQuickSettings &&
+          !_showEqPanel &&
+          !_showAudioSyncPanel &&
+          !_showSubSyncPanel) {
         setState(() => _showControls = false);
       }
     });
@@ -744,7 +1119,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       backgroundColor: Colors.black,
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _toggleControls,
+        onTap: _handleCenterTap,
         onDoubleTapDown: (d) {
           final w = MediaQuery.of(context).size.width;
           if (_scale > 1.01) {
@@ -985,9 +1360,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             Positioned(
               bottom: 90, right: 20,
               child: GestureDetector(
-                onTap: () {
-                  _player.seek(const Duration(seconds: 85));
+                onTap: () async {
+                  final seekTo = _savedIntroEnd ?? 85;
+                  _player.seek(Duration(seconds: seekTo));
                   setState(() => _skipIntroVisible = false);
+                  // Save for next time
+                  final seriesId = widget.fileId.split('/').first;
+                  await SmartIntroStore.saveIntroEnd(
+                    seriesId: seriesId,
+                    epIndex: _currentEpIdx,
+                    positionSeconds: seekTo);
+                },
+              onLongPress: () async {
+                  // Long-press: clear saved intro time
+                  final seriesId = widget.fileId.split('/').first;
+                  await SmartIntroStore.clearIntroEnd(
+                    seriesId: seriesId, epIndex: _currentEpIdx);
+                  setState(() { _savedIntroEnd = null; });
+                  if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cleared saved skip time'),
+                        duration: Duration(seconds: 2)));
                 },
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1098,6 +1490,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   setState(() => _showAudioMenu = !_showAudioMenu),
               rotationMode: _prefs.rotationMode,
               onCycleRotation: _cycleRotation,
+              audioDelayMs: _audioDelayMs,
+              subDelayMs: _subDelayMs,
+              volumeBoost: _volumeBoost,
+              showPlaybackInfo: _showPlaybackInfo,
+              onSettings: () => setState(() => _showQuickSettings = true),
+              onEq: () => setState(() => _showEqPanel = true),
+              onAudioSync: () => setState(() => _showAudioSyncPanel = true),
+              onSubSync: () => setState(() => _showSubSyncPanel = true),
+              onShareTimestamp: _shareTimestamp,
+              onJumpToTime: _showJumpToTime,
+              onTogglePlaybackInfo: () {
+                setState(() => _showPlaybackInfo = !_showPlaybackInfo);
+                if (_showPlaybackInfo) _fetchPlaybackInfo();
+              },
+              showRemaining: _showRemaining,
+              onToggleRemaining: () => setState(() => _showRemaining = !_showRemaining),
               onNextEpisode: _hasNextEp ? _playNextEpisode : null,
               onPiP: _enterPiP,
               onCast: _enterCast,
@@ -1179,6 +1587,185 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               ),
             ),
 
+          // ── Rage Skip Badge ──
+          if (_rageSkipActive)
+            Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Container(color: Colors.red.withOpacity(0.22)).animate()
+                  .fadeIn(duration: 50.ms).then(delay: 150.ms).fadeOut(duration: 200.ms),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withOpacity(0.88),
+                    borderRadius: BorderRadius.circular(12)),
+                  child: Text(
+                    'RAGE SKIP ⚡ +${(_prefs.rageSkipSeconds ~/ 60)}:00',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
+                ).animate()
+                  .scale(begin: const Offset(0.5, 0.5), end: const Offset(1.1, 1.1), duration: 250.ms, curve: Curves.elasticOut)
+                  .then().scale(end: const Offset(1.0, 1.0), duration: 100.ms)
+                  .then(delay: 600.ms).fadeOut(duration: 300.ms),
+              ]),
+            ),
+
+          // ── Binge Guard overlay ──
+          if (_showBingeGuard)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black.withOpacity(0.88),
+                child: Center(child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.health_and_safety_outlined, color: Color(0xFFE8002D), size: 52),
+                    const SizedBox(height: 16),
+                    const Text('Time for a Break!', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Text('You've watched $_bingeWatchedMins minutes in this session.',
+                        style: const TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
+                    const SizedBox(height: 32),
+                    Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      TextButton(
+                        onPressed: () { setState(() => _showBingeGuard = false); _player.play(); _bingeGuardCtrl?.reset(); },
+                        style: TextButton.styleFrom(foregroundColor: Colors.white54),
+                        child: const Text('Keep Watching')),
+                      const SizedBox(width: 16),
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE8002D),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12)),
+                        child: const Text('Take a Break', style: TextStyle(color: Colors.white))),
+                    ]),
+                  ]),
+                )),
+              ).animate().fadeIn(duration: 300.ms),
+            ),
+
+          // ── Volume Boost badge ──
+          if (_volumeBoost > 1.01 && !_showControls)
+            Positioned(
+              top: 16, left: 12,
+              child: GestureDetector(
+                onTap: () => setState(() => _showQuickSettings = true),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _volumeBoost > 2.5 ? Colors.red.withOpacity(0.5) : _volumeBoost > 1.5 ? Colors.orange.withOpacity(0.5) : Colors.white24)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.volume_up_rounded, size: 12,
+                      color: _volumeBoost > 2.5 ? Colors.red : _volumeBoost > 1.5 ? Colors.orange : Colors.white),
+                    const SizedBox(width: 4),
+                    Text('${(_volumeBoost * 100).toInt()}%',
+                      style: TextStyle(
+                        color: _volumeBoost > 2.5 ? Colors.red : _volumeBoost > 1.5 ? Colors.orange : Colors.white,
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+            ),
+
+          // ── Playback Info overlay ──
+          if (_showPlaybackInfo && !_showControls)
+            PlaybackInfoOverlay(
+              codec: _piCodec, resolution: _piRes, fps: _piFps,
+              bitrate: _piBitrate, buffer: _piBuffer, decoder: _piDecoder),
+
+          // ── Quick Settings bottom sheet trigger (overlay) ──
+          if (_showQuickSettings)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: () => setState(() => _showQuickSettings = false),
+                child: Container(color: Colors.black45),
+              ),
+            ),
+          if (_showQuickSettings)
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: QuickSettingsPanel(
+                prefs: _prefs,
+                onChanged: (newPrefs) {
+                  setState(() => _prefs = newPrefs);
+                  newPrefs.save();
+                  // Apply live changes
+                  if (newPrefs.volumeBoostMultiplier != _prefs.volumeBoostMultiplier) {
+                    _applyVolumeBoost(newPrefs.volumeBoostMultiplier);
+                  }
+                  _applyVideoFilters(newPrefs);
+                  _applyAudioPrefs(newPrefs);
+                  _initAmbilight();
+                  _initBingeGuard();
+                },
+                onDone: () => setState(() => _showQuickSettings = false),
+                onOpenFullSettings: () {
+                  setState(() => _showQuickSettings = false);
+                  Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => const PlayerSettingsScreen()));
+                },
+                subDelayMs: _subDelayMs,
+                audioDelayMs: _audioDelayMs,
+                onSubDelay: (ms) => _applySubSync(ms),
+                onAudioDelay: (ms) => _applyAudioSync(ms),
+                onOpenSubSync: () {
+                  setState(() { _showQuickSettings = false; _showSubSyncPanel = true; });
+                },
+                onOpenAudioSync: () {
+                  setState(() { _showQuickSettings = false; _showAudioSyncPanel = true; });
+                },
+                speed: _speed,
+                onSpeedChanged: (s) {
+                  setState(() => _speed = s);
+                  _player.setRate(s);
+                },
+              ),
+            ),
+
+          // ── Audio Sync Panel ──
+          if (_showAudioSyncPanel)
+            Positioned.fill(child: GestureDetector(
+              onTap: () => setState(() => _showAudioSyncPanel = false),
+              child: Container(color: Colors.black45))),
+          if (_showAudioSyncPanel)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: SyncPanel(
+                label: 'Audio',
+                delayMs: _audioDelayMs,
+                onChanged: _applyAudioSync,
+                onDone: () => setState(() => _showAudioSyncPanel = false),
+              )),
+
+          // ── Subtitle Sync Panel ──
+          if (_showSubSyncPanel)
+            Positioned.fill(child: GestureDetector(
+              onTap: () => setState(() => _showSubSyncPanel = false),
+              child: Container(color: Colors.black45))),
+          if (_showSubSyncPanel)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: SyncPanel(
+                label: 'Subtitle',
+                delayMs: _subDelayMs,
+                onChanged: _applySubSync,
+                onDone: () => setState(() => _showSubSyncPanel = false),
+              )),
+
+          // ── EQ Panel ──
+          if (_showEqPanel)
+            Positioned.fill(child: GestureDetector(
+              onTap: () => setState(() => _showEqPanel = false),
+              child: Container(color: Colors.black45))),
+          if (_showEqPanel)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: EqPanel(
+                prefs: _prefs,
+                onChanged: (newPrefs) {
+                  setState(() => _prefs = newPrefs);
+                  newPrefs.save();
+                  _applyAudioPrefs(newPrefs);
+                },
+                onDone: () => setState(() => _showEqPanel = false),
+              )),
+
           // ── Sleep Timer Menu ──
           if (_showSleepMenu && !_locked)
             Positioned(
@@ -1224,6 +1811,19 @@ class _ControlsOverlay extends StatelessWidget {
   final bool castConnected;
   final String rotationMode;
   final VoidCallback onCycleRotation;
+  final int audioDelayMs;
+  final int subDelayMs;
+  final double volumeBoost;
+  final bool showPlaybackInfo;
+  final bool showRemaining;
+  final VoidCallback onSettings;
+  final VoidCallback onEq;
+  final VoidCallback onAudioSync;
+  final VoidCallback onSubSync;
+  final VoidCallback onShareTimestamp;
+  final VoidCallback onJumpToTime;
+  final VoidCallback onToggleRemaining;
+  final VoidCallback onTogglePlaybackInfo;
   final VoidCallback? onNextEpisode, onResetZoom;
   final ValueChanged<double> onSeekTo, onSliderStart, onSliderChange, onSliderEnd;
   final String Function(Duration) fmtDur;
@@ -1242,6 +1842,13 @@ class _ControlsOverlay extends StatelessWidget {
     required this.onAudioTracks, required this.onPiP, required this.onSleep,
     required this.onCast, required this.castConnected,
     required this.rotationMode, required this.onCycleRotation,
+    this.audioDelayMs = 0, this.subDelayMs = 0,
+    this.volumeBoost = 1.0, this.showPlaybackInfo = false,
+    this.showRemaining = false,
+    required this.onSettings, required this.onEq,
+    required this.onAudioSync, required this.onSubSync,
+    required this.onShareTimestamp, required this.onJumpToTime,
+    required this.onToggleRemaining, required this.onTogglePlaybackInfo,
     this.onNextEpisode, this.onResetZoom,
     required this.onSeekTo, required this.onSliderStart,
     required this.onSliderChange, required this.onSliderEnd,
@@ -1322,6 +1929,50 @@ class _ControlsOverlay extends StatelessWidget {
                 tooltip: _rotationLabel(rotationMode),
                 onPressed: onCycleRotation,
               ),
+              // EQ button
+              IconButton(
+                icon: const Icon(Icons.equalizer_rounded, color: Colors.white, size: 22),
+                tooltip: 'Equalizer',
+                onPressed: onEq,
+              ),
+              // Settings button
+              IconButton(
+                icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
+                tooltip: 'Player Settings',
+                onPressed: onSettings,
+              ),
+              // Audio sync badge (tap to open sync panel; shows when delay ≠ 0)
+              if (audioDelayMs != 0)
+                GestureDetector(
+                  onTap: onAudioSync,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0x33E8002D),
+                      border: Border.all(color: const Color(0xFFE8002D), width: 0.8),
+                      borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      'Audio ${audioDelayMs > 0 ? '+' : ''}${audioDelayMs}ms ↺',
+                      style: const TextStyle(color: Color(0xFFE8002D), fontSize: 10, fontWeight: FontWeight.w600)),
+                  ),
+                ),
+              // Sub sync badge
+              if (subDelayMs != 0)
+                GestureDetector(
+                  onTap: onSubSync,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0x33E8002D),
+                      border: Border.all(color: const Color(0xFFE8002D), width: 0.8),
+                      borderRadius: BorderRadius.circular(6)),
+                    child: Text(
+                      'Sub ${subDelayMs > 0 ? '+' : ''}${subDelayMs}ms ↺',
+                      style: const TextStyle(color: Color(0xFFE8002D), fontSize: 10, fontWeight: FontWeight.w600)),
+                  ),
+                ),
             ]),
           ),
         ),
@@ -1368,9 +2019,19 @@ class _ControlsOverlay extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Row(children: [
-              Text(fmtDur(position), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              GestureDetector(
+                onTap: onToggleRemaining,
+                onLongPress: onJumpToTime,
+                child: Text(
+                  showRemaining
+                      ? '-${fmtDur(duration - position)}'
+                      : fmtDur(position),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12))),
               const Spacer(),
-              Text(fmtDur(duration), style: const TextStyle(color: Colors.white70, fontSize: 12)),
+              GestureDetector(
+                onLongPress: onShareTimestamp,
+                child: Text(fmtDur(duration),
+                  style: const TextStyle(color: Colors.white70, fontSize: 12))),
             ]),
             const SizedBox(height: 4),
 
