@@ -286,6 +286,86 @@ def api_user_status():
     })
 
 
+
+
+# ---------------------------------------------------------------------------
+# Trending endpoint — top-rated published titles (ranked by rating × vote_count)
+# Falls back to rating-only sort if watch_history is sparse.
+# ---------------------------------------------------------------------------
+
+@bp.route("/api/trending")
+@auth.login_required
+def api_trending():
+    """Return top trending titles for the RaddFlix app Trending Now row."""
+    limit = int(request.args.get("limit", 20))
+    media_type = request.args.get("type", "").strip().lower()
+
+    conditions = ["t.is_published = 1", "t.poster_url IS NOT NULL AND t.poster_url != ''"]
+    params = []
+
+    if media_type:
+        conditions.append("LOWER(t.media_type) = ?")
+        params.append(media_type)
+
+    where = "WHERE " + " AND ".join(conditions)
+
+    # Primary: rank by watch_history view count (last 60 days) × rating
+    sql = f"""
+        SELECT t.id, t.title, t.year, t.media_type, t.plot, t.overview,
+               t.rating, t.genres, t.language, t.is_free, t.updated_at,
+               t.poster, t.poster_share_url, t.poster_url, t.runtime,
+               t.season_count, t.episode_count,
+               (SELECT id FROM files WHERE title_id = t.id LIMIT 1) AS file_id,
+               (SELECT COUNT(*) FROM watch_history wh
+                JOIN files fi ON fi.id = CAST(wh.file_id AS INTEGER)
+                WHERE fi.title_id = t.id
+                  AND wh.updated_at >= datetime('now', '-60 days')
+               ) AS recent_views
+        FROM titles t
+        {where}
+        ORDER BY (recent_views * 3 + COALESCE(t.rating, 0)) DESC
+        LIMIT ?
+    """
+    params.append(limit)
+
+    try:
+        with db.conn() as c:
+            rows = c.execute(sql, params).fetchall()
+
+        result = []
+        for r in rows:
+            import json as _json
+            genres = []
+            try:
+                genres = _json.loads(r["genres"] or "[]")
+                if not isinstance(genres, list):
+                    genres = [str(genres)]
+            except Exception:
+                pass
+            result.append({
+                "id": r["id"],
+                "title": r["title"] or "",
+                "year": r["year"],
+                "media_type": r["media_type"] or "movie",
+                "description": r["plot"] or r["overview"] or "",
+                "rating": float(r["rating"] or 0),
+                "genres": genres,
+                "language": r["language"] or "",
+                "is_free": 1 if r["is_free"] else 0,
+                "runtime": r["runtime"],
+                "season_count": r["season_count"],
+                "episode_count": r["episode_count"],
+                "poster_url": r["poster_url"] or r["poster"] or "",
+                "poster_share_url": r["poster_share_url"] or "",
+                "db_version": int(r["updated_at"] or 0),
+                "file_id": str(r["file_id"]) if r["file_id"] else None,
+                "recent_views": r["recent_views"],
+            })
+
+        return jsonify({"ok": True, "trending": result, "count": len(result)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 # ---------------------------------------------------------------------------
 # Filter endpoints (v2-compatible)
 # ---------------------------------------------------------------------------
