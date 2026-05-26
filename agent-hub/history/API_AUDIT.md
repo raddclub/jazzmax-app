@@ -3,7 +3,8 @@
 **Date:** 2026-05-26  
 **Auditor:** Replit Agent  
 **Scope:** All endpoints in Oracle Watch API (port 6000) vs Flutter app JSON parsing code  
-**Status:** ✅ Complete — 12 bugs found (4 CRITICAL crash-level, 3 HIGH wrong-data, 5 MEDIUM/LOW)
+**Status:** ✅ All 12 Bugs Fixed — 2026-05-26  
+**Verification:** 24/24 automated backend checks PASS
 
 ---
 
@@ -571,3 +572,52 @@ return jsonify({
 | 10 | BUG-010 genres list toString | 2 lines Flutter | Genre chip display |
 | 11 | BUG-011 isGuest not parsed | 1 line Flutter | Cosmetic only |
 | 12 | BUG-012 isActive not in me() | 1 line backend | Cosmetic only |
+
+
+---
+
+## ✅ Fix Session Summary — 2026-05-26
+
+**All 12 bugs resolved. Automated verification: 24/24 checks PASS.**
+
+### Backend Fixes (Oracle — `/opt/jazzmax/_watch_prototype/routes/`)
+
+| Bug | File | Fix |
+|-----|------|-----|
+| BUG-001 | `app_catalog.py` + `app_search.py` | `1 if r["is_free"] else 0` (was Python bool → JSON true/false) |
+| BUG-002 | `app_catalog.py` | Normalize `"tv"`/`"series"` → `"show"` in sync() |
+| BUG-003 | `app_search.py` | Rename JSON key `"type"` → `"media_type"` with normalization |
+| BUG-004 | `app_search.py` | Rename JSON key `"title_id"` → `"id"` |
+| BUG-006 | `app_notifications.py` | Added `_ts()` helper: SQLite TEXT `"YYYY-MM-DD HH:MM:SS"` → Unix int |
+| BUG-007 | `app_subscription.py` | Added `hd_access` field to all 4 PLANS (free=0, others=1) |
+| BUG-008 | `app_subscription.py` | Added `features` list to all 4 PLANS (3–6 items each) |
+| BUG-009 | `app_catalog.py` | Added `share_url` to episode dict in sync() |
+| BUG-012 | `app_auth.py` | Added `is_active` to SQL SELECT + me() return; guest block too |
+
+### Flutter Fixes (GitHub — `raddflix_flutter/lib/`)
+
+| Bug | File | Fix |
+|-----|------|-----|
+| BUG-005 | `screens/show_detail_screen.dart` | `p['position']`→`p['position_ms']`, `p['duration']`→`p['duration_ms']` |
+| BUG-010 | `models/catalog_item.dart` | `genres` List joined as `"Action, Drama"` string, not `.toString()` |
+| BUG-011 | `models/user.dart` | `isGuest: userData['is_guest'] as bool? ?? false` |
+
+### Verification
+
+```
+PASSED: 24  FAILED: 0
+Endpoints tested: /api/catalog/sync, /api/search, /api/subscription/plans, /api/auth/me, /api/notifications/
+```
+
+### GitHub Commits
+
+| Files | Commit message |
+|-------|----------------|
+| `app_catalog.py` | fix(api): BUG-001 is_free int, BUG-002 media_type show, BUG-009 episode share_url |
+| `app_search.py` | fix(api): BUG-001 is_free int, BUG-003 media_type key, BUG-004 id key |
+| `app_subscription.py` | fix(api): BUG-007 hd_access field, BUG-008 features array |
+| `app_notifications.py` | fix(api): BUG-006 created_at string→int Unix timestamp |
+| `app_auth.py` | fix(api): BUG-012 is_active field in /me response |
+| `show_detail_screen.dart` | fix(flutter): BUG-005 episode progress — position_ms/duration_ms |
+| `catalog_item.dart` | fix(flutter): BUG-010 genres List serialized as comma string |
+| `user.dart` | fix(flutter): BUG-011 parse isGuest field from JSON |
