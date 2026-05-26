@@ -9,6 +9,7 @@ import '../core/constants.dart';
 import '../core/db/local_db.dart';
 import '../models/catalog_item.dart';
 import '../providers/catalog_provider.dart';
+import '../providers/downloads_provider.dart';
 
 class ShowDetailScreen extends ConsumerStatefulWidget {
   final CatalogItem item;
@@ -293,23 +294,59 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                     const SizedBox(height: 20),
                   ],
 
-                  // ── MOVIE: Play button ─────────────────────────────────────
+                  // ── MOVIE: Play + Download buttons ─────────────────────────
                   if (isMovie) ...[
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: _playMovie,
-                        icon: const Icon(Icons.play_arrow_rounded, size: 26),
-                        label: const Text('Play Now', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          elevation: 0,
+                    Row(children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _playMovie,
+                          icon: const Icon(Icons.play_arrow_rounded, size: 24),
+                          label: const Text('Play Now', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            elevation: 0,
+                          ),
                         ),
                       ),
-                    ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3),
+                      if (widget.item.fileId != null) ...[
+                        const SizedBox(width: 10),
+                        Consumer(builder: (context, ref2, _) {
+                          final isDownloading = ref2.watch(downloadsProvider).isDownloading(widget.item.fileId!);
+                          return SizedBox(
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: isDownloading ? null : () {
+                                ref2.read(downloadsProvider.notifier).startDownload(
+                                  fileId: widget.item.fileId!,
+                                  titleText: widget.item.title,
+                                  streamUrl: widget.item.shareUrl ?? '',
+                                  posterUrl: widget.item.posterUrl,
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Downloading \${widget.item.title}…'),
+                                    duration: const Duration(seconds: 2)),
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.surface,
+                                foregroundColor: AppColors.textSecondary,
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14),
+                                    side: BorderSide(color: AppColors.border)),
+                                elevation: 0,
+                              ),
+                              child: isDownloading
+                                ? const SizedBox(width: 20, height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary))
+                                : const Icon(Icons.download_for_offline_outlined, size: 22),
+                            ),
+                          );
+                        }),
+                      ],
+                    ]).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3),
                     const SizedBox(height: 32),
                   ],
 
@@ -419,12 +456,27 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                                 'S${season.toString().padLeft(2, '0')}E${epNum.toString().padLeft(2, '0')}';
                             final isFree = (ep['is_free'] as int? ?? 0) == 1;
 
+                            final epShareUrl = ep['share_url'] as String? ?? '';
+                            final isDownloading = ref.watch(downloadsProvider).isDownloading(fileId);
                             return _EpisodeTile(
                               index: i,
                               label: label,
                               isFree: isFree,
                               progress: progress,
                               onTap: () => _playEpisode(i),
+                              isDownloading: isDownloading,
+                              onDownload: fileId.isEmpty ? null : () {
+                                ref.read(downloadsProvider.notifier).startDownload(
+                                  fileId: fileId,
+                                  titleText: '\${widget.item.title} \$label',
+                                  streamUrl: epShareUrl,
+                                  posterUrl: widget.item.posterUrl,
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Downloading \$label…'),
+                                    duration: const Duration(seconds: 2)),
+                                );
+                              },
                             ).animate().fadeIn(
                               delay: Duration(milliseconds: 50 + i * 40),
                             );
@@ -469,6 +521,8 @@ class _EpisodeTile extends StatelessWidget {
   final bool isFree;
   final double progress;
   final VoidCallback onTap;
+  final VoidCallback? onDownload;
+  final bool isDownloading;
 
   const _EpisodeTile({
     required this.index,
@@ -476,6 +530,8 @@ class _EpisodeTile extends StatelessWidget {
     required this.isFree,
     required this.progress,
     required this.onTap,
+    this.onDownload,
+    this.isDownloading = false,
   });
 
   @override
@@ -579,9 +635,23 @@ class _EpisodeTile extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  // Play icon
-                  Icon(
+                  const SizedBox(width: 4),
+                  // Download + Play icons
+                  if (isDownloading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: SizedBox(width: 20, height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.primary)))
+                  else if (onDownload != null)
+                    GestureDetector(
+                      onTap: onDownload,
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 4),
+                        child: Icon(Icons.download_for_offline_outlined,
+                            color: AppColors.textSecondary, size: 22))),
+                  const SizedBox(width: 4),
+                  const Icon(
                     Icons.play_circle_outline_rounded,
                     color: AppColors.primary, size: 28,
                   ),
