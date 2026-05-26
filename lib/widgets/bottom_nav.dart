@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../core/constants.dart';
 
-class JazzMaxBottomNav extends StatelessWidget {
+class ZenoBottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const JazzMaxBottomNav({
+  const ZenoBottomNav({
     super.key,
     required this.currentIndex,
     required this.onTap,
