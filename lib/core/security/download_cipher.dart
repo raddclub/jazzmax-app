@@ -14,7 +14,7 @@ import 'package:path/path.dart' as p;
 /// but it is more than sufficient to prevent casual piracy since:
 /// 1. App-private storage is already sandboxed (other apps can't read it)
 /// 2. The scrambled extension (.jmx) is unrecognised by all video players
-/// 3. Only JazzMAX code knows how to decrypt/play these files
+/// 3. Only ZENO code knows how to decrypt/play these files
 class DownloadCipher {
   // 16-byte rotating XOR key — derived from "JMX-SECURE-KEY!" ASCII
   static const List<int> _key = [
