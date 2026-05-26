@@ -288,7 +288,7 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         borderRadius: BorderRadius.circular(AppRadius.md))));
 }
 
-// ── Plan Card ─────────────────────────────────────────────────────────────────
+// ── Plan Card ────────────────────────────────────────���────────────────────────
 class _PlanCard extends StatelessWidget {
   final SubscriptionPlan plan;
   final bool isPopular, isSelected;
