@@ -37,11 +37,11 @@ jobs:
         run: flutter --version
 
       - name: Flutter pub get
-        working-directory: jazzmax_flutter
+        working-directory: raddflix_flutter
         run: flutter pub get
 
       - name: Set up keystore
-        working-directory: jazzmax_flutter/android/app/keystore
+        working-directory: raddflix_flutter/android/app/keystore
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_BASE64 }}
           KS_PASS: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -59,8 +59,8 @@ jobs:
               -keysize 2048 \
               -validity 10000 \
               -keystore raddflix.keystore \
-              -storepass "${KS_PASS:-JazzMAX_2024_Store}" \
-              -keypass "${KEY_PASS:-JazzMAX_2024_Key}" \
+              -storepass "${KS_PASS:-RaddFlix_2024_Store}" \
+              -keypass "${KEY_PASS:-RaddFlix_2024_Key}" \
               -dname "CN=RaddFlix,OU=Mobile,O=Radd Club,L=Karachi,ST=Sindh,C=PK" \
               -noprompt
             echo "Keystore generated. Save this as KEYSTORE_BASE64 GitHub secret:"
@@ -68,7 +68,7 @@ jobs:
           fi
 
       - name: Build release APK
-        working-directory: jazzmax_flutter
+        working-directory: raddflix_flutter
         env:
           KEYSTORE_PATH: keystore/raddflix.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -79,9 +79,9 @@ jobs:
       - name: Rename APK with version
         id: apk
         run: |
-          VERSION=$(grep "version:" jazzmax_flutter/pubspec.yaml | awk '{print $2}' | tr -d "'" | tr -d '"')
+          VERSION=$(grep "version:" raddflix_flutter/pubspec.yaml | awk '{print $2}' | tr -d "'" | tr -d '"')
           APK_NAME="RaddFlix-${VERSION}-build${{ github.run_number }}.apk"
-          cp jazzmax_flutter/build/app/outputs/flutter-apk/app-release.apk "$APK_NAME"
+          cp raddflix_flutter/build/app/outputs/flutter-apk/app-release.apk "$APK_NAME"
           echo "apk_name=$APK_NAME" >> $GITHUB_OUTPUT
           ls -lh "$APK_NAME"
 
@@ -107,3 +107,4 @@ jobs:
             Install on Android 5.0+
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
