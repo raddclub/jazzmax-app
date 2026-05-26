@@ -34,6 +34,13 @@ import '../screens/player_settings_screen.dart';
 import 'dart:math' as math;
 import 'package:audio_session/audio_session.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:gal/gal.dart';
+import '../widgets/player/cinematic_overlay.dart';
+import '../widgets/player/scene_bookmarks_panel.dart';
+import '../widgets/player/ab_loop_panel.dart';
+import '../widgets/player/track_badges.dart';
+import '../widgets/player/video_enhance_panel.dart';
+import '../widgets/player/transparent_player_layer.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
 const _pipChannel = MethodChannel('com.raddflix.app/pip');
@@ -208,6 +215,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   // ── Phase 3K: Frame Step ─────────────────────────────────────────────────
   bool _showFrameStep = false;
+
+  // ── Phase 3F: Cinematic Mode ─────────────────────────────────────────────
+  bool _cinematicMode = false;
+
+  // ── Video Enhance / Transparent Slider ───────────────────────────────────
+  bool _showVideoEnhance = false;
+  bool _showTransparentSlider = false;
 
   // ── Track Intelligence ────────────────────────────────────────────────────
   int _activeAudioIdx = 0;
@@ -433,6 +447,49 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _shareTimestamp() {
     final pos = _fmtDur(_position);
     Share.share('Watching ${widget.title} at $pos on RaddFlix');
+  }
+
+  // ── Cinematic Mode ────────────────────────────────────────────────────────
+  void _toggleCinematic() {
+    setState(() => _cinematicMode = !_cinematicMode);
+    if (_cinematicMode) setState(() => _showControls = false);
+  }
+
+  // ── Scene Bookmark ────────────────────────────────────────────────────────
+  Future<void> _addBookmarkAtPosition() async {
+    if (_duration == Duration.zero) return;
+    final emoji = await showBookmarkEmojiPicker(context);
+    if (emoji == null) return;
+    await SceneBookmarkStore.add(
+      contentId: widget.fileId,
+      episodeId: widget.episodes != null ? _currentEpIdx.toString() : null,
+      positionMs: _position.inMilliseconds,
+      emoji: emoji,
+    );
+    await _loadBookmarks();
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Bookmark $emoji added'), duration: const Duration(seconds: 2)));
+  }
+
+  Future<void> _deleteBookmark(int id) async {
+    await SceneBookmarkStore.delete(id);
+    await _loadBookmarks();
+  }
+
+  // ── Screenshot → Gallery ──────────────────────────────────────────────────
+  Future<void> _takeScreenshot() async {
+    try {
+      final frame = await _player.screenshot();
+      if (frame == null) return;
+      await Gal.putImageBytes(frame, name: 'raddflix_${DateTime.now().millisecondsSinceEpoch}.jpg');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Screenshot saved to gallery'),
+            duration: Duration(seconds: 2)));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not save screenshot'),
+            duration: Duration(seconds: 2)));
+    }
   }
 
   Future<void> _showJumpToTime() async {
@@ -1035,7 +1092,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           !_showQuickSettings &&
           !_showEqPanel &&
           !_showAudioSyncPanel &&
-          !_showSubSyncPanel) {
+          !_showSubSyncPanel &&
+          !_showAbPanel &&
+          !_showBookmarksPanel &&
+          !_showVideoEnhance) {
         setState(() => _showControls = false);
       }
     });
@@ -1515,6 +1575,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                   ? () => setState(() => _scale = 1.0)
                   : null,
               fmtDur: _fmtDur,
+              cinematicMode: _cinematicMode,
+              onToggleCinematic: _toggleCinematic,
+              activeAudioIdx: _activeAudioIdx,
+              activeSubIdx: _activeSubIdx,
+              audioLabels: _buildAudioLabels(_player.state.tracks.audio),
+              subLabels: _buildSubLabels(_player.state.tracks.subtitle),
+              bookmarks: _bookmarks,
+              abLoop: _abLoop,
+              onToggleAbPanel: () => setState(() => _showAbPanel = !_showAbPanel),
+              onToggleBookmarks: () => setState(() => _showBookmarksPanel = !_showBookmarksPanel),
+              onToggleVideoEnhance: () => setState(() => _showVideoEnhance = !_showVideoEnhance),
+              onTakeScreenshot: _takeScreenshot,
+              onAddBookmark: _addBookmarkAtPosition,
             ),
 
           // ── Lock Button ──
@@ -1565,10 +1638,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               child: _TracksPanel(
                 title: 'Subtitles',
                 tracks: _buildSubLabels(_player.state.tracks.subtitle),
+                activeIndex: _activeSubIdx,
                 onSelect: (i) {
-                  _player.setSubtitleTrack(
-                      _player.state.tracks.subtitle[i]);
-                  setState(() => _showSubtitleMenu = false);
+                  setState(() { _activeSubIdx = i; _showSubtitleMenu = false; });
+                  _player.setSubtitleTrack(_player.state.tracks.subtitle[i]);
                 },
               ),
             ),
@@ -1580,9 +1653,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               child: _TracksPanel(
                 title: 'Audio',
                 tracks: _buildAudioLabels(_player.state.tracks.audio),
+                activeIndex: _activeAudioIdx,
                 onSelect: (i) {
+                  setState(() { _activeAudioIdx = i; _showAudioMenu = false; });
                   _player.setAudioTrack(_player.state.tracks.audio[i]);
-                  setState(() => _showAudioMenu = false);
                 },
               ),
             ),
@@ -1784,6 +1858,85 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 },
               ),
             ),
+
+          // ── Cinematic Mode Overlay ──
+          if (_cinematicMode)
+            Positioned.fill(
+              child: CinematicOverlay(
+                isPlaying: _playing,
+                position: _position,
+                duration: _duration,
+                fmtDur: _fmtDur,
+                onPlayPause: () {
+                  _player.playOrPause();
+                  _userPaused = !_playing;
+                },
+                onExit: _toggleCinematic,
+                onSeekTo: (frac) {
+                  final ms = (frac * _duration.inMilliseconds).toInt();
+                  _player.seek(Duration(milliseconds: ms));
+                },
+              ),
+            ),
+
+          // ── Scene Bookmarks Panel ──
+          if (_showBookmarksPanel)
+            Positioned.fill(child: GestureDetector(
+              onTap: () => setState(() => _showBookmarksPanel = false),
+              child: Container(color: Colors.black45))),
+          if (_showBookmarksPanel)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: SceneBookmarksPanel(
+                bookmarks: _bookmarks,
+                fmtDur: _fmtDur,
+                onSeekTo: (pos) => _player.seek(pos),
+                onDelete: _deleteBookmark,
+                onClose: () => setState(() => _showBookmarksPanel = false),
+              )),
+
+          // ── A-B Loop Panel ──
+          if (_showAbPanel)
+            Positioned.fill(child: GestureDetector(
+              onTap: () => setState(() => _showAbPanel = false),
+              child: Container(color: Colors.black45))),
+          if (_showAbPanel)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: AbLoopPanel(
+                controller: _abLoop,
+                currentPosition: _position,
+                fmtDur: _fmtDur,
+                onChanged: () => setState(() {}),
+                onClose: () => setState(() => _showAbPanel = false),
+              )),
+
+          // ── Video Enhancement Panel ──
+          if (_showVideoEnhance)
+            Positioned.fill(child: GestureDetector(
+              onTap: () => setState(() => _showVideoEnhance = false),
+              child: Container(color: Colors.black45))),
+          if (_showVideoEnhance)
+            Positioned(bottom: 0, left: 0, right: 0,
+              child: VideoEnhancePanel(
+                prefs: _prefs,
+                onChanged: (newPrefs) {
+                  setState(() => _prefs = newPrefs);
+                  newPrefs.save();
+                  _applyVideoFilters(newPrefs);
+                },
+                onClose: () => setState(() => _showVideoEnhance = false),
+              )),
+
+          // ── Transparent Mode Opacity Slider ──
+          if (_prefs.transparentModeEnabled && _showTransparentSlider)
+            TransparentPlayerSlider(
+              opacity: _prefs.transparentModeOpacity,
+              onChanged: (v) {
+                final np = _prefs.copyWith(transparentModeOpacity: v);
+                setState(() => _prefs = np);
+                np.save();
+              },
+              onClose: () => setState(() => _showTransparentSlider = false),
+            ),
         ]),
       ),
     );
@@ -1827,6 +1980,20 @@ class _ControlsOverlay extends StatelessWidget {
   final VoidCallback? onNextEpisode, onResetZoom;
   final ValueChanged<double> onSeekTo, onSliderStart, onSliderChange, onSliderEnd;
   final String Function(Duration) fmtDur;
+  // Extended params
+  final bool cinematicMode;
+  final VoidCallback onToggleCinematic;
+  final int activeAudioIdx;
+  final int activeSubIdx;
+  final List<String> audioLabels;
+  final List<String> subLabels;
+  final List<SceneBookmark> bookmarks;
+  final AbLoopController abLoop;
+  final VoidCallback onToggleAbPanel;
+  final VoidCallback onToggleBookmarks;
+  final VoidCallback onToggleVideoEnhance;
+  final VoidCallback onTakeScreenshot;
+  final VoidCallback onAddBookmark;
 
   const _ControlsOverlay({
     required this.title, required this.playing, required this.buffering,
@@ -1853,6 +2020,19 @@ class _ControlsOverlay extends StatelessWidget {
     required this.onSeekTo, required this.onSliderStart,
     required this.onSliderChange, required this.onSliderEnd,
     required this.fmtDur,
+    this.cinematicMode = false,
+    required this.onToggleCinematic,
+    this.activeAudioIdx = 0,
+    this.activeSubIdx = 0,
+    this.audioLabels = const [],
+    this.subLabels = const [],
+    this.bookmarks = const [],
+    required this.abLoop,
+    required this.onToggleAbPanel,
+    required this.onToggleBookmarks,
+    required this.onToggleVideoEnhance,
+    required this.onTakeScreenshot,
+    required this.onAddBookmark,
   });
 
   @override
@@ -1888,6 +2068,16 @@ class _ControlsOverlay extends StatelessWidget {
                   Text('Episode ${currentEp! + 1} of $totalEps',
                       style: const TextStyle(color: Colors.white60, fontSize: 11)),
               ])),
+              // Active track pills
+              if (audioLabels.isNotEmpty)
+                AudioTrackBadge(
+                  label: activeAudioIdx < audioLabels.length ? audioLabels[activeAudioIdx] : '',
+                  onTap: onAudioTracks),
+              SubTrackBadge(
+                label: subLabels.isEmpty ? 'Off' : (activeSubIdx < subLabels.length ? subLabels[activeSubIdx] : 'Off'),
+                isOff: subLabels.isEmpty,
+                onTap: onSubtitleTracks),
+              TrackCountBadge(audioCount: audioLabels.length, subCount: subLabels.length),
               // Zoom reset
               if (onResetZoom != null)
                 _TopBtn(label: '${scale.toStringAsFixed(1)}×', onTap: onResetZoom!),
@@ -1934,6 +2124,39 @@ class _ControlsOverlay extends StatelessWidget {
                 icon: const Icon(Icons.equalizer_rounded, color: Colors.white, size: 22),
                 tooltip: 'Equalizer',
                 onPressed: onEq,
+              ),
+              // Video Enhancement
+              IconButton(
+                icon: const Icon(Icons.brightness_6_rounded, color: Colors.white, size: 20),
+                tooltip: 'Video Enhancement',
+                onPressed: onToggleVideoEnhance,
+              ),
+              // Cinematic Mode
+              IconButton(
+                icon: Icon(Icons.crop_free_rounded,
+                    color: cinematicMode ? const Color(0xFFE8002D) : Colors.white, size: 20),
+                tooltip: cinematicMode ? 'Exit Cinematic' : 'Cinematic Mode',
+                onPressed: onToggleCinematic,
+              ),
+              // Screenshot
+              IconButton(
+                icon: const Icon(Icons.screenshot_monitor_rounded, color: Colors.white, size: 20),
+                tooltip: 'Screenshot to Gallery',
+                onPressed: onTakeScreenshot,
+              ),
+              // A-B Loop
+              IconButton(
+                icon: Icon(Icons.loop_rounded,
+                    color: abLoop.isActive ? const Color(0xFFE8002D) : Colors.white, size: 20),
+                tooltip: 'A-B Loop',
+                onPressed: onToggleAbPanel,
+              ),
+              // Bookmarks
+              IconButton(
+                icon: Icon(Icons.bookmark_border_rounded,
+                    color: bookmarks.isNotEmpty ? Colors.amber : Colors.white, size: 20),
+                tooltip: 'Scene Bookmarks',
+                onPressed: onToggleBookmarks,
               ),
               // Settings button
               IconButton(
@@ -2059,6 +2282,33 @@ class _ControlsOverlay extends StatelessWidget {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
+                  // ── Scene Bookmark dots ──
+                  ...bookmarks.map((bm) {
+                    if (duration.inMilliseconds <= 0) return const SizedBox.shrink();
+                    final frac = (bm.positionMs / duration.inMilliseconds).clamp(0.0, 1.0);
+                    return Positioned(
+                      left: 24 + frac * (MediaQuery.of(context).size.width - 80),
+                      top: 0, bottom: 0,
+                      child: Center(child: GestureDetector(
+                        onTap: () => onSeekTo(frac),
+                        child: Text(bm.emoji, style: const TextStyle(fontSize: 10)))),
+                    );
+                  }),
+                  // ── A-B loop dots ──
+                  if (abLoop.pointA != null && duration.inMilliseconds > 0)
+                    Positioned(
+                      left: 24 + (abLoop.pointA!.inMilliseconds / duration.inMilliseconds).clamp(0.0,1.0) * (MediaQuery.of(context).size.width - 80),
+                      top: 0, bottom: 0,
+                      child: Center(child: Container(
+                        width: 10, height: 10,
+                        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.orange)))),
+                  if (abLoop.pointB != null && duration.inMilliseconds > 0)
+                    Positioned(
+                      left: 24 + (abLoop.pointB!.inMilliseconds / duration.inMilliseconds).clamp(0.0,1.0) * (MediaQuery.of(context).size.width - 80),
+                      top: 0, bottom: 0,
+                      child: Center(child: Container(
+                        width: 10, height: 10,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFE8002D))))),
                   // ── Buffer (gray) bar behind progress ──
                   Positioned(
                     left: 24, right: 24,
@@ -2096,6 +2346,17 @@ class _ControlsOverlay extends StatelessWidget {
             ),
 
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+              TextButton.icon(
+                icon: const Icon(Icons.bookmark_add_outlined, size: 13, color: Colors.white54),
+                label: const Text('Bookmark',
+                    style: TextStyle(color: Colors.white54, fontSize: 10)),
+                onPressed: onAddBookmark,
+                style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              ),
+              const SizedBox(width: 10),
               TextButton.icon(
                 icon: const Icon(Icons.add_rounded, size: 13, color: Colors.white54),
                 label: const Text('Subtitle File',
@@ -2356,20 +2617,29 @@ List<String> _buildSubLabels(List<dynamic> tracks) {
 class _TracksPanel extends StatelessWidget {
   final String title;
   final List<String> tracks;
+  final int activeIndex;
   final ValueChanged<int> onSelect;
-  const _TracksPanel({required this.title, required this.tracks, required this.onSelect});
+  const _TracksPanel({required this.title, required this.tracks, required this.onSelect, this.activeIndex = 0});
   @override
   Widget build(BuildContext context) {
-    return Container(width: 180, color: Colors.black87,
+    return Container(width: 200, color: Colors.black87,
       child: Column(children: [
         Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700))),
         Expanded(child: tracks.isEmpty
             ? const Center(child: Text('No tracks', style: TextStyle(color: Colors.white54, fontSize: 13)))
             : ListView.builder(itemCount: tracks.length,
-                itemBuilder: (_, i) => ListTile(
-                    title: Text(tracks[i], style: const TextStyle(color: Colors.white)),
-                    dense: true, onTap: () => onSelect(i)))),
+                itemBuilder: (_, i) {
+                  final isActive = i == activeIndex;
+                  return ListTile(
+                    title: Text(tracks[i], style: TextStyle(
+                      color: isActive ? const Color(0xFFE8002D) : Colors.white,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.normal)),
+                    trailing: isActive
+                      ? const Icon(Icons.check_rounded, color: Color(0xFFE8002D), size: 16)
+                      : null,
+                    dense: true, onTap: () => onSelect(i));
+                })),
       ])).animate().slideX(begin: 1, end: 0, duration: 200.ms, curve: AppCurves.standard);
   }
 }

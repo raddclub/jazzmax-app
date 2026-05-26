@@ -18,7 +18,7 @@ class _PlayerSettingsScreenState extends ConsumerState<PlayerSettingsScreen>
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 8, vsync: this);
+    _tab = TabController(length: 10, vsync: this);
   }
 
   @override
@@ -76,6 +76,8 @@ class _PlayerSettingsScreenState extends ConsumerState<PlayerSettingsScreen>
             Tab(text: 'Video'),
             Tab(text: 'Features'),
             Tab(text: 'Playback'),
+          Tab(text: 'Track Memory'),
+          Tab(text: 'Appearance'),
           ],
         ),
       ),
@@ -88,6 +90,8 @@ class _PlayerSettingsScreenState extends ConsumerState<PlayerSettingsScreen>
         _VideoTab(p: p, onChanged: _update),
         _FeaturesTab(p: p, onChanged: _update),
         _PlaybackTab(p: p, onChanged: _update),
+          _TrackMemoryTab(p: p, onChanged: _update),
+          _AppearanceTab(p: p, onChanged: _update),
       ]),
     );
   }
@@ -232,16 +236,38 @@ class _SubtitlesTab extends StatelessWidget {
     _Section('General'),
     _Toggle('Enable Subtitles', p.subtitleEnabled,
         (v) => onChanged((x) => x.copyWith(subtitleEnabled: v))),
+    _Toggle('Auto-Detect (Local Files)', p.subtitleAutoDetect,
+        (v) => onChanged((x) => x.copyWith(subtitleAutoDetect: v))),
     _Divider(),
     _Section('Style'),
     _SliderRow('Font Size', p.subtitleFontSize, 10, 40,
         (v) => onChanged((x) => x.copyWith(subtitleFontSize: v)),
         unit: 'px', divisions: 30),
+    _Choices('Font Family',
+        ['Sans-Serif', 'Serif', 'Monospace', 'Cursive'],
+        ['Sans-Serif', 'Serif', 'Monospace', 'Cursive'],
+        p.subtitleFontFamily,
+        (v) => onChanged((x) => x.copyWith(subtitleFontFamily: v))),
+    _Toggle('Bold Text', p.subtitleBold,
+        (v) => onChanged((x) => x.copyWith(subtitleBold: v))),
+    _Toggle('Italic Text', p.subtitleItalic,
+        (v) => onChanged((x) => x.copyWith(subtitleItalic: v))),
     _SliderRow('Outline Thickness', p.subtitleOutlineThickness, 0, 4,
         (v) => onChanged((x) => x.copyWith(subtitleOutlineThickness: v)),
         unit: '', divisions: 8),
-    _Toggle('Bold Text', p.subtitleBold,
-        (v) => onChanged((x) => x.copyWith(subtitleBold: v))),
+    _SliderRow('Background Opacity', p.subtitleBackgroundOpacity, 0, 1,
+        (v) => onChanged((x) => x.copyWith(subtitleBackgroundOpacity: v)),
+        displayFn: (v) => '${(v*100).toInt()}%', divisions: 10),
+    _Divider(),
+    _Section('Position'),
+    _Choices('Subtitle Position',
+        ['Bottom', 'Center', 'Top'],
+        ['bottom', 'center', 'top'],
+        p.subtitlePosition,
+        (v) => onChanged((x) => x.copyWith(subtitlePosition: v))),
+    _SliderRow('Vertical Offset', p.subtitleVerticalOffset, -0.5, 0.5,
+        (v) => onChanged((x) => x.copyWith(subtitleVerticalOffset: v)),
+        displayFn: (v) => v.toStringAsFixed(2), divisions: 20),
     _Divider(),
     _Section('Encoding'),
     _Choices('Encoding Override',
@@ -431,6 +457,88 @@ class _PlaybackTab extends StatelessWidget {
         (v) => onChanged((x) => x.copyWith(backgroundPlayEnabled: v))),
     _Toggle('Long-Press Play = Restart from Beginning', p.longPressPlayRestart,
         (v) => onChanged((x) => x.copyWith(longPressPlayRestart: v))),
+  ]);
+}
+
+// ── TRACK MEMORY TAB ──────────────────────────────────────────────────────────
+class _TrackMemoryTab extends StatelessWidget {
+  final PlayerPrefs p;
+  final void Function(PlayerPrefs Function(PlayerPrefs) fn) onChanged;
+  const _TrackMemoryTab({required this.p, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) => _SettingsList(children: [
+    _Section('Language Memory'),
+    _Toggle('Remember Audio Language', p.rememberAudioTrack,
+        (v) => onChanged((x) => x.copyWith(rememberAudioTrack: v))),
+    _Toggle('Remember Subtitle Language', p.rememberSubtitleTrack,
+        (v) => onChanged((x) => x.copyWith(rememberSubtitleTrack: v))),
+    _Toggle('Auto-Select by Device Language', p.autoSelectAudioByLocale,
+        (v) => onChanged((x) => x.copyWith(autoSelectAudioByLocale: v))),
+    _Divider(),
+    _Section('Badges'),
+    _Toggle('Show Active Track Badge', p.showActiveTrackBadge,
+        (v) => onChanged((x) => x.copyWith(showActiveTrackBadge: v))),
+    _Toggle('Show Track Count Badge', p.showTrackCountBadge,
+        (v) => onChanged((x) => x.copyWith(showTrackCountBadge: v))),
+    _Divider(),
+    const Padding(
+      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Text(
+        'Track memory saves your last selected audio and subtitle language so RaddFlix can auto-select it on the next video.',
+        style: TextStyle(color: Colors.white38, fontSize: 11),
+      ),
+    ),
+  ]);
+}
+
+// ── APPEARANCE TAB ────────────────────────────────────────────────────────────
+class _AppearanceTab extends StatelessWidget {
+  final PlayerPrefs p;
+  final void Function(PlayerPrefs Function(PlayerPrefs) fn) onChanged;
+  const _AppearanceTab({required this.p, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) => _SettingsList(children: [
+    _Section('Theme'),
+    Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(children: [
+        const Text('Accent Color', style: TextStyle(color: Colors.white70, fontSize: 13)),
+        const Spacer(),
+        GestureDetector(
+          onTap: () {},
+          child: Container(
+            width: 32, height: 32,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8002D),
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white24)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        const Text('#E8002D', style: TextStyle(color: Colors.white54, fontSize: 12)),
+      ]),
+    ),
+    _SliderRow('UI Font Scale', p.uiFontSize, 0.8, 1.2,
+        (v) => onChanged((x) => x.copyWith(uiFontSize: v)),
+        displayFn: (v) => '${v.toStringAsFixed(1)}×', divisions: 8),
+    _Divider(),
+    _Section('Info Overlays'),
+    _Toggle('Show Network Speed', p.showNetworkSpeed,
+        (v) => onChanged((x) => x.copyWith(showNetworkSpeed: v))),
+    _Toggle('Show Decoder Badge (HW/SW)', p.showDecoderInfo,
+        (v) => onChanged((x) => x.copyWith(showDecoderInfo: v))),
+    _Toggle('Show Playback Info', p.showPlaybackInfo,
+        (v) => onChanged((x) => x.copyWith(showPlaybackInfo: v))),
+    _Toggle('Show Episode Info', p.showEpisodeInfo,
+        (v) => onChanged((x) => x.copyWith(showEpisodeInfo: v))),
+    _Divider(),
+    _Section('Haptics'),
+    _Toggle('Vibrate on Gesture', p.vibrateOnGesture,
+        (v) => onChanged((x) => x.copyWith(vibrateOnGesture: v))),
+    _Toggle('Vibrate on Bookmark Save', p.bookmarkVibrate,
+        (v) => onChanged((x) => x.copyWith(bookmarkVibrate: v))),
   ]);
 }
 
