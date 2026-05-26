@@ -433,7 +433,7 @@ class _DebugPanelState extends State<_DebugPanel> {
                       : const Icon(Icons.share_rounded, size: 16),
                   label: Text(_sharing ? 'Sharing…' : 'Share File'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const AppColors.primary,
+                    backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
                   onPressed: _sharing ? null : () async {
