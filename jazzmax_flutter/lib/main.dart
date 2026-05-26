@@ -34,7 +34,7 @@ void main() async {
 
   runApp(
     const ProviderScope(
-      child: JazzMaxApp(),
+      child: ZenoApp(),
     ),
   );
 }
