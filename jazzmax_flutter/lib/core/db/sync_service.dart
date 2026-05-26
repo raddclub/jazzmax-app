@@ -1,145 +1,170 @@
+import 'dart:convert';
+import 'package:dio/dio.dart';
 import '../api/catalog_api.dart';
+import '../constants.dart';
+import '../debug/debug_logger.dart';
 import 'local_db.dart';
 import '../../models/catalog_item.dart';
-import '../debug/debug_logger.dart';
 
 /// Handles syncing the catalog from the server into the local SQLite database.
+///
+/// Sync priority:
+///   1. Oracle server (http://92.4.95.252) — when internet is available
+///   2. JazzDrive db_update.json — zero-rated fallback when no internet bundle
+///
 /// On first run: full sync (downloads everything).
 /// On subsequent runs: delta sync (only new/changed items since last sync).
 class SyncService {
   static Future<SyncResult> sync() async {
+    // Try Oracle server first
     try {
-      final lastSyncTs = await LocalDb.getLastSyncTimestamp();
-      final localVersion = await LocalDb.getLastSyncVersion();
+      final result = await _syncFromOracle();
+      return result;
+    } catch (e) {
+      DebugLogger.logWarn('SYNC', 'Oracle sync failed: $e — trying JazzDrive fallback');
+    }
 
-      DebugLogger.logSync('START',
-          'lastSyncTs=$lastSyncTs  localVersion=$localVersion');
-
-      CatalogVersion serverVersion;
+    // Fallback: JazzDrive zero-rated sync (works without internet bundle)
+    if (AppConstants.jazzDriveDbUpdateUrl.isNotEmpty) {
       try {
-        serverVersion = await CatalogApi.getVersion();
-        DebugLogger.logSync('VERSION',
-            'serverVersion=${serverVersion.version}  serverCount=${serverVersion.count}');
-      } catch (e, s) {
-        DebugLogger.logError('SYNC', 'getVersion() API call failed', e, s);
-        return SyncResult(
-          success: false,
-          itemsSynced: 0,
-          message: 'Sync failed: version check error: $e',
-          isUpToDate: false,
-        );
+        final result = await _syncFromJazzDrive();
+        return result;
+      } catch (e) {
+        DebugLogger.logError('SYNC', 'JazzDrive fallback sync also failed', e);
       }
+    }
 
-      // Check if sync is needed
-      if (localVersion >= serverVersion.version && lastSyncTs > 0) {
-        DebugLogger.logSync('SKIP', 'Already up to date (local=$localVersion >= server=${serverVersion.version})');
-        return SyncResult(
-          success: true,
-          itemsSynced: 0,
-          message: 'Already up to date',
-          isUpToDate: true,
-        );
-      }
+    return const SyncResult(
+      success: false,
+      itemsSynced: 0,
+      message: 'Sync failed: no internet and no JazzDrive fallback configured',
+      isUpToDate: false,
+    );
+  }
 
-      // Choose full or delta sync
-      List<CatalogItem> items;
-      if (lastSyncTs == 0) {
-        DebugLogger.logSync('FULL', 'First run — performing full sync');
-        try {
-          items = await CatalogApi.syncFull();
-          DebugLogger.logSync('FULL_RECV',
-              'Received ${items.length} items from server');
-          // Log breakdown
-          final movies = items.where((i) => i.mediaType == 'movie').length;
-          final shows = items.where((i) => i.mediaType == 'show').length;
-          final other = items.length - movies - shows;
-          DebugLogger.logSync('FULL_DETAIL',
-              'movies=$movies  shows=$shows  other=$other');
-          if (items.isEmpty) {
-            DebugLogger.logWarn('SYNC', 'Server returned 0 items on full sync!');
-          }
-          // Log a sample of media_types
-          final types = items.map((i) => i.mediaType).toSet();
-          DebugLogger.logSync('FULL_TYPES', 'media_types seen: $types');
-        } catch (e, s) {
-          DebugLogger.logError('SYNC', 'syncFull() API call failed', e, s);
-          return SyncResult(
-            success: false,
-            itemsSynced: 0,
-            message: 'Sync failed: full sync error: $e',
-            isUpToDate: false,
-          );
-        }
-      } else {
-        DebugLogger.logSync('DELTA', 'Delta sync since ts=$lastSyncTs');
-        try {
-          items = await CatalogApi.syncDelta(lastSyncTs);
-          DebugLogger.logSync('DELTA_RECV',
-              'Received ${items.length} changed items');
-        } catch (e, s) {
-          DebugLogger.logError('SYNC', 'syncDelta() API call failed', e, s);
-          return SyncResult(
-            success: false,
-            itemsSynced: 0,
-            message: 'Sync failed: delta sync error: $e',
-            isUpToDate: false,
-          );
-        }
-      }
+  // ── Oracle server sync ────────────────────────────────────────────────────
 
-      // Write to local DB
-      DebugLogger.logSync('DB_WRITE', 'Writing ${items.length} items to SQLite...');
-      int written = 0;
-      int epWritten = 0;
-      for (final item in items) {
-        try {
-          await LocalDb.upsertTitle(item);
-          written++;
-        } catch (e) {
-          DebugLogger.logError('SYNC', 'upsertTitle failed for id=${item.id} title=${item.title}', e);
-        }
+  static Future<SyncResult> _syncFromOracle() async {
+    final lastSyncTs = await LocalDb.getLastSyncTimestamp();
+    final serverVersion = await CatalogApi.getVersion();
+    final localVersion = await LocalDb.getLastSyncVersion();
 
-        for (final ep in item.episodes) {
-          try {
-            await LocalDb.upsertEpisode({
-              'id': ep['id'],
-              'title_id': item.id,
-              'file_id': ep['file_id']?.toString(),
-              'season': ep['season'],
-              'episode': ep['episode'],
-              'label': ep['label'],
-              'quality': ep['quality'],
-              'is_free': (ep['is_free'] == true || ep['is_free'] == 1) ? 1 : 0,
-            });
-            epWritten++;
-          } catch (e) {
-            DebugLogger.logError('SYNC', 'upsertEpisode failed for title=${item.id} ep=${ep['id']}', e);
-          }
-        }
-      }
-      DebugLogger.logSync('DB_DONE', 'Wrote $written titles, $epWritten episodes');
-
-      // Update sync metadata
-      final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      await LocalDb.setLastSyncVersion(serverVersion.version);
-      await LocalDb.setLastSyncTimestamp(nowTs);
-      DebugLogger.logSync('META', 'Updated sync_meta: version=${serverVersion.version}  ts=$nowTs');
-
-      DebugLogger.logSync('SUCCESS', 'Sync complete — ${items.length} item(s) synced');
-      return SyncResult(
+    if (localVersion >= serverVersion.version && lastSyncTs > 0) {
+      return const SyncResult(
         success: true,
-        itemsSynced: items.length,
-        message: 'Synced ${items.length} item(s)',
-        isUpToDate: false,
-      );
-    } catch (e, s) {
-      DebugLogger.logError('SYNC', 'Unexpected sync error', e, s);
-      return SyncResult(
-        success: false,
         itemsSynced: 0,
-        message: 'Sync failed: $e',
-        isUpToDate: false,
+        message: 'Already up to date',
+        isUpToDate: true,
       );
+    }
+
+    List<CatalogItem> items;
+    if (lastSyncTs == 0) {
+      items = await CatalogApi.syncFull();
+    } else {
+      items = await CatalogApi.syncDelta(lastSyncTs);
+    }
+
+    await _persistItems(items);
+
+    final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await LocalDb.setLastSyncVersion(serverVersion.version);
+    await LocalDb.setLastSyncTimestamp(nowTs);
+
+    DebugLogger.log('SYNC', 'Oracle sync complete: ${items.length} item(s)');
+    return SyncResult(
+      success: true,
+      itemsSynced: items.length,
+      message: 'Synced ${items.length} item(s) from server',
+      isUpToDate: false,
+    );
+  }
+
+  // ── JazzDrive zero-rated fallback sync ───────────────────────────────────
+
+  static Future<SyncResult> _syncFromJazzDrive() async {
+    DebugLogger.log('SYNC', 'Attempting JazzDrive db_update.json sync (zero-rated)');
+
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 20),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+
+    final resp = await dio.get<dynamic>(AppConstants.jazzDriveDbUpdateUrl);
+    if (resp.statusCode != 200 || resp.data == null) {
+      throw Exception('JazzDrive sync: HTTP ${resp.statusCode}');
+    }
+
+    final raw = resp.data is String
+        ? json.decode(resp.data as String) as Map<String, dynamic>
+        : resp.data as Map<String, dynamic>;
+
+    final remoteVersion = raw['version'] as int? ?? 0;
+    final localVersion = await LocalDb.getLastSyncVersion();
+
+    if (localVersion >= remoteVersion && localVersion > 0) {
+      DebugLogger.log('SYNC', 'JazzDrive: already up to date (v$localVersion)');
+      return const SyncResult(
+        success: true,
+        itemsSynced: 0,
+        message: 'Already up to date (JazzDrive)',
+        isUpToDate: true,
+      );
+    }
+
+    final titlesRaw = raw['titles'] as List<dynamic>? ?? [];
+    final episodesRaw = raw['episodes'] as List<dynamic>? ?? [];
+
+    final items = titlesRaw
+        .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
+        .toList();
+
+    // Attach episodes to their parent items
+    final epsByTitle = <int, List<Map<String, dynamic>>>{};
+    for (final ep in episodesRaw) {
+      final m = ep as Map<String, dynamic>;
+      final tid = m['title_id'] as int? ?? 0;
+      epsByTitle.putIfAbsent(tid, () => []).add(m);
+    }
+
+    final itemsWithEps = items.map((item) {
+      final eps = epsByTitle[item.id] ?? [];
+      return item.copyWithEpisodes(eps);
+    }).toList();
+
+    await _persistItems(itemsWithEps);
+
+    final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await LocalDb.setLastSyncVersion(remoteVersion);
+    await LocalDb.setLastSyncTimestamp(nowTs);
+
+    DebugLogger.log('SYNC', 'JazzDrive sync complete: ${items.length} item(s)');
+    return SyncResult(
+      success: true,
+      itemsSynced: items.length,
+      message: 'Synced ${items.length} item(s) via JazzDrive (zero-rated)',
+      isUpToDate: false,
+    );
+  }
+
+  // ── Persistence ────────────────────────────────────────────────────────────
+
+  static Future<void> _persistItems(List<CatalogItem> items) async {
+    for (final item in items) {
+      await LocalDb.upsertTitle(item);
+      for (final ep in item.episodes) {
+        await LocalDb.upsertEpisode({
+          'id':        ep['id'],
+          'title_id':  item.id,
+          'file_id':   ep['file_id']?.toString(),
+          'season':    ep['season'],
+          'episode':   ep['episode'],
+          'label':     ep['label'],
+          'quality':   ep['quality'],
+          'is_free':   (ep['is_free'] == true || ep['is_free'] == 1) ? 1 : 0,
+          'share_url': ep['share_url'] as String?,
+        });
+      }
     }
   }
 }
