@@ -16,7 +16,7 @@ import 'jazzdrive_service.dart';
 ///   2. Show placeholder — poster arrives when user taps play
 ///      (JazzDrive thumbnail is fetched for free alongside stream link)
 ///
-/// Storage: getExternalFilesDir / getApplicationDocumentsDirectory + /jazzmax_posters/
+/// Storage: getExternalFilesDir / getApplicationDocumentsDirectory + /zeno_posters/
 /// Files named title_{id}.jpg — no collisions even if JazzDrive names all "poster.jpg"
 class PosterService {
   static Directory? _posterDir;
