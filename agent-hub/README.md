@@ -47,7 +47,7 @@ RaddFlix is a Pakistani streaming platform. Jazz SIM users stream movies/dramas 
 │   │   ├── _legacy/           ← !! DO NOT DELETE !! jazzdrive.py + scanner.py import from here
 │   │   └── templates/         ← Jinja2 HTML templates
 │   └── requirements.txt
-├── jazzmax_flutter/           ← Flutter mobile app source (build on dev machine, not server)
+├── raddflix_flutter/           ← Flutter mobile app source (build on dev machine, not server)
 ├── _watch_prototype/          ← Early prototype, reference only
 ├── wa-bot/                    ← WhatsApp bot (Node.js)
 └── scripts/                   ← Utility scripts

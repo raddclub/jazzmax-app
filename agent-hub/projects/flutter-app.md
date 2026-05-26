@@ -4,8 +4,8 @@
 The user-facing streaming app for Android (and eventually iOS). Jazz SIM users stream movies/dramas for free (JazzDrive zero-rating). Non-Jazz users can also subscribe with limited access.
 
 ## Location
-- **Server:** `/opt/jazzmax/jazzmax_flutter/` (folder name is legacy — internal only)
-- **GitHub:** `jazzmax_flutter/` folder in `raddclub/raddflix-app`
+- **Server:** `/opt/jazzmax/raddflix_flutter/` (folder name is legacy — internal only)
+- **GitHub:** `raddflix_flutter/` folder in `raddclub/raddflix-app`
 - **Build:** Must be done on a development machine with Flutter SDK installed. Not built on the Oracle server.
 
 ## Tech Stack
@@ -56,7 +56,7 @@ The user-facing streaming app for Android (and eventually iOS). Jazz SIM users s
 ## Build Command (on dev machine with Flutter SDK)
 
 ```bash
-cd jazzmax_flutter
+cd raddflix_flutter
 flutter build apk --release
 # APK output: build/app/outputs/flutter-apk/app-release.apk
 ```

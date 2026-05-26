@@ -4,7 +4,7 @@ Flutter mobile app for the RaddFlix streaming platform.
 
 **Package ID:** `com.raddflix.app`
 **Min Android SDK:** 21
-**Server path (Oracle):** `/opt/jazzmax/jazzmax_flutter/`
+**Server path (Oracle):** `/opt/jazzmax/raddflix_flutter/`
 
 ## Build (on dev machine with Flutter SDK)
 

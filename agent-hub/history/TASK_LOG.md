@@ -21,7 +21,7 @@ Full project cleanup, rebrand from JazzMAX → RaddFlix, and agent coordination 
 - Removed all Zeno brand assets (10 x `zeno_*.png` image files from `assets/brand/`)
 - Fixed `ZENO` comment in `radd-hub/hub/routes/library.py`
 - Created full agent-hub system: README, SKILLS, SETUP, PROMPT, project docs, install script, task log
-- Added per-project `.md` files: `radd-hub/README.md`, `jazzmax_flutter/README.md`
+- Added per-project `.md` files: `radd-hub/README.md`, `raddflix_flutter/README.md`
 - Added root `README.md`
 
 ### Files Changed (key ones)
@@ -34,16 +34,16 @@ Full project cleanup, rebrand from JazzMAX → RaddFlix, and agent coordination 
 - `agent-hub/projects/radd-hub.md` — created
 - `agent-hub/projects/flutter-app.md` — created
 - `agent-hub/projects/wa-bot.md` — created
-- `jazzmax_flutter/android/app/build.gradle` — fallback keystore/alias fixed
-- `jazzmax_flutter/android/app/src/main/res/xml/network_security_config.xml` — comment fixed
-- `jazzmax_flutter/lib/core/theme/radd_colors.dart` — renamed from jazz_colors, all properties rebranded
-- `jazzmax_flutter/lib/widgets/radd_text_field.dart` — renamed from jazz_text_field, class rebranded
-- `jazzmax_flutter/lib/screens/home_screen.dart` — imports updated
-- `jazzmax_flutter/lib/screens/login_screen.dart` — imports + class usage updated
-- `jazzmax_flutter/lib/screens/register_screen.dart` — imports + class usage updated
-- `jazzmax_flutter/lib/screens/subscription_screen.dart` — imports + class usage updated
+- `raddflix_flutter/android/app/build.gradle` — fallback keystore/alias fixed
+- `raddflix_flutter/android/app/src/main/res/xml/network_security_config.xml` — comment fixed
+- `raddflix_flutter/lib/core/theme/radd_colors.dart` — renamed from jazz_colors, all properties rebranded
+- `raddflix_flutter/lib/widgets/radd_text_field.dart` — renamed from jazz_text_field, class rebranded
+- `raddflix_flutter/lib/screens/home_screen.dart` — imports updated
+- `raddflix_flutter/lib/screens/login_screen.dart` — imports + class usage updated
+- `raddflix_flutter/lib/screens/register_screen.dart` — imports + class usage updated
+- `raddflix_flutter/lib/screens/subscription_screen.dart` — imports + class usage updated
 - `radd-hub/hub/routes/library.py` — ZENO comment fixed
-- 10x `jazzmax_flutter/assets/brand/zeno_*.png` — deleted
+- 10x `raddflix_flutter/assets/brand/zeno_*.png` — deleted
 - `README.md` (root) — created
 
 ### Notes for Next Agent

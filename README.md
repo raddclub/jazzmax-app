@@ -7,7 +7,7 @@
 | Folder | What it is |
 |--------|-----------|
 | `radd-hub/` | Flask admin panel (Radd Hub v3.0) — content management, user management, subscriptions, analytics |
-| `jazzmax_flutter/` | Flutter mobile app — the user-facing streaming app |
+| `raddflix_flutter/` | Flutter mobile app — the user-facing streaming app |
 | `_watch_prototype/` | Early prototype of watch API (reference only) |
 | `scripts/` | Utility scripts (firewall, oracle setup, push helpers) |
 | `agent-hub/` | **AI agent coordination system** — read this if you are an AI agent |
