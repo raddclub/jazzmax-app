@@ -12,6 +12,7 @@ class CatalogItem {
   final List<Map<String, dynamic>> episodes;
   final String? fileId;
   final String? shareUrl;
+  final String? posterPath;
   final String? language;
   final bool? isNew;
   final double? watchProgress;
@@ -33,6 +34,7 @@ class CatalogItem {
     this.episodes = const [],
     this.fileId,
     this.shareUrl,
+    this.posterPath,
     this.language,
     this.isNew,
     this.watchProgress,
@@ -76,6 +78,7 @@ class CatalogItem {
       episodes:    episodesRaw.cast<Map<String, dynamic>>(),
       fileId:      json['file_id']?.toString(),
       shareUrl:    json['share_url'] as String?,
+      posterPath:  null,  // local only — set by LocalDb
       language:    json['language'] as String?,
       isNew:       json['is_new'] as bool?,
       watchProgress: (json['watch_progress'] as num?)?.toDouble(),
@@ -91,12 +94,14 @@ class CatalogItem {
     String? status,
     bool? isOngoing,
     String? shareUrl,
+    String? posterPath,
   }) => CatalogItem(
     id: id, title: title, year: year, mediaType: mediaType,
     description: description, rating: rating, genres: genres,
     posterUrl: posterUrl, isFree: isFree, dbVersion: dbVersion,
     episodes: episodes, fileId: fileId, language: language, isNew: isNew,
     shareUrl: shareUrl ?? this.shareUrl,
+    posterPath: posterPath ?? this.posterPath,
     watchProgress: watchProgress ?? this.watchProgress,
     isUploading: isUploading ?? this.isUploading,
     status: status ?? this.status,
@@ -107,7 +112,7 @@ class CatalogItem {
     id: id, title: title, year: year, mediaType: mediaType,
     description: description, rating: rating, genres: genres,
     posterUrl: posterUrl, isFree: isFree, dbVersion: dbVersion,
-    episodes: eps, fileId: fileId, shareUrl: shareUrl,
+    episodes: eps, fileId: fileId, shareUrl: shareUrl, posterPath: posterPath,
     language: language, isNew: isNew,
     watchProgress: watchProgress,
     isUploading: isUploading,
