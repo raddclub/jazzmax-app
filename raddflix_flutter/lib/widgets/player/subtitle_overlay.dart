@@ -50,6 +50,13 @@ class SubtitleOverlay extends StatelessWidget {
           child: GestureDetector(
             onLongPress: () {
               Clipboard.setData(ClipboardData(text: currentLine!));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Copied to clipboard'),
+                  duration: Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
             },
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
