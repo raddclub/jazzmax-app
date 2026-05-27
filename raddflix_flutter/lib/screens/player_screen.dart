@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -226,6 +227,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // ── Phase 3K: Frame Step ─────────────────────────────────────────────────
   bool _showFrameStep = false;
 
+  // ── Phase 3K: Chapter Markers ────────────────────────────────────────────
+  List<Duration> _chapters = [];
+
   // ── Phase 3F: Cinematic Mode ─────────────────────────────────────────────
   bool _cinematicMode = false;
 
@@ -302,7 +306,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Future<void> _initAudioSession() async {
     try {
       final session = await AudioSession.instance;
-      await session.configure(const AudioSessionConfiguration.video());
+      await session.configure(const AudioSessionConfiguration.music());
       session.interruptionEventStream.listen((event) {
         if (!mounted) return;
         if (event.begin) {
@@ -362,12 +366,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Future<void> _applyAudioPrefs(PlayerPrefs p) async {
     // Hardware decoder
-    await _player.setProperty('hwdec', p.hwDecoderEnabled ? 'auto' : 'no');
+    await _np.setProperty('hwdec', p.hwDecoderEnabled ? 'auto' : 'no');
     // Deinterlace
-    await _player.setProperty('deinterlace', p.deinterlaceEnabled ? 'yes' : 'no');
+    await _np.setProperty('deinterlace', p.deinterlaceEnabled ? 'yes' : 'no');
     // Audio normalization
     if (p.audioNormalization) {
-      await _player.setProperty('af', 'dynaudnorm');
+      await _np.setProperty('af', 'dynaudnorm');
     }
     // Equalizer bands
     if (p.equalizerEnabled && !p.dialogueBoostEnabled) {
@@ -376,10 +380,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           .asMap().entries
           .map((e) => 'equalizer=f=${e.key < b.length ? [60,170,310,600,1000,3000,6000,12000,14000,16000][e.key] : 60}:width_type=o:width=2:g=${e.key < b.length ? b[e.key].toStringAsFixed(1) : "0"}')
           .join(',');
-      await _player.setProperty('af', eqStr);
+      await _np.setProperty('af', eqStr);
     } else if (p.dialogueBoostEnabled) {
       // Fixed voice-clarity EQ
-      await _player.setProperty('af',
+      await _np.setProperty('af',
           'equalizer=f=310:width_type=o:width=2:g=2,'
           'equalizer=f=600:width_type=o:width=2:g=4,'
           'equalizer=f=1000:width_type=o:width=2:g=5,'
@@ -390,7 +394,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   Future<void> _applyVideoFilters(PlayerPrefs p) async {
     final vf = _buildVfString(p);
-    await _player.setProperty('vf', vf);
+    await _np.setProperty('vf', vf);
   }
 
   void _applyVolumeBoost(double multiplier) {
@@ -398,28 +402,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Step 1: system volume to max
     VolumeController().setVolume(1.0);
     // Step 2: MPV internal amplification (100 = normal, 300 = 3×)
-    _player.setProperty('volume', '${(multiplier * 100).toInt()}');
+    _np.setProperty('volume', '${(multiplier * 100).toInt()}');
   }
 
   Future<void> _applyAudioSync(int ms) async {
     _audioDelayMs = ms;
-    await _player.setProperty('audio-delay', '${ms / 1000.0}');
+    await _np.setProperty('audio-delay', '${ms / 1000.0}');
   }
 
   Future<void> _applySubSync(int ms) async {
     _subDelayMs = ms;
-    await _player.setProperty('sub-delay', '${ms / 1000.0}');
+    await _np.setProperty('sub-delay', '${ms / 1000.0}');
   }
 
   Future<void> _fetchPlaybackInfo() async {
     try {
-      final codec  = await _player.getProperty('video-codec');
-      final width  = await _player.getProperty('width');
-      final height = await _player.getProperty('height');
-      final fps    = await _player.getProperty('fps');
-      final bits   = await _player.getProperty('video-bitrate');
-      final buf    = await _player.getProperty('demuxer-cache-duration');
-      final hwdec  = await _player.getProperty('hwdec-current');
+      final codec  = await _np.getProperty('video-codec');
+      final width  = await _np.getProperty('width');
+      final height = await _np.getProperty('height');
+      final fps    = await _np.getProperty('fps');
+      final bits   = await _np.getProperty('video-bitrate');
+      final buf    = await _np.getProperty('demuxer-cache-duration');
+      final hwdec  = await _np.getProperty('hwdec-current');
       if (!mounted) return;
       setState(() {
         _piCodec   = codec ?? '—';
@@ -459,6 +463,78 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     Share.share('Watching ${widget.title} at $pos on RaddFlix');
   }
 
+  // ── §3.3 item 5: Seek bar long-press → "Set intro end here" ──────────────
+  void _onSeekBarLongPress() {
+    if (_duration == Duration.zero) return;
+    if (!SmartIntroStore.shouldShow(
+        contentType: widget.contentType, totalDuration: _duration)) return;
+    final pos = _fmtDur(_position);
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1A2E),
+        title: const Text('Set Intro End',
+            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+        content: Text(
+          'Set intro skip point to $pos?\n\nNext time this series plays, "Skip Intro" will jump to this position.',
+          style: const TextStyle(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final seriesId = widget.fileId.split('/').first;
+              await SmartIntroStore.saveIntroEnd(
+                seriesId: seriesId,
+                epIndex: _currentEpIdx,
+                positionSeconds: _position.inSeconds);
+              if (!mounted) return;
+              setState(() {
+                _savedIntroEnd = _position.inSeconds;
+                _skipIntroVisible = true;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Intro end set to $pos'),
+                    duration: const Duration(seconds: 2)));
+            },
+            child: const Text('Set Here',
+                style: TextStyle(color: Color(0xFFE8002D), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── §3K: Frame-by-frame step ──────────────────────────────────────────────
+  void _frameStep() {
+    if (_playing) { _player.pause(); _userPaused = true; }
+    _np.command(['frame-step']);
+    setState(() => _showFrameStep = true);
+  }
+
+  void _frameBackStep() {
+    if (_playing) { _player.pause(); _userPaused = true; }
+    _np.command(['frame-back-step']);
+    setState(() => _showFrameStep = true);
+  }
+
+  // ── §3K: Load chapter markers from MPV ───────────────────────────────────
+  Future<void> _loadChapters() async {
+    try {
+      final raw = await _np.getProperty('chapter-list');
+      if (raw == null || raw.isEmpty || _duration == Duration.zero) return;
+      final list = jsonDecode(raw) as List<dynamic>;
+      final chapters = list.map((ch) {
+        final timeSec = (ch['time'] as num? ?? 0).toDouble();
+        return Duration(milliseconds: (timeSec * 1000).toInt());
+      }).where((d) => d > Duration.zero).toList();
+      if (mounted && chapters.isNotEmpty) setState(() => _chapters = chapters);
+    } catch (_) {}
+  }
+
   // ── Cinematic Mode ────────────────────────────────────────────────────────
   void _toggleCinematic() {
     setState(() => _cinematicMode = !_cinematicMode);
@@ -470,12 +546,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     if (_duration == Duration.zero) return;
     final emoji = await showBookmarkEmojiPicker(context);
     if (emoji == null) return;
-    await SceneBookmarkStore.add(
+    await SceneBookmarkStore.add(SceneBookmark(
       contentId: widget.fileId,
       episodeId: widget.episodes != null ? _currentEpIdx.toString() : null,
       positionMs: _position.inMilliseconds,
       emoji: emoji,
-    );
+      createdAt: DateTime.now(),
+    ));
     await _loadBookmarks();
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Bookmark $emoji added'), duration: const Duration(seconds: 2)));
@@ -493,7 +570,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (frame == null) return;
       final result = await SaverGallery.saveImage(
         frame,
-        name: 'raddflix_${DateTime.now().millisecondsSinceEpoch}',
+        fileName: 'raddflix_${DateTime.now().millisecondsSinceEpoch}',
         androidExistNotSave: false,
       );
       if (result.isSuccess != true) throw Exception('Save failed');
@@ -666,6 +743,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   double _brightness = 0.5;
   double _volume = 0.7;
 
+  // Helper: access MPV-level setProperty / getProperty / command
+  NativePlayer get _np => _player.platform as NativePlayer;
+
   Future<void> _initPlayer() async {
     _player = Player();
     _videoCtrl = VideoController(_player);
@@ -690,6 +770,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!mounted) return;
       _duration = d;
       _durationNotifier.value = d;
+      // Load chapter markers once duration is known
+      if (d.inSeconds > 0) _loadChapters();
     });
     _player.stream.buffering.listen((b) {
       if (!mounted) return;
@@ -907,7 +989,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final fraction = step / steps;
       final newVol = ((1.0 - fraction) * _preFadeVolume).clamp(0.0, 1.0);
       VolumeController().setVolume(newVol);
-      _player.setProperty('volume', '${(newVol * _volumeBoost * 100).toInt()}');
+      _np.setProperty('volume', '${(newVol * _volumeBoost * 100).toInt()}');
       if (step >= steps) t.cancel();
     });
   }
@@ -916,7 +998,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _sleepFadeTimer?.cancel();
     _sleepFadeActive = false;
     VolumeController().setVolume(_preFadeVolume);
-    _player.setProperty('volume', '${(_volumeBoost * 100).toInt()}');
+    _np.setProperty('volume', '${(_volumeBoost * 100).toInt()}');
   }
 
   void _setSleepTimer(int minutes) {
@@ -1083,7 +1165,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           // Normal system volume range 0–100%
           final newV = rawV.clamp(0.0, 1.0);
           VolumeController().setVolume(newV);
-          _player.setProperty('volume', '${(newV * _volumeBoost * 100).toInt()}');
+          _np.setProperty('volume', '${(newV * _volumeBoost * 100).toInt()}');
           setState(() {
             _volume = newV;
             _inBoostGesture = false;
@@ -1095,7 +1177,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           final boostDelta = (rawV - 1.0) * 2.5; // 2.5× gain per screen-height above max
           final newBoost = (_startVolumeBoost + boostDelta).clamp(1.0, 3.0);
           VolumeController().setVolume(1.0); // system stays at max
-          _player.setProperty('volume', '\${(newBoost * 100).toInt()}');
+          _np.setProperty('volume', '${(newBoost * 100).toInt()}');
           if (newBoost > 2.0) HapticFeedback.mediumImpact(); // haptic at 200%+
           setState(() {
             _volume = 1.0;
@@ -1720,6 +1802,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               onToggleVideoEnhance: () => setState(() => _showVideoEnhance = !_showVideoEnhance),
               onTakeScreenshot: _takeScreenshot,
               onAddBookmark: _addBookmarkAtPosition,
+              onSeekBarLongPress: _onSeekBarLongPress,
+              chapters: _chapters,
+              showFrameStep: _showFrameStep,
+              onFrameStep: _frameStep,
+              onFrameBackStep: _frameBackStep,
             ),
 
           // ── Lock Button ──
@@ -1826,7 +1913,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     const SizedBox(height: 16),
                     const Text('Time for a Break!', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
-                    Text('You've watched $_bingeWatchedMins minutes in this session.',
+                    Text("You've watched $_bingeWatchedMins minutes in this session.",
                         style: const TextStyle(color: Colors.white70, fontSize: 14), textAlign: TextAlign.center),
                     const SizedBox(height: 32),
                     Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -2126,6 +2213,13 @@ class _ControlsOverlay extends StatelessWidget {
   final VoidCallback onToggleVideoEnhance;
   final VoidCallback onTakeScreenshot;
   final VoidCallback onAddBookmark;
+  // §3.3 item 5: seek bar long-press
+  final VoidCallback? onSeekBarLongPress;
+  // §3K: chapter markers + frame-step
+  final List<Duration> chapters;
+  final bool showFrameStep;
+  final VoidCallback onFrameStep;
+  final VoidCallback onFrameBackStep;
 
   const _ControlsOverlay({
     required this.title, required this.playing, required this.buffering,
@@ -2165,6 +2259,11 @@ class _ControlsOverlay extends StatelessWidget {
     required this.onToggleVideoEnhance,
     required this.onTakeScreenshot,
     required this.onAddBookmark,
+    this.onSeekBarLongPress,
+    this.chapters = const [],
+    this.showFrameStep = false,
+    required this.onFrameStep,
+    required this.onFrameBackStep,
   });
 
   @override
@@ -2441,6 +2540,31 @@ class _ControlsOverlay extends StatelessWidget {
                       child: Center(child: Container(
                         width: 10, height: 10,
                         decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFE8002D))))),
+                  // ── Chapter markers ──
+                  ...chapters.map((ch) {
+                    if (duration.inMilliseconds <= 0) return const SizedBox.shrink();
+                    final frac = (ch.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+                    return Positioned(
+                      left: 24 + frac * (MediaQuery.of(context).size.width - 80) - 1,
+                      top: 0, bottom: 0,
+                      child: Center(child: Container(
+                        width: 2, height: sliderDragging ? 16 : 10,
+                        decoration: BoxDecoration(
+                          color: Colors.white54,
+                          borderRadius: BorderRadius.circular(1)),
+                      )),
+                    );
+                  }),
+                  // ── Long-press seek bar → set intro end ──
+                  if (onSeekBarLongPress != null)
+                    Positioned(
+                      left: 24, right: 24, top: 0, bottom: 0,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onLongPress: onSeekBarLongPress,
+                        child: const SizedBox.expand(),
+                      ),
+                    ),
                   // ── Buffer (gray) bar behind progress ──
                   Positioned(
                     left: 24, right: 24,
@@ -2476,6 +2600,25 @@ class _ControlsOverlay extends StatelessWidget {
                 ],
               ),
             ),
+
+            // ── §3K: Frame-step controls (visible when paused + showFrameStep) ──
+            if (!playing && showFrameStep)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 4),
+                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  IconButton(
+                    icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 28),
+                    tooltip: 'Frame back',
+                    onPressed: onFrameBackStep),
+                  const SizedBox(width: 8),
+                  const Text('Frame', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 28),
+                    tooltip: 'Frame forward',
+                    onPressed: onFrameStep),
+                ]),
+              ),
 
             Row(mainAxisAlignment: MainAxisAlignment.end, children: [
               TextButton.icon(
