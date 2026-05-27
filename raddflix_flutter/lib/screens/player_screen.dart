@@ -572,6 +572,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         frame,
         fileName: 'raddflix_${DateTime.now().millisecondsSinceEpoch}',
         androidRelativePath: 'Pictures',
+        skipIfExists: false,
       );
       if (result.isSuccess != true) throw Exception('Save failed');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
