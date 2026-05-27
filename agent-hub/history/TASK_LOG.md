@@ -1023,3 +1023,28 @@ Audit all Phase 3 code for bugs/compile errors. Fix them. Implement next spec ta
   - Screenshot: `_takeScreenshot()` calls `player.screenshot()` + `Gal.putImageBytes()` — needs verification
 
 ---
+
+
+## Session 2026-05-27 — Fix All Dart Compile Errors + Spec Features
+
+### Dart Compile Errors Fixed (from build #280)
+- `AudioSessionConfiguration.video()` → `.music()` (constructor doesn't exist in audio_session 0.1.21)
+- All `_player.setProperty/getProperty/command()` → `(_player.platform as NativePlayer).method()`; added helper getter `NativePlayer get _np`
+- `SceneBookmarkStore.add(...)` fixed: takes positional `SceneBookmark` object, wrapped named params in `SceneBookmark(...)` constructor
+- saver_gallery 3.0.10: renamed `name:` → `fileName:`
+- Line 1906 apostrophe parse error: `'You've watched...'` → double-quoted string
+- `eq_panel.dart:137`: `Text(_bands[i])` double→String: added `.toStringAsFixed(0)`
+- `scene_bookmarks_panel.dart:77,92`: `bm.id` (int?) → `bm.id!` for non-nullable callback
+- Added `dart:convert` import for `jsonDecode` in `_loadChapters()`
+
+### Spec Features Implemented
+- **§3.3 item 5**: Long-press seek bar → "Set Intro End" confirmation dialog at current position
+- **§3K Chapter Markers**: MPV `chapter-list` property loaded after duration known → white tick marks on seek bar
+- **§3K Frame-by-frame**: `_frameStep()`/`_frameBackStep()` via `NativePlayer.command`; frame-step buttons appear below seek bar when paused
+- **§3.16H Subtitle copy snackbar**: "Copied to clipboard" SnackBar shown on subtitle long-press
+
+### Files Changed (commits a557200d / ef43ecfb / ac6a1e7d / 761ac472)
+- `raddflix_flutter/lib/screens/player_screen.dart`
+- `raddflix_flutter/lib/widgets/player/eq_panel.dart`
+- `raddflix_flutter/lib/widgets/player/scene_bookmarks_panel.dart`
+- `raddflix_flutter/lib/widgets/player/subtitle_overlay.dart`
