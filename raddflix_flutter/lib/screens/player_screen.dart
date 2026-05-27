@@ -571,7 +571,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final result = await SaverGallery.saveImage(
         frame,
         fileName: 'raddflix_${DateTime.now().millisecondsSinceEpoch}',
-        androidExistNotSave: false,
+        androidRelativePath: 'Pictures',
       );
       if (result.isSuccess != true) throw Exception('Save failed');
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
@@ -1205,7 +1205,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _onScaleEnd(ScaleEndDetails d) {
     // Persist volume boost if changed via swipe-into-boost
     if (_inBoostGesture && _volumeBoost != _startVolumeBoost) {
-      _prefs.save(_prefs.copyWith(volumeBoostMultiplier: _volumeBoost));
+      final np = _prefs.copyWith(volumeBoostMultiplier: _volumeBoost);
+      setState(() => _prefs = np);
+      np.save();
     }
     _inBoostGesture = false;
     if (_dragIntent == 'seek' && _dragSeekDelta != null) {
