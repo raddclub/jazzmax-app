@@ -74,7 +74,7 @@ class SceneBookmarksPanel extends StatelessWidget {
                     alignment: Alignment.centerRight,
                     padding: const EdgeInsets.only(right: 20),
                     child: const Icon(Icons.delete_rounded, color: Colors.red, size: 20)),
-                  onDismissed: (_) => onDelete(bm.id),
+                  onDismissed: (_) => onDelete(bm.id!),
                   child: ListTile(
                     dense: true,
                     leading: Text(bm.emoji, style: const TextStyle(fontSize: 20)),
@@ -89,7 +89,7 @@ class SceneBookmarksPanel extends StatelessWidget {
                     },
                     onLongPress: () {
                       HapticFeedback.mediumImpact();
-                      onDelete(bm.id);
+                      onDelete(bm.id!);
                     },
                   ),
                 );
