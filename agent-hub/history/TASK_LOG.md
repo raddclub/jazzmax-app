@@ -1051,3 +1051,47 @@ Audit all Phase 3 code for bugs/compile errors. Fix them. Implement next spec ta
 
 
 **BUILD #287: SUCCESS ✅** — commit 26780c8c — APK built successfully via GitHub Actions CI. All Dart compile errors resolved.
+
+---
+
+## Session 2026-05-27 — Full Live API Audit (All Endpoints + DB Schema + Flutter Comparison)
+
+### Objective
+Complete live API audit of all RaddFlix backend endpoints. Test every route, document request/response format, DB table/column schema, and compare with Flutter app data consumption. No assumptions — everything verified live from Oracle server and GitHub.
+
+### What Was Done
+- SSH connected to Oracle server (92.4.95.252), all 10 Python route files read directly from disk: `app_auth.py`, `app_catalog.py`, `app_search.py`, `app_subscription.py`, `app_history.py`, `app_notifications.py`, `app_plans.py`, `watch.py`, `app_version.py`, `jazzdrive_db.py`, `poster_proxy.py`, `sms_gateway.py`
+- All Flutter files read from GitHub: `constants.dart`, `auth_api.dart`, `catalog_api.dart`, `subscription_api.dart`, `api_client.dart`, `local_db.dart`, `sync_service.dart`, all model files
+- 34 live HTTP requests made against all 46 endpoints (public + authenticated)
+- Full SQLite DB schema obtained via SSH PRAGMA commands for all 12 tables
+- Guest token obtained and used on all auth-gated endpoints
+- Real play link generated and verified (Interstellar, file_id=11)
+- Real user registered and login tested live
+
+### DB Stats (verified live)
+- 69 published titles: 55 movie, 10 tv, 4 series
+- 15 free titles, 54 paid titles
+- 14 movie files, 6 episode files
+- 8 registered users
+
+### Bugs Found (10 new)
+| ID | Severity | Description |
+|----|----------|-------------|
+| BUG-NEW-001 | 🔴 CRITICAL | `is_active` returned as bool, Flutter expects int cast |
+| BUG-NEW-002 | 🔴 CRITICAL | `year` is TEXT in DB, returned as string, Flutter casts as `int?` → year never displays |
+| BUG-NEW-003 | 🔴 CRITICAL | `db_update` endpoint doesn't normalize `media_type` → TV shows invisible on JazzDrive sync |
+| BUG-NEW-004 | 🟠 HIGH | Title `file_id` is int in db_update vs string in sync (inconsistent) |
+| BUG-NEW-005 | 🟠 HIGH | `subscription/status` missing download quota fields → always shows 0/0 |
+| BUG-NEW-006 | 🔴 CRITICAL | Two conflicting payment account numbers: `03286839827` (app_subscription.py) vs `03001234567` (DB) |
+| BUG-NEW-007 | 🟠 HIGH | History API uses seconds, Flutter local DB uses milliseconds |
+| BUG-NEW-008 | 🟡 MEDIUM | `/api/app/check` update_url has old package ID (`pk.jazzmax.app`) |
+| BUG-NEW-009 | 🟡 MEDIUM | `watch_history.updated_at` is TEXT (CURRENT_TIMESTAMP), not Unix int |
+| BUG-NEW-010 | 🟡 MEDIUM | `POST /api/auth/device` crashes with 500 on guest token |
+
+### Key Findings
+- Flutter never calls `/api/app/check` (startup version gate exists but app ignores it)
+- `/api/plans` (DB) has DIFFERENT prices than `/api/subscription/plans` (hardcoded): PKR 249/399 vs 299/499
+- Two catalog endpoints: `/api/catalog/sync` (normalizes media_type ✅) vs `/api/catalog/db_update` (raw, doesn't normalize ❌)
+- `/api/jazzdrive/db_update_url` correctly points to `/api/catalog/db_update`
+- All 46 endpoints mapped: 34 live-tested, 12 code-verified
+- Full report: `agent-hub/history/API_FULL_AUDIT_2026_05_27.md`
