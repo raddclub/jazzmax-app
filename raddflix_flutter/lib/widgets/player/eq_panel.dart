@@ -134,7 +134,7 @@ class _EqPanelState extends State<EqPanel> {
                 )),
                 Text(_bands[i]==0?'0':(_bands[i]>0?'+${_bands[i].toStringAsFixed(0)}':'${_bands[i].toStringAsFixed(0)}'),
                   style:const TextStyle(color:Colors.white54,fontSize:9)),
-                Text(_bands[i], style:const TextStyle(color:Colors.white38,fontSize:9)),
+                Text('${_bands[i].toStringAsFixed(0)} Hz', style:const TextStyle(color:Colors.white38,fontSize:9)),
               ]),
             )).toList(),
           ),
