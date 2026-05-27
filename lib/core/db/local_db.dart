@@ -24,7 +24,7 @@ class LocalDb {
 
     return openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createAll,
       onUpgrade: _migrate,
     );
@@ -111,6 +111,17 @@ class LocalDb {
         rated_at INTEGER DEFAULT 0
       )
     ''');
+    await db.execute('''
+      CREATE TABLE vault_items (
+        id          TEXT PRIMARY KEY,
+        orig_name   TEXT NOT NULL,
+        vault_path  TEXT NOT NULL,
+        file_type   TEXT NOT NULL DEFAULT 'other',
+        file_size   INTEGER DEFAULT 0,
+        mime_type   TEXT,
+        added_at    INTEGER DEFAULT 0
+      )
+    ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
     await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
   }
@@ -162,6 +173,19 @@ class LocalDb {
           poster_url  TEXT,
           is_free     INTEGER DEFAULT 0,
           file_id     TEXT,
+          added_at    INTEGER DEFAULT 0
+        )
+      ''');
+    }
+    if (oldV < 7) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS vault_items (
+          id          TEXT PRIMARY KEY,
+          orig_name   TEXT NOT NULL,
+          vault_path  TEXT NOT NULL,
+          file_type   TEXT NOT NULL DEFAULT 'other',
+          file_size   INTEGER DEFAULT 0,
+          mime_type   TEXT,
           added_at    INTEGER DEFAULT 0
         )
       ''');
@@ -580,4 +604,40 @@ class LocalDb {
       fileId: row['file_id'] as String?,
     );
   }
+  // ── Vault ─────────────────────────────────────────────────────────────────
+
+  static Future<void> insertVaultItem(Map<String, dynamic> item) async {
+    final db = await instance;
+    await db.insert(
+      'vault_items',
+      {
+        'id':         item['id'],
+        'orig_name':  item['orig_name'],
+        'vault_path': item['vault_path'],
+        'file_type':  item['file_type'] ?? 'other',
+        'file_size':  item['file_size'] ?? 0,
+        'mime_type':  item['mime_type'],
+        'added_at':   DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<Map<String, dynamic>>> getVaultItems() async {
+    final db = await instance;
+    return db.query('vault_items', orderBy: 'added_at DESC');
+  }
+
+  static Future<void> deleteVaultItem(String id) async {
+    final db = await instance;
+    await db.delete('vault_items', where: 'id = ?', whereArgs: [id]);
+  }
+
+  static Future<int> getVaultItemCount() async {
+    final db = await instance;
+    final result =
+        await db.rawQuery('SELECT COUNT(*) as c FROM vault_items');
+    return (result.first['c'] as int?) ?? 0;
+  }
+
 }

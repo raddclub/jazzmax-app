@@ -47,6 +47,8 @@ class AppRoutes {
   static const String downloads = '/downloads';
   static const String watchlist = '/watchlist';
   static const String history = '/history';
+  static const String vault = '/vault';
+  static const String vaultLock = '/vault-lock';
 }
 
 class StorageKeys {

@@ -52,6 +52,13 @@ class RaddFlixBottomNav extends StatelessWidget {
               isActive: currentIndex == 3,
               onTap: () => onTap(3),
             ),
+            _NavItem(
+              icon: Icons.lock_outline_rounded,
+              activeIcon: Icons.lock_rounded,
+              label: 'Vault',
+              isActive: currentIndex == 4,
+              onTap: () => onTap(4),
+            ),
           ],
         ),
       ),

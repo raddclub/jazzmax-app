@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:dio/dio.dart';
 import '../core/api/catalog_api.dart';
 import '../core/constants.dart';
 import '../core/db/local_db.dart';
@@ -281,7 +283,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
     final durMs = _player.state.duration.inMilliseconds;
     if (posMs > 0) {
       await LocalDb.savePosition(widget.fileId, posMs, durationMs: durMs);
+      _syncHistoryToServer(posMs, durMs);
     }
+  }
+
+  /// Fire-and-forget backend history sync.
+  /// Skipped silently when offline — works on WiFi and mobile data.
+  void _syncHistoryToServer(int posMs, int durMs) async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      final hasConn = results.any((r) => r != ConnectivityResult.none);
+      if (!hasConn) return;
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString(StorageKeys.accessToken);
+      if (token == null || token.isEmpty) return;
+      final completed = durMs > 0 && posMs >= (durMs * 0.9).round();
+      await Dio().post(
+        '${AppConstants.apiBaseUrl}${ApiPaths.saveHistory(widget.fileId)}',
+        data: {
+          'progress_seconds': posMs ~/ 1000,
+          'completed': completed,
+        },
+        options: Options(
+          headers: {'Authorization': 'Bearer $token'},
+          sendTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+    } catch (_) {}
   }
 
   // ── Controls visibility ───────────────────────────────────────────────────

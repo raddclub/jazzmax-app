@@ -15,6 +15,8 @@ import 'screens/profile_screen.dart';
 import 'screens/downloads_screen.dart';
 import 'screens/watchlist_screen.dart';
 import 'screens/history_screen.dart';
+import 'screens/vault_screen.dart';
+import 'screens/vault_lock_screen.dart';
 import 'models/catalog_item.dart';
 
 class RaddFlixApp extends ConsumerWidget {
@@ -38,6 +40,8 @@ class RaddFlixApp extends ConsumerWidget {
         AppRoutes.downloads:     (_) => const DownloadsScreen(),
         AppRoutes.watchlist:     (_) => const WatchlistScreen(),
         AppRoutes.history:       (_) => const HistoryScreen(),
+        AppRoutes.vault:         (_) => const VaultScreen(),
+        AppRoutes.vaultLock:     (_) => const VaultLockScreen(),
         AppRoutes.search:        (_) => const SearchScreen(),
       },
       onGenerateRoute: (settings) {

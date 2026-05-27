@@ -54,6 +54,9 @@ dependencies:
   # Local video file picker — play any file from device storage (MX Player-style)
   file_picker: ^6.1.1
 
+  # Vault: biometric authentication (fingerprint / face unlock)
+  local_auth: ^2.2.0
+
   # Fonts
   google_fonts: ^6.1.0
 

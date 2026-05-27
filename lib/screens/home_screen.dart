@@ -8,6 +8,7 @@ import '../providers/catalog_provider.dart';
 import '../models/catalog_item.dart';
 import '../widgets/content_card.dart';
 import '../widgets/bottom_nav.dart';
+import '../providers/vault_provider.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -215,6 +216,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Navigator.of(context).pushNamed(AppRoutes.downloads);
           } else if (i == 3) {
             Navigator.of(context).pushNamed(AppRoutes.profile);
+          } else if (i == 4) {
+            final isUnlocked = ref.read(vaultProvider).isUnlocked;
+            Navigator.of(context).pushNamed(
+                isUnlocked ? AppRoutes.vault : AppRoutes.vaultLock);
           }
         },
       ),
