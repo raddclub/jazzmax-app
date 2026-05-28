@@ -372,6 +372,8 @@ class _FeaturesTab extends StatelessWidget {
     if (p.ambilightEnabled) ...[
       _SliderRow('Intensity', p.ambilightIntensity, 0.3, 1.0,
           (v) => onChanged((x) => x.copyWith(ambilightIntensity: v)), divisions: 7),
+      _SliderRow('Blur Radius', p.ambilightBlurRadius, 8.0, 48.0,
+          (v) => onChanged((x) => x.copyWith(ambilightBlurRadius: v)), divisions: 8),
       _Choices('Sample Rate', ['Fast (200ms)','Normal (400ms)','Smooth (800ms)'],
           ['200','400','800'], p.ambilightSampleIntervalMs.toString(),
           (v) => onChanged((x) => x.copyWith(ambilightSampleIntervalMs: int.parse(v)))),
