@@ -1191,3 +1191,40 @@ Complete live API audit of all RaddFlix backend endpoints. Test every route, doc
   - Added `showActiveTrackBadge` + `showTrackCountBadge` fields to `_ControlsOverlay` with defaults `true`; passed from parent via `_prefs`
   - `_player.stream.tracks` listener calls `_restoreTrackMemory()` once on first load
   
+## [2026-05-28] -- Agent: Replit Agent (Read-Only Audit Session)
+
+### Task
+User asked: find what was the last thing the previous Replit agent did.
+
+### Done
+- Ran install script (SSH setup attempted -- Oracle connection timed out, not blocking for this task)
+- Fetched and read agent-hub/README.md, agent-hub/SKILLS.md, agent-hub/history/TASK_LOG.md from GitHub
+- Identified and reported the last session work to the user
+
+### What the Previous Agent Did (last session summary)
+Session: 2026-05-28 -- Wire 9 Unimplemented Player Features
+Commit: 89c0890be5c04051d8d03b49c6e84be5ca2308b3
+File: raddflix_flutter/lib/screens/player_screen.dart (3074 -> 3223 lines, +149 lines)
+
+9 features wired:
+1. Ambilight glow border -- wrapped player body with AmbilightGlowBorder widget
+2. Transparent player opacity -- Opacity widget around Video, reads prefs.transparentModeOpacity
+3. Active track badges -- AudioTrackBadge + SubTrackBadge in top bar
+4. Track count badge -- "3A . 2S" badge shown when >1 track exists
+5. Rotation badge -- rotation icon + label in top bar, taps onCycleRotation
+6. Track memory -- saves/restores last audio & subtitle language via SharedPrefs
+7. SubtitleOverlay -- wired _player.stream.subtitle.listen to SubtitleOverlay widget
+8. Headphone disconnect notification -- SnackBar on becomingNoisyEventStream
+9. Headphone button guard -- _userPaused flag guard to prevent double-pause
+
+### Files Changed
+- `agent-hub/history/TASK_LOG.md` -- appended this entry (read-only session, no code changes)
+
+### Notes for Next Agent
+- This was a read-only audit session. No code was modified.
+- Last code commit was 89c0890b -- 9 player features wired in player_screen.dart
+- Oracle SSH connection timed out during install script (port 22 unreachable from Replit container at time of session) -- verify server is up before doing server-side work
+- ORACLE_SSH_KEY is plain text in Replit Secrets (no base64 decode needed)
+- Next implementation work: see PLAYER_SPEC.md for remaining unimplemented sections (volume boost 300%, frame-by-frame UI, chapter markers, remaining audio_session wiring)
+
+---
