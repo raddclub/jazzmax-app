@@ -152,6 +152,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // Sleep timer
   int? _sleepRemainingSeconds;
   Timer? _sleepTimer;
+  bool _sleepAtEpisodeEnd = false; // FIX-SLEEP: -1 = pause at end of episode
   // Sleep fade
   bool _sleepFadeActive = false;
   double _preFadeVolume = 0.7;
@@ -170,7 +171,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   double _sliderDragValue = 0.0;
 
   bool get _isLocalFile =>
-      widget.localPath != null && widget.localPath!.isNotEmpty;
+      (widget.localPath != null && widget.localPath!.isNotEmpty) ||
+      _isLocalPath(widget.fileId);
 
   // JazzDrive XML auto-retry
   int _jazzRetryCount = 0;
@@ -974,6 +976,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   void _onPlaybackEnded() {
+    // FIX-SLEEP: if "End of episode" sleep timer is set, pause here
+    if (_sleepAtEpisodeEnd) {
+      _sleepAtEpisodeEnd = false;
+      _player.pause();
+      _userPaused = true;
+      setState(() => _showControls = true);
+      return;
+    }
     if (_hasNextEp) {
       _startNextEpCountdown();
     } else {
@@ -1078,6 +1088,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   void _setSleepTimer(int minutes) {
     _cancelSleepTimer();
+    // FIX-SLEEP: -1 = "End of episode" — pause when playback ends naturally
+    if (minutes == -1) {
+      setState(() => _sleepAtEpisodeEnd = true);
+      return;
+    }
     if (minutes <= 0) return;
     setState(() => _sleepRemainingSeconds = minutes * 60);
     _sleepTimer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -1110,7 +1125,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _sleepFadeTimer?.cancel();
     if (_sleepFadeActive) _restoreVolumeAfterSleep();
     _sleepFadeActive = false;
-    setState(() => _sleepRemainingSeconds = null);
+    // FIX-SLEEP: also clear end-of-episode flag
+    setState(() { _sleepRemainingSeconds = null; _sleepAtEpisodeEnd = false; });
   }
 
   // ── PiP ──────────────────────────────────────────────────────────────────
@@ -1164,13 +1180,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   // ── Seek Thumbnail ────────────────────────────────────────────────────────
   void _updateSeekThumb(double fraction) {
     if (!_isLocalFile) return;
+    // FIX-LOCAL-2: use effective path — widget.localPath OR fileId for gallery videos
+    final videoPath = (widget.localPath != null && widget.localPath!.isNotEmpty)
+        ? widget.localPath!
+        : widget.fileId;
     _seekThumbDebounce?.cancel();
     _jazzRetryTimer?.cancel();
     _seekThumbDebounce = Timer(const Duration(milliseconds: 120), () async {
       final ms = (fraction * _duration.inMilliseconds).toInt();
       try {
         final thumb = await VideoThumbnail.thumbnailData(
-          video: widget.localPath!,
+          video: videoPath,
           timeMs: ms,
           quality: 60,
           maxWidth: 160,
