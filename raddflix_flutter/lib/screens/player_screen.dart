@@ -2248,7 +2248,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               onClose: () => setState(() => _showTransparentSlider = false),
             ),
         ]),
-      ),
+      );
   }
 }
 
