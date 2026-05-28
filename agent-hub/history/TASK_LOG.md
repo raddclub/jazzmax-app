@@ -1679,3 +1679,53 @@ Continue the comprehensive audit of all Flutter application files. Identify feat
 
   ---
   
+  ---
+
+  ## Session 6 — 2026-05-29
+
+  ### Scope
+  Post-fix verification + 5 more bugs found and fixed from deep code analysis of player_screen.dart and jazzdrive_service.dart.
+
+  ### Bugs Fixed
+
+  #### FIX-LOCAL-1: _isLocalFile getter broken for gallery-via-fileId (player_screen.dart)
+  - **Root cause**: `_isLocalFile` getter only checked `widget.localPath != null`. When a gallery video was passed as `fileId` (e.g. `content://media/...` or `/sdcard/...`), `_isLocalFile` returned `false` even though `_openMedia` correctly detected the local path.
+  - **Impact**: Three downstream breaks: (1) auto-retry JazzDrive logic fired on local files (lines 875, 884), (2) `isLocal` flag passed to seek bar was `false` so seek bar showed no thumbnail, (3) `_updateSeekThumb` gated on `_isLocalFile` so thumbnails never generated.
+  - **Fix**: Extended getter: `_isLocalFile => (widget.localPath != null && ...) || _isLocalPath(widget.fileId)`
+  - **Commit**: 1d6ef9f7
+
+  #### FIX-LOCAL-2: _updateSeekThumb hardcoded widget.localPath! (player_screen.dart)
+  - **Root cause**: Even if `_isLocalFile` were fixed, the thumbnail call used `widget.localPath!` which is null for gallery-via-fileId → null crash.
+  - **Fix**: Computed `videoPath = widget.localPath ?? widget.fileId` and passed that to `VideoThumbnail.thumbnailData`.
+  - **Commit**: 1d6ef9f7
+
+  #### FIX-SLEEP-1/2/3: Sleep timer "End of episode" (-1) completely broken (player_screen.dart)
+  - **Root cause**: `_setSleepTimer(int minutes)` had `if (minutes <= 0) return;` — the -1 sentinel for "End of episode" was silently discarded. The UI sent -1 but nothing happened.
+  - **Fix**:
+    1. Added `bool _sleepAtEpisodeEnd = false` state variable.
+    2. `_setSleepTimer(-1)` now sets `_sleepAtEpisodeEnd = true` and returns.
+    3. `_onPlaybackEnded()` checks `_sleepAtEpisodeEnd` first — pauses player, clears flag, shows controls, skips auto-next.
+    4. `_cancelSleepTimer()` also clears `_sleepAtEpisodeEnd`.
+  - **Commit**: 1d6ef9f7
+
+  #### FIX-TTL: JazzDrive stream cache TTL 6h → 90 min (jazzdrive_service.dart)
+  - **Root cause**: `_cacheTtl = Duration(hours: 6)` but JazzDrive CDN tokens embedded in stream URLs expire in ~1-2 hours. A cached link from 3 hours ago would fail silently — the player would try to play an expired CDN URL.
+  - **Fix**: `_cacheTtl = Duration(minutes: 90)` — keeps cache benefit, stays within CDN token lifetime.
+  - **Commit**: 42a53909
+
+  ### BUG-009 Status (Oracle share_url)
+  - app_catalog.py in repo already contains `"share_url": r["share_url"] or "",  # FIX BUG-009` in both /sync and /db_update endpoints.
+  - Live Oracle server tested — result TBD (connection may be needed to confirm deployed state).
+  - If server is running stale code, a `git pull && sudo systemctl restart jazzmax` on Oracle will activate the fix.
+
+  ### Files Changed
+  - `raddflix_flutter/lib/screens/player_screen.dart` — FIX-LOCAL-1, FIX-LOCAL-2, FIX-SLEEP-1/2/3 (commit 1d6ef9f7)
+  - `raddflix_flutter/lib/core/services/jazzdrive_service.dart` — FIX-TTL (commit 42a53909)
+
+  ### Known Remaining Issues
+  - BUG-009: Oracle server may need `git pull && restart` to serve share_url — not verifiable without SSH
+  - AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder still needs a real number before release
+  - Oracle SSH (port 22) still unreachable from Replit — use GitHub API only for all file ops
+
+  ---
+  
