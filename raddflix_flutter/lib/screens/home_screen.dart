@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -24,6 +26,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _selectedCategory = 'All';
   final ScrollController _scroll = ScrollController();
   bool _scrolled = false;
+  Timer? _notifTimer;
 
   static const _categories = ['All', 'Movies', 'Shows', 'Dramas', 'Urdu', 'Punjabi', 'English'];
 
@@ -38,10 +41,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.read(catalogProvider.notifier).initialize();
       NotificationService.instance.fetch();
     });
+    _notifTimer = Timer.periodic(const Duration(minutes: 5),
+        (_) => NotificationService.instance.fetch());
   }
 
   @override
-  void dispose() { _scroll.dispose(); super.dispose(); }
+  void dispose() {
+    _notifTimer?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
 
   List<CatalogItem> _filtered(CatalogState s) {
     final all = [...s.movies, ...s.shows];
@@ -101,8 +110,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         text: const TextSpan(
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
           children: [
-            TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
-            TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
+            TextSpan(text: 'Radd', style: TextStyle(color: AppColors.textPrimary)),
+            TextSpan(text: 'Flix', style: TextStyle(color: AppColors.primary)),
           ],
         ),
       ),
@@ -197,6 +206,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             items: catalog.recentlyWatched,
             showProgress: true,
           )),
+
+        // Trending Now
+        if (catalog.trending.isNotEmpty)
+          SliverToBoxAdapter(child: _ContentSection(
+            title: 'Trending Now',
+            items: catalog.trending,
+          ).animate().fadeIn(duration: 400.ms)),
 
         // Main content grid or rows
         if (_selectedCategory == 'All') ...[
