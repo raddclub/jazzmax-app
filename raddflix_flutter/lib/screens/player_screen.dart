@@ -819,15 +819,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     // Layer 1: MPV fires a hard error (expired token, DNS fail, etc.)
     _player.stream.error.listen((err) {
       if (!mounted || _isLocalFile) return;
+      // Skip error popup if video is already playing fine
+      if (_playing && _position.inSeconds > 3) return;
       DebugLogger.logError('PLAYER', 'Stream error: $err');
       _jazzAutoRetry(err);
     });
 
-    // Layer 2: Playing for 5s but duration is still zero → got XML instead of video
-    _jazzRetryTimer = Timer(const Duration(seconds: 5), () {
+    // Layer 2: Wait 8s — only trigger if duration still zero AND video not started
+    _jazzRetryTimer = Timer(const Duration(seconds: 8), () {
       if (!mounted || _isLocalFile || _jazzRetryCount > 0) return;
-      if (_duration == Duration.zero && !_isLinkLoading) {
-        DebugLogger.logError('PLAYER', 'Duration still zero after 5s — likely JazzDrive XML error');
+      // Key fix: !_playing ensures we don't show error popup during actual playback
+      if (_duration == Duration.zero && !_isLinkLoading && !_playing) {
+        DebugLogger.logError('PLAYER', 'Duration still zero after 8s and not playing');
         _jazzAutoRetry('Stream returned non-video content (possible XML error page)');
       }
     });
@@ -2272,228 +2275,208 @@ class _ControlsOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Stack(children: [
-      // Gradient scrim
+      // ── Gradient scrim (MX Player: stronger dark at top+bottom) ────────────
       Positioned.fill(
         child: DecoratedBox(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter, end: Alignment.bottomCenter,
-              colors: [Color(0xCC000000), Colors.transparent, Colors.transparent, Color(0xCC000000)],
-              stops: [0.0, 0.25, 0.75, 1.0],
+              colors: [Color(0xDD000000), Colors.transparent, Colors.transparent, Color(0xDD000000)],
+              stops: [0.0, 0.22, 0.72, 1.0],
             ),
           ),
         ),
       ),
 
-      // ── TOP BAR ──
+      // ── TOP BAR (MX Player: back + title, minimal right controls) ──────────
       Positioned(
         top: 0, left: 0, right: 0,
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 8, 8),
+            padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
             child: Row(children: [
-              IconButton(icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  size: 20, color: Colors.white), onPressed: onBack),
-              const SizedBox(width: 2),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                if (currentEp != null && totalEps != null)
-                  Text('Episode ${currentEp! + 1} of $totalEps',
-                      style: const TextStyle(color: Colors.white60, fontSize: 11)),
-              ])),
-              // Active track pills
-              if (audioLabels.isNotEmpty)
-                AudioTrackBadge(
-                  label: activeAudioIdx < audioLabels.length ? audioLabels[activeAudioIdx] : '',
-                  onTap: onAudioTracks),
-              SubTrackBadge(
-                label: subLabels.isEmpty ? 'Off' : (activeSubIdx < subLabels.length ? subLabels[activeSubIdx] : 'Off'),
-                isOff: subLabels.isEmpty,
-                onTap: onSubtitleTracks),
-              TrackCountBadge(audioCount: audioLabels.length, subCount: subLabels.length),
-              // Zoom reset
-              if (onResetZoom != null)
-                _TopBtn(label: '${scale.toStringAsFixed(1)}×', onTap: onResetZoom!),
-              _TopBtn(label: fitLabel, onTap: onCycleFit),
-              _TopBtn(label: speed == 1.0 ? '1×' : '${speed}×', onTap: onSpeed),
-              // Sleep timer button
-              _TopIconBtn(
-                icon: sleepLabel.isEmpty ? Icons.bedtime_outlined : Icons.bedtime_rounded,
-                color: sleepLabel.isEmpty ? Colors.white : Colors.orange,
-                badge: sleepLabel.isNotEmpty ? sleepLabel : null,
-                onTap: onSleep,
-                tooltip: 'Sleep Timer',
-              ),
-              // PiP button
               IconButton(
-                icon: const Icon(Icons.picture_in_picture_alt_rounded,
-                    color: Colors.white, size: 22),
-                tooltip: 'Picture in Picture',
-                onPressed: onPiP,
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
+                onPressed: onBack,
+                padding: const EdgeInsets.all(8),
               ),
-              // Chromecast button
-              IconButton(
-                icon: Icon(
-                  castConnected ? Icons.cast_connected_rounded : Icons.cast_rounded,
-                  color: castConnected ? const Color(0xFF4FC3F7) : Colors.white,
-                  size: 22,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (currentEp != null && totalEps != null)
+                      Text('EP ${currentEp! + 1} / $totalEps',
+                          style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w500)),
+                    Text(title,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                  ],
                 ),
-                tooltip: castConnected ? 'Stop Casting' : 'Cast to TV',
-                onPressed: onCast,
               ),
-              IconButton(icon: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 22),
-                  tooltip: 'Subtitles', onPressed: onSubtitleTracks),
-              IconButton(icon: const Icon(Icons.audiotrack_rounded, color: Colors.white, size: 22),
-                  tooltip: 'Audio', onPressed: onAudioTracks),
-              IconButton(icon: const Icon(Icons.lock_outline_rounded, color: Colors.white, size: 22),
-                  tooltip: 'Lock', onPressed: onLock),
-              IconButton(
-                icon: Icon(_rotationIcon(rotationMode), color: Colors.white, size: 22),
-                tooltip: _rotationLabel(rotationMode),
-                onPressed: onCycleRotation,
-              ),
-              // EQ button
-              IconButton(
-                icon: const Icon(Icons.equalizer_rounded, color: Colors.white, size: 22),
-                tooltip: 'Equalizer',
-                onPressed: onEq,
-              ),
-              // Video Enhancement
-              IconButton(
-                icon: const Icon(Icons.brightness_6_rounded, color: Colors.white, size: 20),
-                tooltip: 'Video Enhancement',
-                onPressed: onToggleVideoEnhance,
-              ),
-              // Cinematic Mode
-              IconButton(
-                icon: Icon(Icons.crop_free_rounded,
-                    color: cinematicMode ? const Color(0xFFE8002D) : Colors.white, size: 20),
-                tooltip: cinematicMode ? 'Exit Cinematic' : 'Cinematic Mode',
-                onPressed: onToggleCinematic,
-              ),
-              // Screenshot
-              IconButton(
-                icon: const Icon(Icons.screenshot_monitor_rounded, color: Colors.white, size: 20),
-                tooltip: 'Screenshot to Gallery',
-                onPressed: onTakeScreenshot,
-              ),
-              // A-B Loop
-              IconButton(
-                icon: Icon(Icons.loop_rounded,
-                    color: abLoop.isActive ? const Color(0xFFE8002D) : Colors.white, size: 20),
-                tooltip: 'A-B Loop',
-                onPressed: onToggleAbPanel,
-              ),
-              // Bookmarks
-              IconButton(
-                icon: Icon(Icons.bookmark_border_rounded,
-                    color: bookmarks.isNotEmpty ? Colors.amber : Colors.white, size: 20),
-                tooltip: 'Scene Bookmarks',
-                onPressed: onToggleBookmarks,
-              ),
-              // Settings button
-              IconButton(
-                icon: const Icon(Icons.tune_rounded, color: Colors.white, size: 22),
-                tooltip: 'Player Settings',
-                onPressed: onSettings,
-              ),
-              // Audio sync badge (tap to open sync panel; shows when delay ≠ 0)
               if (audioDelayMs != 0)
-                GestureDetector(
-                  onTap: onAudioSync,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0x33E8002D),
-                      border: Border.all(color: const Color(0xFFE8002D), width: 0.8),
-                      borderRadius: BorderRadius.circular(6)),
-                    child: Text(
-                      'Audio ${audioDelayMs > 0 ? '+' : ''}${audioDelayMs}ms ↺',
-                      style: const TextStyle(color: Color(0xFFE8002D), fontSize: 10, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              // Sub sync badge
+                _MxBadge(label: 'A${audioDelayMs > 0 ? '+' : ''}${audioDelayMs}ms', color: const Color(0xFFE8002D), onTap: onAudioSync),
               if (subDelayMs != 0)
-                GestureDetector(
-                  onTap: onSubSync,
-                  child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0x33E8002D),
-                      border: Border.all(color: const Color(0xFFE8002D), width: 0.8),
-                      borderRadius: BorderRadius.circular(6)),
-                    child: Text(
-                      'Sub ${subDelayMs > 0 ? '+' : ''}${subDelayMs}ms ↺',
-                      style: const TextStyle(color: Color(0xFFE8002D), fontSize: 10, fontWeight: FontWeight.w600)),
-                  ),
+                _MxBadge(label: 'S${subDelayMs > 0 ? '+' : ''}${subDelayMs}ms', color: const Color(0xFFE8002D), onTap: onSubSync),
+              if (onResetZoom != null)
+                _MxBadge(label: '${scale.toStringAsFixed(1)}×', color: Colors.white70, onTap: onResetZoom!),
+              IconButton(
+                icon: Icon(castConnected ? Icons.cast_connected_rounded : Icons.cast_rounded,
+                    color: castConnected ? const Color(0xFF4FC3F7) : Colors.white54, size: 20),
+                onPressed: onCast,
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(),
+              ),
+              IconButton(
+                icon: const Icon(Icons.picture_in_picture_alt_rounded, color: Colors.white54, size: 20),
+                onPressed: onPiP,
+                padding: const EdgeInsets.all(6),
+                constraints: const BoxConstraints(),
+              ),
+              if (!locked)
+                IconButton(
+                  icon: const Icon(Icons.lock_outline_rounded, color: Colors.white54, size: 20),
+                  onPressed: onLock,
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
                 ),
             ]),
           ),
         ),
       ),
 
-      // ── CENTER CONTROLS ──
+      // ── RIGHT SIDE VERTICAL STRIP (MX Player signature element) ────────────
       if (!locked)
-        Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-          _SeekBtn(icon: Icons.replay_rounded, label: '15', onTap: onSeekBack),
-          const SizedBox(width: 24),
-          GestureDetector(
-            onTap: onPlayPause,
-            child: Container(
-              width: 76, height: 76,
-              decoration: BoxDecoration(shape: BoxShape.circle,
-                  color: AppColors.primary, boxShadow: AppShadows.glow),
-              child: Icon(playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                  color: Colors.white, size: 42)),
-          ),
-          const SizedBox(width: 24),
-          _SeekBtn(icon: Icons.forward_rounded, label: '15', onTap: onSeekForward),
-          if (hasNext) ...[
-            const SizedBox(width: 16),
-            GestureDetector(
-              onTap: onNextEpisode,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(color: Colors.white12,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    border: Border.all(color: Colors.white24)),
-                child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('Next', style: TextStyle(color: Colors.white, fontSize: 12)),
-                  SizedBox(width: 4),
-                  Icon(Icons.skip_next_rounded, color: Colors.white, size: 18),
-                ])),
+        Positioned(
+          right: 6, top: 0, bottom: 0,
+          child: SafeArea(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _MxSideBtn(
+                  icon: Icons.audiotrack_rounded,
+                  label: audioLabels.isEmpty
+                      ? 'Audio'
+                      : (activeAudioIdx < audioLabels.length
+                          ? audioLabels[activeAudioIdx].split(' ').first
+                          : 'Audio'),
+                  onTap: onAudioTracks,
+                  active: audioLabels.length > 1,
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(
+                  icon: Icons.subtitles_outlined,
+                  label: 'Sub',
+                  onTap: onSubtitleTracks,
+                  active: subLabels.isNotEmpty && activeSubIdx < subLabels.length,
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(icon: Icons.fit_screen_rounded, label: fitLabel, onTap: onCycleFit),
+                const SizedBox(height: 6),
+                _MxSideBtn(
+                  icon: Icons.speed_rounded,
+                  label: speed == 1.0 ? '1×' : '${speed}×',
+                  onTap: onSpeed,
+                  active: speed != 1.0,
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(
+                  icon: Icons.dark_mode_outlined,
+                  label: 'Night',
+                  onTap: onToggleCinematic,
+                  active: cinematicMode,
+                  activeColor: const Color(0xFF3B82F6),
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(
+                  icon: Icons.loop_rounded,
+                  label: 'Loop',
+                  onTap: onToggleAbPanel,
+                  active: abLoop.isActive,
+                  activeColor: const Color(0xFFE8002D),
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(
+                  icon: sleepLabel.isEmpty ? Icons.bedtime_outlined : Icons.bedtime_rounded,
+                  label: sleepLabel.isEmpty ? 'Sleep' : sleepLabel,
+                  onTap: onSleep,
+                  active: sleepLabel.isNotEmpty,
+                  activeColor: Colors.orange,
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(
+                  icon: Icons.bookmark_border_rounded,
+                  label: 'Mark',
+                  onTap: onAddBookmark,
+                  active: bookmarks.isNotEmpty,
+                  activeColor: Colors.amber,
+                ),
+                const SizedBox(height: 6),
+                _MxSideBtn(icon: Icons.tune_rounded, label: 'More', onTap: onSettings),
+              ],
             ),
-          ],
-        ]).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut)),
+          ),
+        ),
 
-      // ── BOTTOM BAR ──
+      // ── CENTER CONTROLS (MX Player: large red circle + circular seek btns) ─
+      if (!locked)
+        Center(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _MxSeekBtn(isForward: false, seconds: 15, onTap: onSeekBack),
+              const SizedBox(width: 24),
+              // MX Player signature: large red circle play/pause
+              GestureDetector(
+                onTap: onPlayPause,
+                child: Container(
+                  width: 76, height: 76,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Color(0xFFE8002D),
+                    boxShadow: [BoxShadow(color: Color(0x55E8002D), blurRadius: 24, spreadRadius: 4)],
+                  ),
+                  child: Icon(
+                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: Colors.white, size: 44,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 24),
+              _MxSeekBtn(isForward: true, seconds: 15, onTap: onSeekForward),
+              if (hasNext) ...[
+                const SizedBox(width: 20),
+                GestureDetector(
+                  onTap: onNextEpisode,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Text('Next', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      SizedBox(width: 4),
+                      Icon(Icons.skip_next_rounded, color: Colors.white, size: 18),
+                    ]),
+                  ),
+                ),
+              ],
+            ],
+          ).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
+        ),
+
+      // ── BOTTOM BAR (MX Player: clean progress + time) ──────────────────────
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          padding: const EdgeInsets.fromLTRB(12, 0, 58, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Row(children: [
-              GestureDetector(
-                onTap: onToggleRemaining,
-                onLongPress: onJumpToTime,
-                child: Text(
-                  showRemaining
-                      ? '-${fmtDur(duration - position)}'
-                      : fmtDur(position),
-                  style: const TextStyle(color: Colors.white70, fontSize: 12))),
-              const Spacer(),
-              GestureDetector(
-                onLongPress: onShareTimestamp,
-                child: Text(fmtDur(duration),
-                  style: const TextStyle(color: Colors.white70, fontSize: 12))),
-            ]),
-            const SizedBox(height: 4),
-
-            // Seek thumbnail preview
-            if (seekThumb != null && (sliderDragging) && isLocal)
+            // Seek thumbnail (local files)
+            if (seekThumb != null && sliderDragging && isLocal)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Align(
@@ -2511,140 +2494,156 @@ class _ControlsOverlay extends StatelessWidget {
                 ),
               ),
 
-            SizedBox(
-              height: sliderDragging ? 44 : 36,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  // ── Scene Bookmark dots ──
-                  ...bookmarks.map((bm) {
-                    if (duration.inMilliseconds <= 0) return const SizedBox.shrink();
-                    final frac = (bm.positionMs / duration.inMilliseconds).clamp(0.0, 1.0);
-                    return Positioned(
-                      left: 24 + frac * (MediaQuery.of(context).size.width - 80),
-                      top: 0, bottom: 0,
-                      child: Center(child: GestureDetector(
-                        onTap: () => onSeekTo(frac),
-                        child: Text(bm.emoji, style: const TextStyle(fontSize: 10)))),
-                    );
-                  }),
-                  // ── A-B loop dots ──
-                  if (abLoop.pointA != null && duration.inMilliseconds > 0)
-                    Positioned(
-                      left: 24 + (abLoop.pointA!.inMilliseconds / duration.inMilliseconds).clamp(0.0,1.0) * (MediaQuery.of(context).size.width - 80),
-                      top: 0, bottom: 0,
-                      child: Center(child: Container(
-                        width: 10, height: 10,
-                        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.orange)))),
-                  if (abLoop.pointB != null && duration.inMilliseconds > 0)
-                    Positioned(
-                      left: 24 + (abLoop.pointB!.inMilliseconds / duration.inMilliseconds).clamp(0.0,1.0) * (MediaQuery.of(context).size.width - 80),
-                      top: 0, bottom: 0,
-                      child: Center(child: Container(
-                        width: 10, height: 10,
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: const Color(0xFFE8002D))))),
-                  // ── Chapter markers ──
-                  ...chapters.map((ch) {
-                    if (duration.inMilliseconds <= 0) return const SizedBox.shrink();
-                    final frac = (ch.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
-                    return Positioned(
-                      left: 24 + frac * (MediaQuery.of(context).size.width - 80) - 1,
-                      top: 0, bottom: 0,
-                      child: Center(child: Container(
-                        width: 2, height: sliderDragging ? 16 : 10,
-                        decoration: BoxDecoration(
-                          color: Colors.white54,
-                          borderRadius: BorderRadius.circular(1)),
-                      )),
-                    );
-                  }),
-                  // ── Long-press seek bar → set intro end ──
-                  if (onSeekBarLongPress != null)
-                    Positioned(
-                      left: 24, right: 24, top: 0, bottom: 0,
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onLongPress: onSeekBarLongPress,
-                        child: const SizedBox.expand(),
-                      ),
-                    ),
-                  // ── Buffer (gray) bar behind progress ──
-                  Positioned(
-                    left: 24, right: 24,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: bufferedFraction.clamp(0.0, 1.0),
-                        backgroundColor: Colors.white10,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white30),
-                        minHeight: sliderDragging ? 5 : 3,
-                      ),
-                    ),
+            // Progress row: time | slider | total
+            Row(children: [
+              GestureDetector(
+                onTap: onToggleRemaining,
+                onLongPress: onJumpToTime,
+                child: SizedBox(
+                  width: 44,
+                  child: Text(
+                    showRemaining ? '-${fmtDur(duration - position)}' : fmtDur(position),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                    textAlign: TextAlign.right,
                   ),
-                  // ── Progress (red) slider — transparent inactive track ──
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: sliderDragging ? 5 : 3,
-                      thumbShape: RoundSliderThumbShape(
-                          enabledThumbRadius: sliderDragging ? 10 : 5),
-                      overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
-                      activeTrackColor: AppColors.primary,
-                      inactiveTrackColor: Colors.transparent,
-                      thumbColor: AppColors.primary,
-                      overlayColor: AppColors.primaryGlow,
-                    ),
-                    child: Slider(
-                      value: progress.clamp(0.0, 1.0),
-                      onChangeStart: onSliderStart,
-                      onChanged: onSliderChange,
-                      onChangeEnd: onSliderEnd,
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: sliderDragging ? 44 : 36,
+                  child: Stack(alignment: Alignment.center, children: [
+                    // Buffer bar
+                    Positioned(
+                      left: 0, right: 0,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: bufferedFraction.clamp(0.0, 1.0),
+                          backgroundColor: Colors.white12,
+                          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white30),
+                          minHeight: sliderDragging ? 5 : 3,
+                        ),
+                      ),
+                    ),
+                    // Scene bookmarks
+                    ...bookmarks.map((bm) {
+                      if (duration.inMilliseconds <= 0) return const SizedBox.shrink();
+                      final frac = (bm.positionMs / duration.inMilliseconds).clamp(0.0, 1.0);
+                      final w = MediaQuery.of(context).size.width - 130;
+                      return Positioned(
+                        left: frac * w, top: 0, bottom: 0,
+                        child: Center(child: GestureDetector(
+                          onTap: () => onSeekTo(frac),
+                          child: Text(bm.emoji, style: const TextStyle(fontSize: 10)),
+                        )),
+                      );
+                    }),
+                    // A-B markers
+                    if (abLoop.pointA != null && duration.inMilliseconds > 0)
+                      Positioned(
+                        left: (abLoop.pointA!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0) *
+                            (MediaQuery.of(context).size.width - 130),
+                        top: 0, bottom: 0,
+                        child: Center(child: Container(
+                            width: 10, height: 10,
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.orange))),
+                      ),
+                    if (abLoop.pointB != null && duration.inMilliseconds > 0)
+                      Positioned(
+                        left: (abLoop.pointB!.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0) *
+                            (MediaQuery.of(context).size.width - 130),
+                        top: 0, bottom: 0,
+                        child: Center(child: Container(
+                            width: 10, height: 10,
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFE8002D)))),
+                      ),
+                    // Chapter markers
+                    ...chapters.map((ch) {
+                      if (duration.inMilliseconds <= 0) return const SizedBox.shrink();
+                      final frac = (ch.inMilliseconds / duration.inMilliseconds).clamp(0.0, 1.0);
+                      return Positioned(
+                        left: frac * (MediaQuery.of(context).size.width - 130) - 1,
+                        top: 0, bottom: 0,
+                        child: Center(child: Container(
+                          width: 2, height: sliderDragging ? 16 : 10,
+                          decoration: BoxDecoration(color: Colors.white54, borderRadius: BorderRadius.circular(1)),
+                        )),
+                      );
+                    }),
+                    // Seek bar long-press (set intro end)
+                    if (onSeekBarLongPress != null)
+                      Positioned(
+                        left: 0, right: 0, top: 0, bottom: 0,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onLongPress: onSeekBarLongPress,
+                          child: const SizedBox.expand(),
+                        ),
+                      ),
+                    // Red progress slider (MX Player red accent)
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: sliderDragging ? 5 : 3,
+                        thumbShape: RoundSliderThumbShape(enabledThumbRadius: sliderDragging ? 10 : 5),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
+                        activeTrackColor: const Color(0xFFE8002D),
+                        inactiveTrackColor: Colors.transparent,
+                        thumbColor: const Color(0xFFE8002D),
+                        overlayColor: const Color(0x22E8002D),
+                      ),
+                      child: Slider(
+                        value: progress.clamp(0.0, 1.0),
+                        onChangeStart: onSliderStart,
+                        onChanged: onSliderChange,
+                        onChangeEnd: onSliderEnd,
+                      ),
+                    ),
+                  ]),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onLongPress: onShareTimestamp,
+                child: SizedBox(
+                  width: 44,
+                  child: Text(fmtDur(duration),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                ),
+              ),
+            ]),
 
-            // ── §3K: Frame-step controls (visible when paused + showFrameStep) ──
-            if (!playing && showFrameStep)
-              Padding(
-                padding: const EdgeInsets.only(top: 4, bottom: 4),
-                child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            // Bottom actions row
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+              Row(mainAxisSize: MainAxisSize.min, children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.add_rounded, size: 13, color: Colors.white54),
+                  label: const Text('Subtitle File', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                  onPressed: onSubtitleFile,
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                const SizedBox(width: 10),
+                TextButton.icon(
+                  icon: const Icon(Icons.equalizer_rounded, size: 13, color: Colors.white54),
+                  label: const Text('EQ', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                  onPressed: onEq,
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+              ]),
+              if (!playing && showFrameStep)
+                Row(mainAxisSize: MainAxisSize.min, children: [
                   IconButton(
-                    icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 28),
-                    tooltip: 'Frame back',
+                    icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 22),
+                    padding: EdgeInsets.zero, constraints: const BoxConstraints(),
                     onPressed: onFrameBackStep),
-                  const SizedBox(width: 8),
                   const Text('Frame', style: TextStyle(color: Colors.white38, fontSize: 10)),
-                  const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 28),
-                    tooltip: 'Frame forward',
+                    icon: const Icon(Icons.skip_next_rounded, color: Colors.white70, size: 22),
+                    padding: EdgeInsets.zero, constraints: const BoxConstraints(),
                     onPressed: onFrameStep),
                 ]),
-              ),
-
-            Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton.icon(
-                icon: const Icon(Icons.bookmark_add_outlined, size: 13, color: Colors.white54),
-                label: const Text('Bookmark',
-                    style: TextStyle(color: Colors.white54, fontSize: 10)),
-                onPressed: onAddBookmark,
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              ),
-              const SizedBox(width: 10),
-              TextButton.icon(
-                icon: const Icon(Icons.add_rounded, size: 13, color: Colors.white54),
-                label: const Text('Subtitle File',
-                    style: TextStyle(color: Colors.white54, fontSize: 10)),
-                onPressed: onSubtitleFile,
-                style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              ),
             ]),
           ]).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
         ),
@@ -2653,91 +2652,102 @@ class _ControlsOverlay extends StatelessWidget {
   }
 }
 
-// ─── Top icon button with optional badge ────────────────────────────────────
-// ── Rotation helpers ────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// MX PLAYER STYLE HELPER WIDGETS
+// ═══════════════════════════════════════════════════════════════════════════════
 
-IconData _rotationIcon(String mode) {
-  switch (mode) {
-    case 'lock_left':    return Icons.stay_current_landscape_rounded;
-    case 'lock_right':   return Icons.stay_current_landscape_rounded;
-    case 'lock_portrait': return Icons.stay_current_portrait_rounded;
-    case 'auto':         return Icons.screen_rotation_outlined;
-    case 'lock_current': return Icons.screen_lock_rotation_rounded;
-    default:             return Icons.screen_rotation_rounded; // sensor_landscape
-  }
-}
-
-String _rotationLabel(String mode) {
-  switch (mode) {
-    case 'lock_left':    return 'Locked: Landscape Left';
-    case 'lock_right':   return 'Locked: Landscape Right';
-    case 'lock_portrait': return 'Locked: Portrait';
-    case 'auto':         return 'Auto Rotate';
-    case 'lock_current': return 'Lock Current';
-    default:             return 'Sensor Landscape'; // sensor_landscape
-  }
-}
-
-class _TopIconBtn extends StatelessWidget {
+/// Compact side-strip button (right edge, MX Player style)
+class _MxSideBtn extends StatelessWidget {
   final IconData icon;
-  final Color color;
-  final String? badge;
+  final String label;
   final VoidCallback onTap;
-  final String tooltip;
-  const _TopIconBtn({required this.icon, required this.color,
-      this.badge, required this.onTap, required this.tooltip});
+  final bool active;
+  final Color? activeColor;
+  const _MxSideBtn({required this.icon, required this.label, required this.onTap,
+      this.active = false, this.activeColor});
 
   @override
   Widget build(BuildContext context) {
+    final col = active ? (activeColor ?? const Color(0xFFE8002D)) : Colors.white70;
     return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-        child: badge != null
-            ? Column(mainAxisSize: MainAxisSize.min, children: [
-                Icon(icon, color: color, size: 20),
-                Text(badge!, style: TextStyle(color: color, fontSize: 9)),
-              ])
-            : Icon(icon, color: color, size: 22),
+      child: Container(
+        width: 46, height: 44,
+        decoration: BoxDecoration(
+          color: active ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.18) : Colors.black45,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: active ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.55) : Colors.white18,
+            width: 0.8,
+          ),
+        ),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, color: col, size: 17),
+          const SizedBox(height: 2),
+          Text(label, style: TextStyle(color: col, fontSize: 8, fontWeight: FontWeight.w600),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        ]),
       ),
     );
   }
 }
 
-class _TopBtn extends StatelessWidget {
-  final String label;
+/// Circular seek button (MX Player style: dark circle with icon + seconds label)
+class _MxSeekBtn extends StatelessWidget {
+  final bool isForward;
+  final int seconds;
   final VoidCallback onTap;
-  const _TopBtn({required this.label, required this.onTap});
+  const _MxSeekBtn({required this.isForward, required this.seconds, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-          color: Colors.black38, borderRadius: BorderRadius.circular(5)),
-      child: Text(label, style: const TextStyle(
-          color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700))));
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () { HapticFeedback.selectionClick(); onTap(); },
+      child: Container(
+        width: 54, height: 54,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black45,
+          border: Border.all(color: Colors.white18, width: 0.8),
+        ),
+        child: Stack(alignment: Alignment.center, children: [
+          Icon(isForward ? Icons.forward_rounded : Icons.replay_rounded, color: Colors.white, size: 26),
+          Positioned(
+            bottom: 10,
+            child: Text('$seconds',
+                style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+          ),
+        ]),
+      ),
+    );
+  }
 }
 
-class _SeekBtn extends StatelessWidget {
-  final IconData icon;
-  final String? label;
+/// Small labeled badge for top bar (MX Player style)
+class _MxBadge extends StatelessWidget {
+  final String label;
+  final Color color;
   final VoidCallback onTap;
-  const _SeekBtn({required this.icon, required this.onTap, this.label});
+  const _MxBadge({required this.label, required this.color, required this.onTap});
+
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: () { HapticFeedback.selectionClick(); onTap(); },
-    child: Container(width: 68, height: 68,
-        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.white.withOpacity(0.08)),
-        child: label != null
-            ? Stack(alignment: Alignment.center, children: [
-                Icon(icon, color: Colors.white, size: 30),
-                Positioned(bottom: 13, child: Text(label!,
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800))),
-              ])
-            : Icon(icon, color: Colors.white, size: 36)));
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.15),
+          border: Border.all(color: color.withOpacity(0.5), width: 0.8),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+      ),
+    );
+  }
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SLEEP PANEL

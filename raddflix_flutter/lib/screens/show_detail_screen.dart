@@ -86,7 +86,16 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
     if (episodeIndex >= allEps.length) return;
     final ep = allEps[episodeIndex];
     final fileId = ep['file_id']?.toString();
-    if (fileId == null) return;
+    if (fileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Video not available yet. Please try again later.'),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     Navigator.pushNamed(
       context,
@@ -104,7 +113,16 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
 
   void _playMovie() {
     final fileId = widget.item.fileId;
-    if (fileId == null) return;
+    if (fileId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Video not available yet. Please try again later.'),
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     Navigator.pushNamed(
       context,
       AppRoutes.player,
