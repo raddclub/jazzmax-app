@@ -9,7 +9,7 @@ class RaddFlixBottomNav extends StatelessWidget {
 
   static const _items = [
     _NavItem(icon: Icons.home_outlined, active: Icons.home_rounded, label: 'Home'),
-    _NavItem(icon: Icons.search_outlined, active: Icons.search_rounded, label: 'Search'),
+    _NavItem(icon: Icons.folder_outlined, active: Icons.folder_rounded, label: 'Local'),
     _NavItem(icon: Icons.download_outlined, active: Icons.download_rounded, label: 'Downloads'),
     _NavItem(icon: Icons.person_outline_rounded, active: Icons.person_rounded, label: 'Profile'),
   ];

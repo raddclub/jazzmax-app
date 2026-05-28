@@ -31,6 +31,8 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // ── MediaStore Plugin (local video browser) ──────────────────────
+        flutterEngine.plugins.add(MediaStorePlugin())
 
         // ── PiP Channel ──────────────────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)
