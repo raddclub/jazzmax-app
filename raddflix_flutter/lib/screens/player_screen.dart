@@ -2197,8 +2197,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (_showBookmarksPanel)
             Positioned(bottom: 0, left: 0, right: 0,
               child: SceneBookmarksPanel(
-                showActiveTrackBadge: _prefs.showActiveTrackBadge,
-              showTrackCountBadge: _prefs.showTrackCountBadge,
               bookmarks: _bookmarks,
                 fmtDur: _fmtDur,
                 onSeekTo: (pos) => _player.seek(pos),
@@ -2419,7 +2417,7 @@ class _ControlsOverlay extends StatelessWidget {
                 SubTrackBadge(
                   label: (subLabels.isNotEmpty && activeSubIdx < subLabels.length)
                       ? subLabels[activeSubIdx]
-                      : null,
+                      : '',
                   onTap: onSubtitleTracks,
                 ),
               // ── Track count badge (3A · 2S) ──
@@ -2437,7 +2435,7 @@ class _ControlsOverlay extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.08),
-                    border: Border.all(color: Colors.white18, width: 0.8),
+                    border: Border.all(color: Colors.white.withOpacity(0.18), width: 0.8),
                     borderRadius: BorderRadius.circular(5),
                   ),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -2878,7 +2876,7 @@ class _MxSideBtn extends StatelessWidget {
           color: active ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.18) : Colors.black45,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: active ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.55) : Colors.white18,
+            color: active ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.55) : Colors.white.withOpacity(0.18),
             width: 0.8,
           ),
         ),
@@ -2909,7 +2907,7 @@ class _MxSeekBtn extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: Colors.black45,
-          border: Border.all(color: Colors.white18, width: 0.8),
+          border: Border.all(color: Colors.white.withOpacity(0.18), width: 0.8),
         ),
         child: Stack(alignment: Alignment.center, children: [
           Icon(isForward ? Icons.forward_rounded : Icons.replay_rounded, color: Colors.white, size: 26),

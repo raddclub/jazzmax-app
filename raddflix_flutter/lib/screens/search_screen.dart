@@ -209,7 +209,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
           if ((hasQuery || hasFilter) && (genres.isNotEmpty || years.isNotEmpty))
             _buildGenreYearChips(genres, years),
           const SizedBox(height: 6),
-          Expanded(child: _buildBody(allItems, genres, years, hasQuery)),
+          Expanded(child: _buildBody(allItems, genres, years, catalog.trending, hasQuery)),
         ]),
       ),
     );
@@ -397,10 +397,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   // ── Body dispatcher ──────────────────────────────────────────────────────────
 
   Widget _buildBody(
-      List<CatalogItem> allItems, List<String> genres, List<int> years, bool hasQuery) {
+      List<CatalogItem> allItems, List<String> genres, List<int> years, List<CatalogItem> trending, bool hasQuery) {
     if (_loading) return _buildShimmer();
     if (_results != null) return _buildResults();
-    return _buildDiscover(allItems, genres, catalog.trending);
+    return _buildDiscover(allItems, genres, trending);
   }
 
   // ── Shimmer ──────────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
   import 'package:flutter/material.dart';
   import 'package:flutter_animate/flutter_animate.dart';
@@ -147,8 +148,8 @@ import 'dart:typed_data';
       }
     }
 
-    Future<dynamic> _fileFromPath(String path) async {
-      return import('dart:io').then((_) => throw UnimplementedError());
+    Future<File> _fileFromPath(String path) async {
+      return File(path);
     }
 
     @override
