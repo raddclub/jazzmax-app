@@ -1228,3 +1228,56 @@ File: raddflix_flutter/lib/screens/player_screen.dart (3074 -> 3223 lines, +149 
 - Next implementation work: see PLAYER_SPEC.md for remaining unimplemented sections (volume boost 300%, frame-by-frame UI, chapter markers, remaining audio_session wiring)
 
 ---
+
+  ---
+
+  ## [2026-05-28] — Agent: Replit Agent (Comprehensive UI Audit)
+
+  ### Task
+  Full codebase audit: identify all features implemented in code but NOT wired to the UI. Verify each widget's trigger path. Document all bugs and gaps. Update .md files. No code changes.
+
+  ### Method
+  - Read all 65+ Flutter lib files (screens, widgets, providers, controllers, services, models)
+  - Read player_screen.dart in full (3222 lines across 4 fetch segments)
+  - Verified every state variable's toggle path: init → UI trigger → render
+  - Cross-referenced all _ControlsOverlay callbacks against the overlay's build() method
+
+  ### Confirmed Bugs
+
+  | ID | File | Issue |
+  |----|------|-------|
+  | BUG-001 | home_screen.dart ~line 101 | AppBar title shows "JazzMAX" — should be "RaddFlix" |
+
+  ### Features In Code But Not Accessible From UI
+
+  | ID | Feature | Missing element |
+  |----|---------|----------------|
+  | PL-001 | TransparentPlayerSlider | _showTransparentSlider never set to true — no button triggers the opacity slider |
+  | PL-002 | PlaybackInfoOverlay | onTogglePlaybackInfo passed to ControlsOverlay but no button in overlay calls it |
+  | PL-003 | VideoEnhancePanel | onToggleVideoEnhance passed to ControlsOverlay but no button in overlay calls it |
+  | PL-004 | SceneBookmarksPanel (view) | onToggleBookmarks passed to ControlsOverlay but no button calls it — "Mark" only adds, never opens the panel |
+  | PL-005 | Screenshot | onTakeScreenshot passed to ControlsOverlay but no button calls it |
+  | HS-001 | CatalogState.trending | Computed by _computeTrending() in catalog_provider but never displayed in home_screen.dart |
+
+  ### Service Gaps
+
+  | ID | Service | Gap |
+  |----|---------|-----|
+  | SVC-001 | NotificationService | fetch() called once at initState, no periodic refresh timer |
+
+  ### Confirmed Working (previously suspected as unimplemented)
+  TidStatusScreen, VaultSettingsScreen, CinematicOverlay, AbLoopPanel, BingeGuardController,
+  AmbilightGlowBorder, SubtitleOverlay, SearchScreen, EqPanel, SyncPanels (Audio + Sub)
+
+  ### Files Created/Updated
+  - agent-hub/history/UI_AUDIT_2026_05_28.md — full audit report with per-item fix guidance
+  - agent-hub/history/TASK_LOG.md — this entry
+
+  ### Notes for Next Agent
+  - No code was modified. This is a pure audit session.
+  - All 5 unimplemented player UI buttons share the same fix pattern: add _MxSideBtn to the right-side strip or add entries to QuickSettingsPanel.
+  - BUG-001 (branding) is a 2-char change: 'Jazz'->'Radd', 'MAX'->'Flix' in home_screen.dart line ~101.
+  - HS-001 (trending): add one SliverToBoxAdapter with _ContentSection(title: 'Trending Now', items: catalog.trending) in home_screen.dart _buildContent().
+  - PL-001 (transparent slider): needs a button/callback in QuickSettingsPanel that calls setState(()=>_showTransparentSlider=true) in the player. Since QuickSettingsPanel doesn't have direct access to parent state, add an onOpenTransparentSlider callback to QuickSettingsPanel and wire it up.
+  - Oracle SSH still times out from Replit container — use GitHub API only for file operations.
+  
