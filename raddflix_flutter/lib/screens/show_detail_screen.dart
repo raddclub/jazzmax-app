@@ -107,6 +107,7 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
         'episodes': allEps,
         'episode_index': episodeIndex,
         'show_title': widget.item.title,
+        'content_type': widget.item.mediaType,
       },
     );
   }
@@ -132,6 +133,7 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
         'local_path': null,
         'episodes': <Map<String, dynamic>>[],
         'episode_index': 0,
+        'content_type': 'movie',
       },
     );
   }

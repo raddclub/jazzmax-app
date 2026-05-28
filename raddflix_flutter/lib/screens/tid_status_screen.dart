@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:dio/dio.dart';
 import '../core/constants.dart';
 import '../core/api/api_client.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// TID Payment Status Polling Screen.
 /// Shown immediately after a user submits a TID — polls every 20s for approval.
@@ -382,15 +383,22 @@ class _TidStatusScreenState extends State<TidStatusScreen>
 
   Widget _buildWhatsAppButton() {
     return TextButton.icon(
-      onPressed: () {
-        // Could launch WhatsApp with deep link
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('WhatsApp support: Contact via RaddFlix help'),
-        ));
+      onPressed: () async {
+        final uri = Uri.parse(
+          'https://wa.me/${AppConstants.supportWhatsApp}?text=RaddFlix+Support+%E2%80%94+TID:+${widget.tid}',
+        );
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('WhatsApp not installed. Please contact RaddFlix support.'),
+            duration: Duration(seconds: 3),
+          ));
+        }
       },
-      icon: const Icon(Icons.chat_rounded, size: 18),
+      icon: const Icon(Icons.chat_rounded, size: 18, color: Color(0xFF25D366)),
       label: const Text('Contact Support on WhatsApp'),
-      style: TextButton.styleFrom(foregroundColor: AppColors.textSecondary),
+      style: TextButton.styleFrom(foregroundColor: const Color(0xFF25D366)),
     );
   }
 
@@ -417,9 +425,21 @@ class _TidStatusScreenState extends State<TidStatusScreen>
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () {},
+        onPressed: () async {
+          final uri = Uri.parse(
+            'https://wa.me/${AppConstants.supportWhatsApp}?text=RaddFlix+Payment+Rejected+%E2%80%94+TID:+${widget.tid}',
+          );
+          if (await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('WhatsApp not installed. Please contact RaddFlix support.'),
+              duration: Duration(seconds: 3),
+            ));
+          }
+        },
         icon: const Icon(Icons.support_agent_rounded),
-        label: const Text('Contact Support'),
+        label: const Text('Contact Support via WhatsApp'),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.error,
           foregroundColor: Colors.white,

@@ -27,6 +27,11 @@ class AppConstants {
 
   /// Stream link cache TTL. Same link reused for both watch + download within TTL.
   static const Duration streamLinkTtl = Duration(hours: 6);
+
+  // ── Support ──────────────────────────────────────────────────────────────
+  /// WhatsApp support number (international format, no +, no spaces).
+  /// Replace with actual support number before production release.
+  static const String supportWhatsApp = '923XXXXXXXXX';
 }
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────

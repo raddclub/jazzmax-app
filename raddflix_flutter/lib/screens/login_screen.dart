@@ -194,7 +194,7 @@ class _Logo extends StatelessWidget {
             boxShadow: AppShadows.glow,
           ),
           child: const Center(
-            child: Text('J', style: TextStyle(
+            child: Text('R', style: TextStyle(
               color: Colors.white, fontSize: 32,
               fontWeight: FontWeight.w900, letterSpacing: -1)),
           ),
@@ -204,8 +204,8 @@ class _Logo extends StatelessWidget {
           text: const TextSpan(
             style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: -1.5, height: 1),
             children: [
-              TextSpan(text: 'Jazz', style: TextStyle(color: AppColors.textPrimary)),
-              TextSpan(text: 'MAX', style: TextStyle(color: AppColors.primary)),
+              TextSpan(text: 'Radd', style: TextStyle(color: AppColors.textPrimary)),
+              TextSpan(text: 'Flix', style: TextStyle(color: AppColors.primary)),
             ],
           ),
         ),
