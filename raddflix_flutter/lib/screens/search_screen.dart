@@ -400,7 +400,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       List<CatalogItem> allItems, List<String> genres, List<int> years, bool hasQuery) {
     if (_loading) return _buildShimmer();
     if (_results != null) return _buildResults();
-    return _buildDiscover(allItems, genres);
+    return _buildDiscover(allItems, genres, catalog.trending);
   }
 
   // ── Shimmer ──────────────────────────────────────────────────────────────────
@@ -508,7 +508,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Discover ─────────────────────────────────────────────────────────────────
 
-  Widget _buildDiscover(List<CatalogItem> allItems, List<String> genres) {
+  Widget _buildDiscover(List<CatalogItem> allItems, List<String> genres, List<CatalogItem> trendingItems) {
     final discover = _discoverItems(allItems);
     final byGenre  = _byGenre(discover, genres);
 
@@ -550,11 +550,33 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 10),
-        ..._staticTrending.asMap().entries.map((e) =>
-          _TrendingRow(rank: e.key + 1, label: e.value, onTap: () => _tapSuggestion(e.value))
-              .animate(delay: (e.key * 40).ms)
-              .fadeIn(duration: 280.ms)
-              .slideX(begin: 0.15, end: 0, duration: 280.ms, curve: AppCurves.standard)),
+          if (trendingItems.isNotEmpty) ...[
+            SizedBox(
+              height: 185,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                itemCount: trendingItems.length,
+                itemBuilder: (_, i) => Padding(
+                  padding: EdgeInsets.only(right: i < trendingItems.length - 1 ? 10 : 0),
+                  child: SizedBox(
+                    width: 114,
+                    child: ContentCard(item: trendingItems[i])
+                        .animate(delay: (i * 40).ms)
+                        .fadeIn(duration: 280.ms)
+                        .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1),
+                            duration: 280.ms, curve: AppCurves.enter),
+                  ),
+                ),
+              ),
+            ),
+          ] else ...[
+            ..._staticTrending.asMap().entries.map((e) =>
+              _TrendingRow(rank: e.key + 1, label: e.value, onTap: () => _tapSuggestion(e.value))
+                  .animate(delay: (e.key * 40).ms)
+                  .fadeIn(duration: 280.ms)
+                  .slideX(begin: 0.15, end: 0, duration: 280.ms, curve: AppCurves.standard)),
+          ],
 
         // ── Browse by Genre ────────────────────────────────────────────────
         if (byGenre.isNotEmpty) ...[
