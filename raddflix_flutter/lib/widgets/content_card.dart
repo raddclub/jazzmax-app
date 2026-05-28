@@ -18,6 +18,7 @@ class ContentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap ?? () => _onTap(context),
+      onLongPress: () => _showQuickView(context),
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -134,7 +135,16 @@ class ContentCard extends StatelessWidget {
     return _Fallback(item: item);
   }
 
-  void _onTap(BuildContext context) {
+  void _showQuickView(BuildContext context) {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _DetailSheet(item: item),
+      );
+    }
+
+    void _onTap(BuildContext context) {
     // Always navigate to ShowDetailScreen — it handles both movies and shows
     Navigator.of(context).pushNamed(AppRoutes.showDetail, arguments: item);
   }
