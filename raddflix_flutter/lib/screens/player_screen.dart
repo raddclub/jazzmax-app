@@ -1894,6 +1894,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               showFrameStep: _showFrameStep,
               onFrameStep: _frameStep,
               onFrameBackStep: _frameBackStep,
+              isTransparentMode: _prefs.transparentModeEnabled,
+              onToggleTransparentSlider: _prefs.transparentModeEnabled
+                  ? () => setState(() => _showTransparentSlider = !_showTransparentSlider)
+                  : null,
             ),
 
           // ── Lock Button ──
@@ -2310,6 +2314,9 @@ class _ControlsOverlay extends StatelessWidget {
   final bool showFrameStep;
   final VoidCallback onFrameStep;
   final VoidCallback onFrameBackStep;
+  // PL-001: transparent slider trigger
+  final bool isTransparentMode;
+  final VoidCallback? onToggleTransparentSlider;
 
   const _ControlsOverlay({
     required this.title, required this.playing, required this.buffering,
@@ -2356,6 +2363,8 @@ class _ControlsOverlay extends StatelessWidget {
     this.showFrameStep = false,
     required this.onFrameStep,
     required this.onFrameBackStep,
+    this.isTransparentMode = false,
+    this.onToggleTransparentSlider,
   });
 
   @override
@@ -2531,13 +2540,28 @@ class _ControlsOverlay extends StatelessWidget {
                   activeColor: Colors.orange,
                 ),
                 const SizedBox(height: 6),
-                _MxSideBtn(
-                  icon: Icons.bookmark_border_rounded,
-                  label: 'Mark',
-                  onTap: onAddBookmark,
-                  active: bookmarks.isNotEmpty,
-                  activeColor: Colors.amber,
+                GestureDetector(
+                  onLongPress: onToggleBookmarks,
+                  child: _MxSideBtn(
+                    icon: bookmarks.isNotEmpty
+                        ? Icons.bookmarks_rounded
+                        : Icons.bookmark_border_rounded,
+                    label: bookmarks.isNotEmpty ? 'Marks' : 'Mark',
+                    onTap: onAddBookmark,
+                    active: bookmarks.isNotEmpty,
+                    activeColor: Colors.amber,
+                  ),
                 ),
+                if (isTransparentMode && onToggleTransparentSlider != null) ...[
+                    const SizedBox(height: 6),
+                    _MxSideBtn(
+                      icon: Icons.opacity_rounded,
+                      label: 'Opacity',
+                      onTap: onToggleTransparentSlider!,
+                      active: true,
+                      activeColor: Color(0xFF4FC3F7),
+                    ),
+                  ],
                 const SizedBox(height: 6),
                 _MxSideBtn(icon: Icons.tune_rounded, label: 'More', onTap: onSettings),
               ],
@@ -2754,6 +2778,34 @@ class _ControlsOverlay extends StatelessWidget {
                   icon: const Icon(Icons.equalizer_rounded, size: 13, color: Colors.white54),
                   label: const Text('EQ', style: TextStyle(color: Colors.white54, fontSize: 10)),
                   onPressed: onEq,
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                const SizedBox(width: 10),
+                TextButton.icon(
+                  icon: Icon(Icons.info_outline_rounded, size: 13,
+                      color: showPlaybackInfo ? const Color(0xFFE8002D) : Colors.white54),
+                  label: Text('Info',
+                      style: TextStyle(
+                          color: showPlaybackInfo ? const Color(0xFFE8002D) : Colors.white54,
+                          fontSize: 10)),
+                  onPressed: onTogglePlaybackInfo,
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                const SizedBox(width: 10),
+                TextButton.icon(
+                  icon: const Icon(Icons.auto_fix_high_rounded, size: 13, color: Colors.white54),
+                  label: const Text('Enhance', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                  onPressed: onToggleVideoEnhance,
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
+                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                ),
+                const SizedBox(width: 10),
+                TextButton.icon(
+                  icon: const Icon(Icons.camera_alt_outlined, size: 13, color: Colors.white54),
+                  label: const Text('Shot', style: TextStyle(color: Colors.white54, fontSize: 10)),
+                  onPressed: onTakeScreenshot,
                   style: TextButton.styleFrom(padding: EdgeInsets.zero,
                       minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
                 ),
