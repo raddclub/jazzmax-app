@@ -1095,3 +1095,36 @@ Complete live API audit of all RaddFlix backend endpoints. Test every route, doc
 - `/api/jazzdrive/db_update_url` correctly points to `/api/catalog/db_update`
 - All 46 endpoints mapped: 34 live-tested, 12 code-verified
 - Full report: `agent-hub/history/API_FULL_AUDIT_2026_05_27.md`
+
+  ---
+
+  ## Session 5 — 2026-05-28
+
+  ### Tasks Completed
+
+  **Fix 1 — Movie "Play Now" button did nothing**
+  - File: `raddflix_flutter/lib/screens/show_detail_screen.dart`
+  - Both `_playMovie()` and `_playEpisode()` had `if (fileId == null) return;` with no feedback
+  - Replaced with SnackBar: *"Video not available yet. Please try again later."*
+
+  **Fix 2 — Episode error popup appearing during active playback**
+  - File: `raddflix_flutter/lib/screens/player_screen.dart`
+  - Fix 2a: Added guard to error listener — `if (_playing && _position.inSeconds > 3) return;` — prevents false positive popup when stream hits a transient network error mid-play
+  - Fix 2b: Extended `_jazzRetryTimer` from 5s → 8s and added `&& !_playing` condition — prevents triggering retry on slow-starting but valid streams
+
+  **Fix 3 — Video player UI redesigned to MX Player style**
+  - File: `raddflix_flutter/lib/screens/player_screen.dart`
+  - Replaced entire `_ControlsOverlay.build()` and old helper classes (`_TopIconBtn`, `_TopBtn`, `_SeekBtn`)
+  - New layout:
+    - **Top bar**: back arrow + title/episode info + delay badges + cast/PiP/lock icons
+    - **Right-side vertical strip**: 9 dark rounded buttons (Audio, Sub, Fit, Speed, Night, Loop, Sleep, Bookmark, More) — MX Player signature element
+    - **Center**: circular seek-15 button | large red circle (76px) play/pause with glow | seek+15 button | Next episode inline button
+    - **Bottom**: tap-to-toggle time display | red slider with buffer bar + chapter markers + A-B loop markers | total time | subtitle file + EQ shortcuts + frame step
+  - New helper classes: `_MxSideBtn`, `_MxSeekBtn`, `_MxBadge`
+
+  ### Commit
+  `7d456527c3e6ea9bf9b0a2b7fc89c085d1581e4c` — pushed to `main`
+
+  ### Notes
+  - Network issue: Replit container blocked GitHub API (authenticated) and SSH port 22 — resolved by updating GitHub token in Replit secrets and using code_execution sandbox which reads secrets store directly
+  
