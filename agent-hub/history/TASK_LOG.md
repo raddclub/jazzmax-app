@@ -1346,3 +1346,70 @@ File: raddflix_flutter/lib/screens/player_screen.dart (3074 -> 3223 lines, +149 
   - TransparentPlayerSlider Opacity button is conditional — only visible in right strip when `PlayerPrefs.transparentModeEnabled = true`
   - No new packages needed; all icons used are from material_icons already in the project
   
+
+  ---
+
+  ## Session 3 — Second-Pass Audit & Fixes (2026-05-28)
+
+  ### Files Audited This Session
+  - profile_screen.dart — CLEAN (all routes/navigation wired)
+  - show_detail_screen.dart — CLEAN (downloads wired for movies+episodes)
+  - vault_settings_screen.dart — CLEAN (biometric, decoy PIN, auto-lock all functional)
+  - player_settings_screen.dart — CLEAN except PS-001 (see below)
+  - quick_settings_panel.dart — CLEAN
+  - downloads_screen.dart — CLEAN (sort/filter/view/folder/play/delete all functional)
+  - search_screen.dart — SR-001 gap found (see below)
+  - notification_banner.dart — CLEAN (bell, sheet, mark-all-read all functional)
+  - content_card.dart — CC-001 gap found (see below)
+  - bottom_nav.dart — CLEAN
+  - catalog_provider.dart — CLEAN (trending+recentlyWatched computed and exposed)
+
+  ### Items Found & Fixed
+
+  #### PS-001 — ambilightBlurRadius missing from PlayerPrefs (COMPILE ERROR)
+  - **Severity**: Critical — app would not build
+  - **Root cause**: player_screen.dart called `_prefs.ambilightBlurRadius` on line 1426
+    inside AmbilightGlowBorder, but the field was never declared in PlayerPrefs
+  - **Fix** (player_prefs.dart):
+    - Added `final double ambilightBlurRadius;` field declaration
+    - Default `24.0` in constructor
+    - Persisted as `${_p}ambilight_blur_radius` in fromPrefs/save
+    - Added to copyWith signature and return
+  - **Fix** (player_settings_screen.dart):
+    - Added `_SliderRow('Blur Radius', p.ambilightBlurRadius, 8.0, 48.0, ..., divisions: 8)`
+      inside the ambilight expanded section (between Intensity and Sample Rate rows)
+
+  #### SR-001 — SearchScreen trending uses static hardcoded strings, not catalog data
+  - **Root cause**: `_buildDiscover()` rendered `_staticTrending` (8 hardcoded strings)
+    while CatalogProvider already computed a real `trending: List<CatalogItem>` list
+  - **Fix** (search_screen.dart):
+    - Changed `_buildDiscover` signature to accept `List<CatalogItem> trendingItems`
+    - Call site in `_buildBody` now passes `catalog.trending`
+    - Trending section shows a horizontal ContentCard row when `trendingItems.isNotEmpty`
+    - Falls back to existing static `_TrendingRow` text list when catalog is still empty
+      (fresh install / no network), so no regression
+
+  #### CC-001 — _DetailSheet in ContentCard built but never shown
+  - **Root cause**: ContentCard had a complete `_DetailSheet` widget (mini poster, title,
+    year, rating, description, Watch Now button) but only `_onTap` (→ ShowDetailScreen)
+    was wired; no long-press handler existed
+  - **Fix** (content_card.dart):
+    - Added `onLongPress: () => _showQuickView(context)` to the GestureDetector
+    - Added `_showQuickView()` helper that calls `showModalBottomSheet`
+      with `_DetailSheet(item: item)`, `isScrollControlled: true`, transparent bg
+
+  ### Commit
+  All 4 files committed in one push:
+  `fix: PS-001 ambilightBlurRadius in PlayerPrefs+Settings; SR-001 real trending in Search; CC-001 long-press quick-view on ContentCard`
+
+  ### Verification
+  All 12 spot-checks returned `true` against live GitHub raw content:
+  - player_prefs.dart: Declaration, Constructor, copyWith sig, fromPrefs, save (5/5)
+  - player_settings_screen.dart: Blur Radius slider present (1/1)
+  - content_card.dart: onLongPress, _showQuickView method, _DetailSheet call (3/3)
+  - search_screen.dart: sig update, catalog.trending call site, real card grid, static fallback (4/4)
+
+  ### Status
+  Audit complete — all 11 remaining files audited. No further gaps found.
+  Total items resolved across all sessions: 11 (8 in session 2 + 3 in session 3).
+  
