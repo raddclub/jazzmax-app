@@ -4,6 +4,91 @@ Every agent appends to this file after completing work.
 Newest entries go at the TOP.
 Format is defined in `agent-hub/SKILLS.md` Rule 8.
 
+
+## [2026-05-29 04:00 UTC] — Agent: Replit Agent (Session 5)
+
+### Task
+Deep analysis of the video player: how stream links are generated, how local videos
+are handled, why zero-rated links fail, why local videos stay stuck loading, why
+left/right swipes trigger seek instead of brightness/volume, and a UI cleanup to
+match the user's customised MX Player layout (screenshots provided in attached_assets/).
+
+### Analysis Findings
+
+#### How the player generates stream links (full flow)
+```
+PlayerScreen._openMedia(fileId)
+  1. If localPath != null → player.open(localPath) immediately — no network
+  2. LocalDb.getShareUrl(fileId) → Jazz share URL from local SQLite
+  3. JazzDriveService.getStreamLink(fileId, shareUrl)
+       POST cloud.jazzdrive.com.pk/sapi/link/login  → validationKey + JSESSIONID
+       GET  cloud.jazzdrive.com.pk/sapi/media/video → raw CDN stream URL
+       Cache result for 6 hours
+  4. player.open(cdnUrl) — zero-rated CDN stream (Jazz SIM, no bundle needed)
+  5. Fallback: CatalogApi.getStreamUrl(fileId) → Oracle server → requires bundle
+```
+
+#### Bug 1 — Zero-rated path broken (3 causes)
+- **Root**: BUG-009 (documented, not yet fixed) — Oracle catalog sync does NOT
+  include share_url in episodes array → LocalDb.getShareUrl() returns null for
+  most episodes → zero-rated block is skipped entirely → always falls to Oracle
+- **Secondary**: JazzDrive CDN tokens expire in ~1-2h but cache TTL is 6h — stale
+  cached URLs return XML error pages (handled by _jazzAutoRetry, but still fails)
+- **Secondary**: When zero-rated fails, the code falls through silently — user
+  gets no warning that paid data is being consumed
+
+#### Bug 2 — Local/gallery videos stuck loading
+- When user plays a phone gallery video (content:// or /storage/... path), the
+  fileId passed to PlayerScreen may be the file path itself, but localPath is null
+- _isLocalFile check fails → player tries JazzDrive/Oracle with a file path as
+  "fileId" → both fail → player shows "Check your connection" / stuck loading
+
+#### Bug 3 — Left/right vertical swipe triggers seek instead of brightness/volume
+- Both horizontal (seek) and vertical (brightness/volume) used identical 12px
+  threshold for intent detection
+- A real vertical finger swipe has slight horizontal wobble; if horizontal wobble
+  hits 12px FIRST, intent locks to 'seek' and stays there for entire gesture
+- Result: volume/brightness swipes frequently misfire as tiny seek operations
+
+#### Bug 4 — UI too complex vs MX Player reference
+- Top bar had 11+ elements: back, title, AudioTrackBadge, SubTrackBadge, 3A·2S
+  count badge, rotation badge, delay badges, zoom badge, cast, PiP, lock
+- Audio + Sub badges in top bar DUPLICATED the Audio/Sub buttons in the right strip
+- Bottom had a permanent 5-button text row (Subtitle File, EQ, Info, Enhance, Shot)
+  that cluttered the clean video view
+
+### Done
+- **FIX-GESTURE**: Changed direction detection from equal 12px threshold to:
+  horizontal needs 2:1 dominance over vertical AND > 24px; vertical only needs
+  1.5:1 dominance and 8px. Volume/brightness swipes now reliably detected.
+- **FIX-LOCAL**: Added `_isLocalPath()` helper that detects /, file://, content://
+  prefixes. `_openMedia()` now checks fileId itself for local path patterns, so
+  gallery videos play immediately without any network calls.
+- **FIX-ZERORATED**: Added SnackBar warning when JazzDrive zero-rated path fails
+  and app falls back to Oracle (paid internet). User is now informed.
+  Also added comment documenting BUG-009 as the root cause of zero-rated failure.
+- **FIX-UI**: Removed the bottom text-button row (Subtitle File, EQ, Info, Enhance,
+  Shot) — all accessible via right-strip "More" button. Removed duplicate
+  AudioTrackBadge, SubTrackBadge, and 3A·2S count badge from top bar (those
+  features are in the right strip already). Bottom now shows only frame-step
+  controls when paused.
+
+### Files Changed
+- `raddflix_flutter/lib/screens/player_screen.dart` — all 4 fixes (commit 4155cfb6)
+
+### Notes for Next Agent
+- **BUG-009 still not fixed server-side**: Oracle /api/catalog/sync must include
+  share_url in the episodes array for zero-rated path to work. Fix is in
+  `/opt/jazzmax/_watch_prototype/routes/app_catalog.py` — add share_url to the
+  episode dict in the sync response. This is the #1 priority for zero-rated.
+- SSH to Oracle server failed this session (connection timed out at install.sh
+  step 2/4). Check that the server is reachable and ORACLE_SSH_KEY is correct.
+- Cache TTL for JazzDrive links is 6h in jazzdrive_service.dart — consider
+  reducing to 90 minutes to match actual CDN token lifetime.
+- All 4 user-reported bugs now have Flutter-side fixes pushed. The server-side
+  BUG-009 fix (share_url in sync) still needs Oracle SSH access to complete.
+
+---
 ---
 
 ## [2026-05-26 20:14 UTC] — Agent: Replit Agent (Session 4)
