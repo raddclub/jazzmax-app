@@ -100,6 +100,7 @@ class PlayerPrefs {
   final bool   ambilightEnabled;
   final double ambilightIntensity;
   final int    ambilightSampleIntervalMs;
+  final double ambilightBlurRadius;
 
   // ── BINGE GUARD ──────────────────────────────────────────────────────────
   final bool bingeGuardEnabled;
@@ -200,6 +201,7 @@ class PlayerPrefs {
     this.ambilightEnabled = false,
     this.ambilightIntensity = 0.7,
     this.ambilightSampleIntervalMs = 400,
+    this.ambilightBlurRadius = 24.0,
     this.bingeGuardEnabled = false,
     this.bingeGuardThresholdMinutes = 120,
     this.sleepFadeEnabled = true,
@@ -246,7 +248,7 @@ class PlayerPrefs {
     int? seekBackOnResumeSeconds, bool? longPressPlayRestart,
     bool? autoSkipIntroEnabled, bool? showSkipIntroButton,
     bool? transparentModeEnabled, double? transparentModeOpacity,
-    bool? ambilightEnabled, double? ambilightIntensity, int? ambilightSampleIntervalMs,
+    bool? ambilightEnabled, double? ambilightIntensity, int? ambilightSampleIntervalMs, double? ambilightBlurRadius,
     bool? bingeGuardEnabled, int? bingeGuardThresholdMinutes,
     bool? sleepFadeEnabled, int? sleepFadeDurationSeconds,
     bool? showNetworkSpeed, bool? showDecoderInfo, bool? showPlaybackInfo,
@@ -325,6 +327,7 @@ class PlayerPrefs {
     ambilightEnabled: ambilightEnabled ?? this.ambilightEnabled,
     ambilightIntensity: ambilightIntensity ?? this.ambilightIntensity,
     ambilightSampleIntervalMs: ambilightSampleIntervalMs ?? this.ambilightSampleIntervalMs,
+    ambilightBlurRadius: ambilightBlurRadius ?? this.ambilightBlurRadius,
     bingeGuardEnabled: bingeGuardEnabled ?? this.bingeGuardEnabled,
     bingeGuardThresholdMinutes: bingeGuardThresholdMinutes ?? this.bingeGuardThresholdMinutes,
     sleepFadeEnabled: sleepFadeEnabled ?? this.sleepFadeEnabled,
@@ -430,6 +433,7 @@ class PlayerPrefs {
       ambilightEnabled:       s.getBool('${_p}ambilight')         ?? false,
       ambilightIntensity:     s.getDouble('${_p}ambilight_intensity') ?? 0.7,
       ambilightSampleIntervalMs: s.getInt('${_p}ambilight_interval') ?? 400,
+      ambilightBlurRadius:    s.getDouble('${_p}ambilight_blur_radius') ?? 24.0,
       bingeGuardEnabled:      s.getBool('${_p}binge_guard')       ?? false,
       bingeGuardThresholdMinutes: s.getInt('${_p}binge_threshold') ?? 120,
       sleepFadeEnabled:       s.getBool('${_p}sleep_fade')        ?? true,
@@ -524,6 +528,7 @@ class PlayerPrefs {
       s.setBool('${_p}ambilight',          ambilightEnabled),
       s.setDouble('${_p}ambilight_intensity', ambilightIntensity),
       s.setInt('${_p}ambilight_interval',  ambilightSampleIntervalMs),
+      s.setDouble('${_p}ambilight_blur_radius', ambilightBlurRadius),
       s.setBool('${_p}binge_guard',        bingeGuardEnabled),
       s.setInt('${_p}binge_threshold',     bingeGuardThresholdMinutes),
       s.setBool('${_p}sleep_fade',         sleepFadeEnabled),
