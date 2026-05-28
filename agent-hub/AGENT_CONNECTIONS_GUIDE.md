@@ -243,4 +243,17 @@ Need to use JS/Node for GitHub API?
 
 ---
 
-*Last updated: 2026-05-28*
+*Last updated: 2026-05-28 (Session 5)*
+
+  ---
+
+  ## 4 — Quick Tool Reference
+
+  | Tool | Available? | Notes |
+  |------|-----------|-------|
+  | bash curl | ✅ Yes | Primary tool for all GitHub API calls |
+  | jq | ✅ Yes (v1.7.1) | Use for parsing GitHub API JSON responses |
+  | python3 | ❌ No | Not in PATH in Replit container |
+  | node | ❌ No | Not directly in PATH (only via code_execution sandbox) |
+  | code_execution JS sandbox | ⚠️ Limited | process.env.GITHUB_TOKEN is undefined — cannot access secrets |
+  | base64 | ✅ Yes | Available; use `base64 -w 0` to avoid line wraps |

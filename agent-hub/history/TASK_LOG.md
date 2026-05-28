@@ -1509,3 +1509,43 @@ Continue the comprehensive audit of all Flutter application files. Identify feat
 - All fixes should be done via GitHub API (Tree API for multi-file commits). See AGENT_CONNECTIONS_GUIDE.md Pattern E.
 
 ---
+
+
+  ---
+
+  ## [2026-05-28] — Agent: Replit Agent (Session 5 — Bug Fix Session)
+
+  ### Task
+  Fix all outstanding bugs found in Sessions 1–4. Verify all previously-documented "open" issues. Wire all unwired UI features. Update all documentation MD files.
+
+  ### Done
+  - Verified BUG-001, HS-001, SVC-001, PL-001–PL-005 are ALL already fixed in the current codebase (pre-existing, not re-fixed)
+  - Fixed BUG-003: login_screen.dart logo letter 'J' → 'R'; RichText 'Jazz'→'Radd', 'MAX'→'Flix'
+  - Fixed BUG-002: show_detail_screen.dart _playEpisode() and _playMovie() both now pass 'content_type' key in Navigator.pushNamed args to player route
+  - Fixed BUG-004: tid_status_screen.dart _buildWhatsAppButton() now launches WhatsApp via url_launcher instead of showing a SnackBar
+  - Fixed BUG-005: tid_status_screen.dart _buildContactSupportButton() onPressed now launches WhatsApp via url_launcher (was empty () {})
+  - Added AppConstants.supportWhatsApp = '923XXXXXXXXX' to constants.dart (placeholder — update before production release)
+  - Note: BUG-004 was misidentified in Session 4 audit as subscription_screen.dart — actual file is tid_status_screen.dart
+  - Updated all 4 documentation files (UI_AUDIT, TASK_LOG, SKILLS.md, AGENT_CONNECTIONS_GUIDE.md)
+
+  ### Files Changed
+  - `raddflix_flutter/lib/screens/login_screen.dart` — BUG-003: logo letter J→R, Jazz→Radd, MAX→Flix
+  - `raddflix_flutter/lib/screens/show_detail_screen.dart` — BUG-002: added content_type key to both play routes
+  - `raddflix_flutter/lib/screens/tid_status_screen.dart` — BUG-004+005: WhatsApp support buttons now call launchUrl()
+  - `raddflix_flutter/lib/core/constants.dart` — NEW: AppConstants.supportWhatsApp placeholder constant
+  - `agent-hub/history/UI_AUDIT_2026_05_28.md` — appended Fix Session section with final all-clear table
+  - `agent-hub/history/TASK_LOG.md` — appended this entry
+  - `agent-hub/SKILLS.md` — added jq note and supportWhatsApp pattern
+  - `agent-hub/AGENT_CONNECTIONS_GUIDE.md` — added jq tip, updated date
+
+  ### Notes for Next Agent
+  - All 15 tracked bugs across 5 sessions are now resolved. Outstanding issues: 0.
+  - AppConstants.supportWhatsApp is a placeholder ('923XXXXXXXXX'). Replace with the real support WhatsApp number before production release.
+  - Oracle SSH to 92.4.95.252 STILL does not work from Replit container (unchanged).
+  - GitHub API via bash curl works. jq is available (jq-1.7.1) for parsing JSON responses.
+  - code_execution JS sandbox: process.env.GITHUB_TOKEN is UNDEFINED — always use bash curl for GitHub API.
+  - url_launcher (^6.3.0) is already in pubspec.yaml — no package additions needed.
+  - All commits done via GitHub Tree API. Commit SHA: 0799857016c4dda110984540b6bf351a48febffc (code fixes), MD commit follows.
+
+  ---
+  

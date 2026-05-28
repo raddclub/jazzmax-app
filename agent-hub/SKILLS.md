@@ -144,3 +144,30 @@ After every change:
 - Dart/Flutter change → grep to confirm old string is gone and new string is present
 
 If something looks wrong, fix it before logging it as done.
+
+
+  ---
+
+  ## Addendum — Confirmed Working Tools (2026-05-28)
+
+  ### jq is Available
+  `jq` (v1.7.1) is available in the Replit bash environment. Use it to parse GitHub API JSON responses:
+
+  ```bash
+  # Get HEAD SHA
+  HEAD_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    "https://api.github.com/repos/raddclub/raddflix-app/git/refs/heads/main" \
+    | jq -r '.object.sha')
+
+  # Get tree SHA from commit
+  TREE_SHA=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+    "https://api.github.com/repos/raddclub/raddflix-app/git/commits/$HEAD_SHA" \
+    | jq -r '.tree.sha')
+  ```
+
+  ### Support WhatsApp Constant
+  All WhatsApp deep links in the app use `AppConstants.supportWhatsApp` (defined in `raddflix_flutter/lib/core/constants.dart`).
+  Before production release, update this constant to the real support phone number (international format, no +, no spaces, e.g. `923001234567`).
+
+  Current value: `'923XXXXXXXXX'` (placeholder).
+  
