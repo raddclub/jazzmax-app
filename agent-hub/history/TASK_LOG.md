@@ -1453,3 +1453,59 @@ Total items resolved across all sessions at that point: 11 (8 in session 2 + 3 i
 - Next work: refer to PLAYER_SPEC.md for any remaining unimplemented features or new tasks.
 
 ---
+
+
+---
+
+## [2026-05-28 — Session 4] — Agent: Replit Agent (Full Audit Continuation)
+
+### Task
+Continue the comprehensive audit of all Flutter application files. Identify features in code but not wired to UI, verify all UI elements function correctly, check backend connections. Update UI_AUDIT_2026_05_28.md with findings. Create AGENT_CONNECTIONS_GUIDE.md documenting Oracle SSH and GitHub API connection patterns (what works and what doesn't).
+
+### Done
+- Completed audit of all remaining unread files:
+  - player_screen.dart (3200+ lines) — full read confirming all Phase 3 features
+  - All 12 widget/player files — all confirmed functional
+  - catalog_provider.dart, auth_provider.dart — both clean
+  - splash_screen.dart, onboarding_screen.dart, login_screen.dart, register_screen.dart
+  - admin_queue_screen.dart, local_media_screen.dart, local_folder_screen.dart
+  - player_settings_screen.dart, vault_lock_screen.dart
+- Found 4 new bugs (BUG-002 through BUG-005):
+  - BUG-002: show_detail_screen._playMovie() / _playEpisode() missing 'content_type' key — movies default to 'series' contentType
+  - BUG-003: login_screen.dart _Logo shows 'J' not 'R' (stale JazzMAX branding)
+  - BUG-004: subscription_screen.dart WhatsApp button shows SnackBar only, never launches WhatsApp
+  - BUG-005: tid_status_screen.dart Contact Support button has empty onPressed () {}
+- Confirmed 11 other screens/files are clean with no new issues
+- Updated agent-hub/history/UI_AUDIT_2026_05_28.md — appended Third-Pass section with all findings and full open-issues table
+- Created agent-hub/AGENT_CONNECTIONS_GUIDE.md — complete guide covering GitHub API patterns (works) and Oracle SSH (doesn't work from Replit + explanation)
+- Appended this TASK_LOG entry
+
+### Files Changed
+- `agent-hub/history/UI_AUDIT_2026_05_28.md` — appended Third-Pass section (4 new bugs + clean-file table + complete open-issues summary)
+- `agent-hub/AGENT_CONNECTIONS_GUIDE.md` — created new file (Oracle SSH + 6 GitHub API patterns)
+- `agent-hub/history/TASK_LOG.md` — appended this entry
+
+### Open Bugs (All Sessions — Not Yet Fixed)
+| ID | Location | Issue |
+|----|----------|-------|
+| BUG-001 | home_screen.dart | AppBar shows 'JazzMAX' branding |
+| BUG-002 | show_detail_screen.dart | _playMovie/_playEpisode missing content_type |
+| BUG-003 | login_screen.dart | Logo shows 'J' not 'R' |
+| BUG-004 | subscription_screen.dart | WhatsApp button is a SnackBar no-op |
+| BUG-005 | tid_status_screen.dart | Contact Support onPressed is empty () {} |
+| PL-001 | player_screen.dart | TransparentPlayerSlider no trigger |
+| PL-002 | player_screen.dart | PlaybackInfoOverlay no toggle button |
+| PL-003 | player_screen.dart | VideoEnhancePanel no trigger button |
+| PL-004 | player_screen.dart | SceneBookmarksPanel view button missing |
+| PL-005 | player_screen.dart | Screenshot no trigger button |
+| HS-001 | home_screen.dart | catalog.trending never rendered |
+| SVC-001 | home_screen.dart | NotificationService no periodic refresh |
+
+### Notes for Next Agent
+- All 65+ Flutter files have now been audited across 4 sessions. The audit is complete.
+- Oracle SSH to 92.4.95.252 DOES NOT WORK from Replit container (port 22 timeout). Do not attempt SSH. See AGENT_CONNECTIONS_GUIDE.md for details.
+- GitHub API via bash curl WORKS perfectly. $GITHUB_TOKEN is available in bash env. Use curl, not code_execution JS for GitHub API.
+- The 5 most impactful fixes to do next: BUG-004 (WhatsApp button), BUG-005 (TID support button), BUG-003 (login logo), BUG-002 (content_type), HS-001 (trending section).
+- All fixes should be done via GitHub API (Tree API for multi-file commits). See AGENT_CONNECTIONS_GUIDE.md Pattern E.
+
+---
