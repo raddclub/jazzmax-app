@@ -70,7 +70,7 @@ RaddFlix is a Pakistani streaming platform. Jazz SIM users stream movies/dramas 
 
 1. Make sure `GITHUB_TOKEN` and `ORACLE_SSH_KEY` are set in Replit Secrets
 2. Run the install script: `curl -sL https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/scripts/install.sh | bash`
-3. Read `agent-hub/history/TASK_LOG.md` to see what has been done
+3. Read `agent-hub/HANDOFF_2026_05_28.md` for the current state, then `TASK_LOG.md` for full history
 4. Do your work
 5. Append your summary to `TASK_LOG.md` via GitHub API
 

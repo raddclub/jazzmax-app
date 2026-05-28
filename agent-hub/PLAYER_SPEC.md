@@ -1,7 +1,7 @@
 # RaddFlix Player — Supreme Customizable Player Specification
 > **FINAL — For implementation agent. Read every section before writing code.**
 > **Research basis:** MX Player, VLC, KMPlayer, Nova, BSPlayer, nPlayer, Just Player, mpv, Potplayer, Infuse
-> **Last updated:** 2026-05-26 Session 8 (FINAL)
+> **Last updated:** 2026-05-28 Session 5 (MX Player redesign + bug fixes applied)
 > **Platform:** Android only. No iOS code needed. All MPV filters unrestricted.
 
 ---
@@ -32,9 +32,15 @@
 ✅ flutter_animate imported and used
 ✅ shimmer package in pubspec (not yet used in player)
 ✅ share_plus in pubspec (use for timestamp share)
-```
+  ✅ MX Player-style controls overlay — right-side vertical icon strip (_MxSideBtn ×9: Audio/Sub/Fit/Speed/Night/Loop/Sleep/Bookmark/More), large red circle (76px) play/pause with glow, circular ±15s seek buttons (_MxSeekBtn) with second labels, top delay/zoom badges (_MxBadge)
+  ✅ Error popup false-positive fix — error listener returns early if _playing && _position.inSeconds > 3 (no popup during active playback)
+  ✅ Retry timer extended 5s → 8s with !_playing guard — prevents false retry on slow-starting but valid streams
+  ✅ Play Now null fileId — shows SnackBar "Video not available yet" instead of silent return
+  ```
 
-Build ON TOP. Never delete working code.
+  > **Last updated:** 2026-05-28 — Session 5 added MX Player redesign + 3 bug fixes
+
+  Build ON TOP. Never delete working code.
 
 ---
 

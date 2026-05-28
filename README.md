@@ -27,3 +27,10 @@
 → Task history: [`agent-hub/history/TASK_LOG.md`](agent-hub/history/TASK_LOG.md)
 → Rules: [`agent-hub/SKILLS.md`](agent-hub/SKILLS.md)
 → Setup script: [`agent-hub/scripts/install.sh`](agent-hub/scripts/install.sh)
+
+  ## Latest Changes (2026-05-28)
+
+  - 🎬 **MX Player-style video player** — right-side vertical icon strip, large red circular play/pause, circular ±15s seek buttons, clean bottom bar with red slider
+  - 🐛 **Error popup fix** — no more false error dialogs appearing during active playback on slow streams
+  - 🎬 **Movie Play Now fix** — shows friendly message instead of silently doing nothing when a video isn't linked yet
+  

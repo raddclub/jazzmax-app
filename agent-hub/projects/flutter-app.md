@@ -78,3 +78,20 @@ The app is functional but missing many features. Key gaps:
 The app connects to the Oracle server (watch API on port 6000):
 - Base URL configured in `lib/core/api/api_client.dart`
 - HTTP cleartext allowed for `92.4.95.252` (configured in `network_security_config.xml`)
+
+  ## Recent Changes
+
+  | Date | Change | Files |
+  |------|--------|-------|
+  | 2026-05-28 | MX Player-style controls overlay redesign | `player_screen.dart` |
+  | 2026-05-28 | Fix: error popup during active playback (false positive) | `player_screen.dart` |
+  | 2026-05-28 | Fix: movie Play Now button silently doing nothing when fileId is null | `show_detail_screen.dart` |
+  | 2026-05-28 | Vault feature (PIN 4/6-digit, biometric, file hiding) | `vault_screen.dart` |
+
+  ## Key Player Files
+
+  | File | Purpose |
+  |------|---------|
+  | `lib/screens/player_screen.dart` | Full video player — media3, controls, gestures (3074 lines) |
+  | `lib/screens/show_detail_screen.dart` | Show/movie detail + episode list + Play Now button |
+  

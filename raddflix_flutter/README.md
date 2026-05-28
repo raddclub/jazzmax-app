@@ -32,3 +32,10 @@ android/
 ```
 
 → Full documentation: [`agent-hub/projects/flutter-app.md`](../agent-hub/projects/flutter-app.md)
+
+  ## Recent Changes (2026-05-28)
+
+  - **MX Player-style UI** — `player_screen.dart` `_ControlsOverlay` fully redesigned: right-side vertical strip, large red circle play/pause, circular seek buttons, clean bottom bar
+  - **Bug fix** — Error popup no longer fires during active playback on slow streams
+  - **Bug fix** — Movie "Play Now" button now shows a friendly error instead of silently doing nothing
+  
