@@ -19,6 +19,7 @@ import '../core/db/local_db.dart';
 import '../core/api/catalog_api.dart';
 import '../core/services/jazzdrive_service.dart';
 import '../core/debug/debug_logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/player/player_prefs.dart';
 import '../core/player/player_prefs_provider.dart';
 import '../core/player/smart_intro_store.dart';
@@ -43,6 +44,7 @@ import '../widgets/player/ab_loop_panel.dart';
 import '../widgets/player/track_badges.dart';
 import '../widgets/player/video_enhance_panel.dart';
 import '../widgets/player/transparent_player_layer.dart';
+import '../widgets/player/subtitle_overlay.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
 const _pipChannel = MethodChannel('com.raddflix.app/pip');
@@ -241,6 +243,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   int _activeAudioIdx = 0;
   int _activeSubIdx   = 0;
 
+    // ── Subtitle text for custom overlay ─────────────────────────────────────
+    String? _currentSubtitleText;
+
   @override
   void initState() {
     super.initState();
@@ -315,9 +320,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           _player.play();
         }
       });
-      // Pause on headphone unplug
+      // Pause on headphone unplug + user toast
       session.becomingNoisyEventStream.listen((_) {
-        if (mounted && !_userPaused) _player.pause();
+        if (!mounted) return;
+        if (!_userPaused) {
+          _player.pause();
+          _userPaused = true;
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('🎧 Headphones disconnected — paused'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
       });
     } catch (_) {}
   }
@@ -651,7 +665,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player.seek(target);
   }
 
-  void _initBingeGuard() {
+  Future<void> _restoreTrackMemory() async {
+      try {
+        final sp = await SharedPreferences.getInstance();
+        final savedAudioLang = sp.getString('player_last_audio_lang');
+        final savedSubLang   = sp.getString('player_last_sub_lang');
+        if (savedAudioLang != null && _prefs.rememberAudioTrack) {
+          final tracks = _player.state.tracks.audio;
+          for (int i = 0; i < tracks.length; i++) {
+            if (tracks[i].language == savedAudioLang) {
+              setState(() => _activeAudioIdx = i);
+              _player.setAudioTrack(tracks[i]);
+              break;
+            }
+          }
+        }
+        if (savedSubLang != null && _prefs.rememberSubtitleTrack) {
+          final tracks = _player.state.tracks.subtitle;
+          for (int i = 0; i < tracks.length; i++) {
+            if (tracks[i].language == savedSubLang) {
+              setState(() => _activeSubIdx = i);
+              _player.setSubtitleTrack(tracks[i]);
+              break;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    void _initBingeGuard() {
     _bingeGuardCtrl?.dispose();
     if (!_prefs.bingeGuardEnabled) return;
     _bingeGuardCtrl = BingeGuardController(
@@ -813,6 +855,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (!mounted || !done) return;
       setState(() => _ended = true);
       _onPlaybackEnded();
+    });
+
+    // Track list -> restore saved language preferences
+    _player.stream.tracks.listen((_) {
+      if (mounted && _activeAudioIdx == 0) _restoreTrackMemory();
+    });
+
+    // Subtitle text -> custom SubtitleOverlay
+    _player.stream.subtitle.listen((lines) {
+      if (!mounted) return;
+      final text = lines.where((l) => l.trim().isNotEmpty).join('\n');
+      setState(() => _currentSubtitleText = text.isEmpty ? null : text);
     });
 
     // ── JazzDrive XML error detection ──────────────────────────────────────
@@ -1362,9 +1416,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    final body = _buildPlayerBody();
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
+      body: _prefs.ambilightEnabled
+          ? AmbilightGlowBorder(
+              colors: _ambilightColors,
+              intensity: _prefs.ambilightIntensity,
+              blurRadius: _prefs.ambilightBlurRadius,
+              child: body,
+            )
+          : body,
+    );
+  }
+
+  Widget _buildPlayerBody() {
+    return GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _handleCenterTap,
         onDoubleTapDown: (d) {
@@ -1393,12 +1460,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           Positioned.fill(
             child: Transform.scale(
               scale: _scale,
-              child: Video(
-                controller: _videoCtrl,
-                fit: _ratios[_ratioIdx],
-                filterQuality: FilterQuality.medium,
-                controls: NoVideoControls,
-                subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+              child: Opacity(
+                opacity: _prefs.transparentModeEnabled
+                    ? _prefs.transparentModeOpacity.clamp(0.2, 1.0)
+                    : 1.0,
+                child: Video(
+                  controller: _videoCtrl,
+                  fit: _ratios[_ratioIdx],
+                  filterQuality: FilterQuality.medium,
+                  controls: NoVideoControls,
+                  subtitleViewConfiguration: const SubtitleViewConfiguration(visible: false),
+                ),
               ),
             ),
           ),
@@ -1698,6 +1770,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               onSkipCountdown: _playNextEpisode,
             ),
 
+          // ── Custom Subtitle Overlay ──
+          if (_prefs.subtitleEnabled && !_cinematicMode)
+            SubtitleOverlay(
+              currentLine: _currentSubtitleText,
+              prefs: _prefs,
+            ),
+
           // ── Controls ──
           if (_showControls && !_longPressFast && !_showNextEpisode)
             _ControlsOverlay(
@@ -1801,6 +1880,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               activeSubIdx: _activeSubIdx,
               audioLabels: _buildAudioLabels(_player.state.tracks.audio),
               subLabels: _buildSubLabels(_player.state.tracks.subtitle),
+              showActiveTrackBadge: _prefs.showActiveTrackBadge,
+              showTrackCountBadge: _prefs.showTrackCountBadge,
               bookmarks: _bookmarks,
               abLoop: _abLoop,
               onToggleAbPanel: () => setState(() => _showAbPanel = !_showAbPanel),
@@ -2112,7 +2193,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
           if (_showBookmarksPanel)
             Positioned(bottom: 0, left: 0, right: 0,
               child: SceneBookmarksPanel(
-                bookmarks: _bookmarks,
+                showActiveTrackBadge: _prefs.showActiveTrackBadge,
+              showTrackCountBadge: _prefs.showTrackCountBadge,
+              bookmarks: _bookmarks,
                 fmtDur: _fmtDur,
                 onSeekTo: (pos) => _player.seek(pos),
                 onDelete: _deleteBookmark,
@@ -2164,7 +2247,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ),
         ]),
       ),
-    );
   }
 }
 
@@ -2212,6 +2294,8 @@ class _ControlsOverlay extends StatelessWidget {
   final int activeSubIdx;
   final List<String> audioLabels;
   final List<String> subLabels;
+  final bool showActiveTrackBadge;
+  final bool showTrackCountBadge;
   final List<SceneBookmark> bookmarks;
   final AbLoopController abLoop;
   final VoidCallback onToggleAbPanel;
@@ -2258,6 +2342,8 @@ class _ControlsOverlay extends StatelessWidget {
     this.activeSubIdx = 0,
     this.audioLabels = const [],
     this.subLabels = const [],
+    this.showActiveTrackBadge = true,
+    this.showTrackCountBadge = true,
     this.bookmarks = const [],
     required this.abLoop,
     required this.onToggleAbPanel,
@@ -2314,6 +2400,46 @@ class _ControlsOverlay extends StatelessWidget {
                   ],
                 ),
               ),
+              // ── Active track badges (🎵 Urdu / CC English) ──
+              if (showActiveTrackBadge && audioLabels.isNotEmpty)
+                AudioTrackBadge(
+                  label: activeAudioIdx < audioLabels.length ? audioLabels[activeAudioIdx] : '',
+                  onTap: onAudioTracks,
+                ),
+              if (showActiveTrackBadge)
+                SubTrackBadge(
+                  label: (subLabels.isNotEmpty && activeSubIdx < subLabels.length)
+                      ? subLabels[activeSubIdx]
+                      : null,
+                  onTap: onSubtitleTracks,
+                ),
+              // ── Track count badge (3A · 2S) ──
+              if (showTrackCountBadge && (audioLabels.length > 1 || subLabels.length > 1))
+                _MxBadge(
+                  label: '${audioLabels.length}A · ${subLabels.length}S',
+                  color: Colors.white38,
+                  onTap: onAudioTracks,
+                ),
+              // ── Rotation badge ──
+              GestureDetector(
+                onTap: onCycleRotation,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    border: Border.all(color: Colors.white18, width: 0.8),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(_rotationIcon(rotationMode), color: Colors.white54, size: 11),
+                    const SizedBox(width: 3),
+                    Text(_rotationLabel(rotationMode),
+                        style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w600)),
+                  ]),
+                ),
+              ),
+              // ── Delay + zoom badges ──
               if (audioDelayMs != 0)
                 _MxBadge(label: 'A${audioDelayMs > 0 ? '+' : ''}${audioDelayMs}ms', color: const Color(0xFFE8002D), onTap: onAudioSync),
               if (subDelayMs != 0)
@@ -2652,7 +2778,30 @@ class _ControlsOverlay extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Rotation helpers ────────────────────────────────────────────────────────────
+  IconData _rotationIcon(String mode) {
+    switch (mode) {
+      case 'auto':          return Icons.screen_rotation_outlined;
+      case 'lock_left':     return Icons.stay_current_landscape_rounded;
+      case 'lock_right':    return Icons.screen_rotation_rounded;
+      case 'lock_portrait': return Icons.stay_current_portrait_rounded;
+      case 'lock_current':  return Icons.screen_lock_rotation_rounded;
+      default:              return Icons.screen_rotation_rounded;
+    }
+  }
+
+  String _rotationLabel(String mode) {
+    switch (mode) {
+      case 'auto':          return 'Auto';
+      case 'lock_left':     return 'Left';
+      case 'lock_right':    return 'Right';
+      case 'lock_portrait': return 'Portrait';
+      case 'lock_current':  return 'Current';
+      default:              return 'Land';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
 // MX PLAYER STYLE HELPER WIDGETS
 // ═══════════════════════════════════════════════════════════════════════════════
 
