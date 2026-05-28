@@ -1128,3 +1128,38 @@ Complete live API audit of all RaddFlix backend endpoints. Test every route, doc
   ### Notes
   - Network issue: Replit container blocked GitHub API (authenticated) and SSH port 22 — resolved by updating GitHub token in Replit secrets and using code_execution sandbox which reads secrets store directly
   
+  ---
+
+  ## Session 6 — 2026-05-28
+
+  ### Task: Local Media Browser (MX Player style)
+  **Status:** ✅ DONE  
+  **Commit:** `156fc2b8`
+
+  #### Files Created (5 new):
+  | File | Description |
+  |------|-------------|
+  | `lib/models/local_video.dart` | Data models: LocalVideo, LocalFolder with formatters |
+  | `lib/services/local_media_service.dart` | MediaStore query, thumbnail gen, SRT detection, fallback scan |
+  | `lib/screens/local_media_screen.dart` | Folder list screen (453 lines) |
+  | `lib/screens/local_folder_screen.dart` | Video list inside folder (689 lines) |
+  | `android/.../MediaStorePlugin.kt` | Native Kotlin MediaStore plugin (182 lines) |
+
+  #### Files Modified (4):
+  | File | Change |
+  |------|--------|
+  | `lib/app.dart` | Added `localMedia` route + imports |
+  | `lib/screens/home_screen.dart` | Bottom nav index 1 → AppRoutes.localMedia |
+  | `lib/widgets/bottom_nav.dart` | Search tab → Local (folder icon) |
+  | `android/.../MainActivity.kt` | Register MediaStorePlugin |
+
+  #### Features Implemented:
+  - **Folder view** (Screen 1): folder thumbnail, name, video count, total size, new-badge, sort by date/name/size/count, grid/list toggle, search
+  - **Video list** (Screen 2): thumbnail with duration overlay, title, resolution badge (4K/1080p/720p/etc), SRT badge, file size, sort by date/name/size/duration, grid/list toggle, search, multi-select, delete, file info dialog, bottom sheet context menu, "Play All" FAB
+  - **Playback**: taps open existing PlayerScreen with `localPath` (already supports local files)
+  - **Permissions**: Android ≤12 uses READ_EXTERNAL_STORAGE, Android 13+ uses READ_MEDIA_VIDEO (already in manifest)
+  - **Thumbnails**: lazy loaded via video_thumbnail package (already in pubspec)
+  - **New-file badges**: tracks seen paths via SharedPreferences
+  - **Filesystem fallback**: if MediaStore unavailable, scans common dirs directly
+  - **No new packages needed**: all deps already in pubspec.yaml
+  
