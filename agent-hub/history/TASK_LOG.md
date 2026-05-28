@@ -1281,3 +1281,68 @@ File: raddflix_flutter/lib/screens/player_screen.dart (3074 -> 3223 lines, +149 
   - PL-001 (transparent slider): needs a button/callback in QuickSettingsPanel that calls setState(()=>_showTransparentSlider=true) in the player. Since QuickSettingsPanel doesn't have direct access to parent state, add an onOpenTransparentSlider callback to QuickSettingsPanel and wire it up.
   - Oracle SSH still times out from Replit container — use GitHub API only for file operations.
   
+  ---
+
+  ## [2026-05-28] — Agent: Replit Agent (Integrate All Audited Features)
+
+  ### Task
+  Implement all 8 outstanding items identified in the UI audit session. Each feature verified before proceeding to the next. No code reverted.
+
+  ### Commits
+
+  **Commit 1** — `home_screen.dart`  
+  Message: `fix: branding JazzMAX→RaddFlix, add trending row, periodic notif refresh (BUG-001, HS-001, SVC-001)`
+
+  **Commit 2** — `player_screen.dart`  
+  Message: `feat: wire TransparentSlider, PlaybackInfo, VideoEnhance, BookmarksView, Screenshot to player UI (PL-001 to PL-005)`
+
+  ### Changes Applied
+
+  #### BUG-001 — Home Screen AppBar Branding (home_screen.dart line 113–114)
+  - Changed `'Jazz'` → `'Radd'` and `'MAX'` → `'Flix'` in AppBar RichText title
+  - App now shows "RaddFlix" consistently across all screens
+
+  #### HS-001 — Trending Row (home_screen.dart lines 210–216)
+  - Added `if (catalog.trending.isNotEmpty) SliverToBoxAdapter(child: _ContentSection(title: 'Trending Now', items: catalog.trending))`
+  - Inserted after "Continue Watching", before the main content grid
+  - Fades in with 400ms flutter_animate fadeIn
+
+  #### SVC-001 — Notification Periodic Refresh (home_screen.dart lines 29, 44, 50)
+  - Added `Timer? _notifTimer` field
+  - Added `import 'dart:async'`
+  - `_notifTimer = Timer.periodic(Duration(minutes: 5), (_) => NotificationService.instance.fetch())` in initState
+  - `_notifTimer?.cancel()` in dispose()
+
+  #### PL-001 — TransparentPlayerSlider Trigger (player_screen.dart)
+  - Added `final bool isTransparentMode` + `final VoidCallback? onToggleTransparentSlider` to `_ControlsOverlay` fields + constructor
+  - Conditional `_MxSideBtn(icon: Icons.opacity_rounded, label: 'Opacity')` shown in right strip only when transparent mode is enabled
+  - Parent passes `isTransparentMode: _prefs.transparentModeEnabled` and `onToggleTransparentSlider: () => setState(() => _showTransparentSlider = !_showTransparentSlider)`
+
+  #### PL-002 — PlaybackInfoOverlay Toggle Button (player_screen.dart lines ~2786–2795)
+  - Added `TextButton.icon(icon: Icons.info_outline_rounded, label: 'Info', onPressed: onTogglePlaybackInfo)` to bottom actions row
+  - Icon color turns red when info overlay is active (uses `showPlaybackInfo` flag for visual feedback)
+
+  #### PL-003 — VideoEnhancePanel Toggle Button (player_screen.dart lines ~2797–2804)
+  - Added `TextButton.icon(icon: Icons.auto_fix_high_rounded, label: 'Enhance', onPressed: onToggleVideoEnhance)` to bottom actions row
+
+  #### PL-004 — SceneBookmarksPanel View Button (player_screen.dart lines ~2544–2550)
+  - Wrapped "Mark" `_MxSideBtn` in `GestureDetector(onLongPress: onToggleBookmarks)`
+  - Short tap: adds bookmark at current position (unchanged)
+  - Long press: opens SceneBookmarksPanel for view/seek/delete
+  - Icon changes to `Icons.bookmarks_rounded` and label to "Marks" when bookmarks exist
+
+  #### PL-005 — Screenshot Button (player_screen.dart lines ~2806–2812)
+  - Added `TextButton.icon(icon: Icons.camera_alt_outlined, label: 'Shot', onPressed: onTakeScreenshot)` to bottom actions row
+
+  ### Verification Method
+  Each change verified by:
+  1. In-memory string search after patch application (all 8 returned `true`)
+  2. Live `curl` grep of committed files on GitHub main branch
+
+  ### Notes for Next Agent
+  - All 8 audit items from UI_AUDIT_2026_05_28.md are now resolved
+  - Bottom actions bar now has 5 buttons: Subtitle File | EQ | Info | Enhance | Shot
+  - The "Mark" side button dual-role (tap = add, long-press = view) follows iOS/Android long-press conventions
+  - TransparentPlayerSlider Opacity button is conditional — only visible in right strip when `PlayerPrefs.transparentModeEnabled = true`
+  - No new packages needed; all icons used are from material_icons already in the project
+  
