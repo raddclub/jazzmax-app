@@ -914,10 +914,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     });
   }
 
+  /// Returns true when [path] is a device-local file path or URI.
+  static bool _isLocalPath(String path) =>
+      path.startsWith('/') ||
+      path.startsWith('file://') ||
+      path.startsWith('content://');
+
   Future<void> _openMedia(String fileId, {String? localPath}) async {
-    // Local file: play directly
-    if (localPath != null && localPath.isNotEmpty) {
-      await _player.open(Media(localPath));
+    // FIX-LOCAL: detect local paths passed as fileId (e.g. gallery videos).
+    final effectiveLocalPath = (localPath != null && localPath.isNotEmpty)
+        ? localPath
+        : (_isLocalPath(fileId) ? fileId : null);
+    if (effectiveLocalPath != null) {
+      await _player.open(Media(effectiveLocalPath));
       setState(() { _ended = false; _position = Duration.zero; });
       return;
     }
@@ -935,7 +944,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
         return;
       } catch (e) {
-        DebugLogger.logError('PLAYER', 'JazzDrive link failed for $fileId', e);
+        DebugLogger.logError('PLAYER', 'JazzDrive zero-rated link failed for $fileId', e);
+        // Warn user that zero-rated path failed and paid data will be used
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Zero-rated link failed — using mobile data'),
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
         // Fall through to Oracle server fallback (keep _isLinkLoading=true)
       }
     }
@@ -1192,11 +1209,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     final delta = d.localFocalPoint - _dragStartLocal;
     final size = MediaQuery.of(context).size;
 
-    // Determine drag intent once
+    // Determine drag intent once.
+    // FIX-GESTURE: horizontal must dominate 2:1 AND exceed 24px to be 'seek'.
+    // Vertical only needs 1.5:1 dominance and 8px so brightness/volume swipes
+    // are reliably detected even when the finger has slight horizontal drift.
     if (_dragIntent == null) {
-      if (delta.dx.abs() > delta.dy.abs() && delta.dx.abs() > 12) {
+      final isDefinitelyHorizontal =
+          delta.dx.abs() > delta.dy.abs() * 2.0 && delta.dx.abs() > 24;
+      final isDefinitelyVertical =
+          delta.dy.abs() > delta.dx.abs() * 1.5 && delta.dy.abs() > 8;
+      if (isDefinitelyHorizontal) {
         _dragIntent = 'seek';
-      } else if (delta.dy.abs() > delta.dx.abs() && delta.dy.abs() > 12) {
+      } else if (isDefinitelyVertical) {
         if (delta.dy < 0) {
           _dragIntent = 'swipe_zoom';
         } else {
@@ -2407,27 +2431,9 @@ class _ControlsOverlay extends StatelessWidget {
                   ],
                 ),
               ),
-              // ── Active track badges (🎵 Urdu / CC English) ──
-              if (showActiveTrackBadge && audioLabels.isNotEmpty)
-                AudioTrackBadge(
-                  label: activeAudioIdx < audioLabels.length ? audioLabels[activeAudioIdx] : '',
-                  onTap: onAudioTracks,
-                ),
-              if (showActiveTrackBadge)
-                SubTrackBadge(
-                  label: (subLabels.isNotEmpty && activeSubIdx < subLabels.length)
-                      ? subLabels[activeSubIdx]
-                      : '',
-                  onTap: onSubtitleTracks,
-                ),
-              // ── Track count badge (3A · 2S) ──
-              if (showTrackCountBadge && (audioLabels.length > 1 || subLabels.length > 1))
-                _MxBadge(
-                  label: '${audioLabels.length}A · ${subLabels.length}S',
-                  color: Colors.white38,
-                  onTap: onAudioTracks,
-                ),
-              // ── Rotation badge ──
+              // ── Rotation badge (kept; Audio/Sub/count badges removed) ──
+              // FIX-UI: Track badges removed from top bar — they duplicated
+              // the Audio + Sub buttons already in the right-side strip.
               GestureDetector(
                 onTap: onCycleRotation,
                 child: Container(
@@ -2761,55 +2767,13 @@ class _ControlsOverlay extends StatelessWidget {
               ),
             ]),
 
-            // Bottom actions row
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                TextButton.icon(
-                  icon: const Icon(Icons.add_rounded, size: 13, color: Colors.white54),
-                  label: const Text('Subtitle File', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                  onPressed: onSubtitleFile,
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  icon: const Icon(Icons.equalizer_rounded, size: 13, color: Colors.white54),
-                  label: const Text('EQ', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                  onPressed: onEq,
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  icon: Icon(Icons.info_outline_rounded, size: 13,
-                      color: showPlaybackInfo ? const Color(0xFFE8002D) : Colors.white54),
-                  label: Text('Info',
-                      style: TextStyle(
-                          color: showPlaybackInfo ? const Color(0xFFE8002D) : Colors.white54,
-                          fontSize: 10)),
-                  onPressed: onTogglePlaybackInfo,
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  icon: const Icon(Icons.auto_fix_high_rounded, size: 13, color: Colors.white54),
-                  label: const Text('Enhance', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                  onPressed: onToggleVideoEnhance,
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-                const SizedBox(width: 10),
-                TextButton.icon(
-                  icon: const Icon(Icons.camera_alt_outlined, size: 13, color: Colors.white54),
-                  label: const Text('Shot', style: TextStyle(color: Colors.white54, fontSize: 10)),
-                  onPressed: onTakeScreenshot,
-                  style: TextButton.styleFrom(padding: EdgeInsets.zero,
-                      minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                ),
-              ]),
-              if (!playing && showFrameStep)
-                Row(mainAxisSize: MainAxisSize.min, children: [
+            // Frame-step controls (paused only) — minimal like MX Player.
+            // FIX-UI: "Subtitle File / EQ / Info / Enhance / Shot" bottom row
+            // removed — those are accessible via right-strip "More" button.
+            if (!playing && showFrameStep)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
                   IconButton(
                     icon: const Icon(Icons.skip_previous_rounded, color: Colors.white70, size: 22),
                     padding: EdgeInsets.zero, constraints: const BoxConstraints(),
@@ -2820,7 +2784,7 @@ class _ControlsOverlay extends StatelessWidget {
                     padding: EdgeInsets.zero, constraints: const BoxConstraints(),
                     onPressed: onFrameStep),
                 ]),
-            ]),
+              ),
           ]).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
         ),
       ),
