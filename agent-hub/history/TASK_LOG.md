@@ -1163,3 +1163,31 @@ Complete live API audit of all RaddFlix backend endpoints. Test every route, doc
   - **Filesystem fallback**: if MediaStore unavailable, scans common dirs directly
   - **No new packages needed**: all deps already in pubspec.yaml
   
+
+  ---
+
+  ## Session: 2026-05-28 — Wire 9 Unimplemented Player Features
+
+  **Commit:** `89c0890be5c04051d8d03b49c6e84be5ca2308b3`
+  **File changed:** `raddflix_flutter/lib/screens/player_screen.dart` (3074 → 3223 lines, +149 lines)
+
+  ### Features Wired
+
+  | # | Feature | What was done |
+  |---|---------|---------------|
+  | 1 | **Ambilight glow border** | Wrapped Scaffold body with `AmbilightGlowBorder`; gated on `_prefs.ambilightEnabled`; extracted `_buildPlayerBody()` to keep `build()` clean |
+  | 2 | **Transparent player opacity** | Wrapped `Video` widget with `Opacity`; reads `_prefs.transparentModeEnabled / transparentModeOpacity.clamp(0.2,1.0)` |
+  | 3 | **Active track badges** | Added `AudioTrackBadge` (🎵 Urdu) + `SubTrackBadge` (CC English) to `_ControlsOverlay` top bar; gated on `showActiveTrackBadge` |
+  | 4 | **Track count badge** | Added `3A · 2S` badge next to track badges; gated on `showTrackCountBadge` and only shown when >1 track exists |
+  | 5 | **Rotation badge** | Added rotation icon + label widget (Auto / Left / Right / Portrait / Current) to top bar; taps `onCycleRotation` |
+  | 6 | **Track memory (save/load)** | Audio & subtitle `onSelect` callbacks now `async`; save `player_last_audio_lang` / `player_last_sub_lang` to SharedPrefs when `rememberAudioTrack/SubtitleTrack` pref is true; added `_restoreTrackMemory()` method called on `stream.tracks` change |
+  | 7 | **SubtitleOverlay** | Imported `subtitle_overlay.dart`; added `String? _currentSubtitleText` state; wired `_player.stream.subtitle.listen` to update it; mounted `SubtitleOverlay(currentLine, prefs)` in the Stack above controls |
+  | 8 | **Lock screen media notification** | `audio_session` `becomingNoisyEventStream` now shows a `SnackBar` toast "🎧 Headphones disconnected — paused" on unplug (media session itself was already configured via PlayerConfiguration) |
+  | 9 | **Headphone button press handling** | Same `becomingNoisyEventStream` handler refactored to guard `_userPaused` flag before pausing to avoid double-pause |
+
+  ### Supporting additions
+  - Added `SharedPreferences` import
+  - Added `_rotationIcon()` + `_rotationLabel()` free functions (before CONTROLS OVERLAY section)
+  - Added `showActiveTrackBadge` + `showTrackCountBadge` fields to `_ControlsOverlay` with defaults `true`; passed from parent via `_prefs`
+  - `_player.stream.tracks` listener calls `_restoreTrackMemory()` once on first load
+  
