@@ -1746,6 +1746,36 @@ def catalog_db_update():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+
+_DELTA_JSON_PATH = str(_DATA_DIR / "delta.json")
+
+
+@bp.route("/catalog/delta")
+def catalog_delta():
+    """Serve delta.json — metadata-only catalog (no file_id, no share_url).
+
+    Safe for zero-rated JazzDrive access. No streaming credentials exposed.
+    Auto-generates the delta on first request if db_update.json already exists.
+    """
+    try:
+        from flask import send_file as _sf
+        if not os.path.exists(_DELTA_JSON_PATH):
+            if os.path.exists(_CATALOG_JSON_PATH):
+                try:
+                    from hub.routes.zero_rating import generate_delta_payload
+                    import json as _json
+                    payload = generate_delta_payload()
+                    with open(_DELTA_JSON_PATH, "w", encoding="utf-8") as fh:
+                        _json.dump(payload, fh, ensure_ascii=False, indent=2)
+                except Exception as _gen_err:
+                    log.warning("catalog/delta: auto-generate failed: %s", _gen_err)
+            if not os.path.exists(_DELTA_JSON_PATH):
+                return jsonify({"ok": False, "error": "delta.json not generated yet — use Zero-Rating Manager"}), 404
+        return _sf(_DELTA_JSON_PATH, mimetype="application/json")
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/status")
 @auth.login_required
 def status():

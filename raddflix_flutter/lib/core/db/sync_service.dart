@@ -10,7 +10,11 @@ import '../../models/catalog_item.dart';
 ///
 /// Sync priority:
 ///   1. Oracle server (http://92.4.95.252) — when internet is available
-///   2. JazzDrive db_update.json — zero-rated fallback when no internet bundle
+///   2. JazzDrive delta.json — zero-rated fallback when no internet bundle
+///
+/// Delta format (JazzDrive path): metadata only — id, title, year, description,
+/// poster_url, genres, is_free. NO file_id, NO share_url (security).
+/// Uses [LocalDb.mergeDeltaTitle] which preserves share_url from prior Oracle syncs.
 ///
 /// On first run: full sync (downloads everything).
 /// On subsequent runs: delta sync (only new/changed items since last sync).
@@ -24,20 +28,20 @@ class SyncService {
       DebugLogger.logWarn('SYNC', 'Oracle sync failed: $e — trying JazzDrive fallback');
     }
 
-    // Fallback: JazzDrive zero-rated sync (works without internet bundle)
-    if (AppConstants.jazzDriveDbUpdateUrl.isNotEmpty) {
+    // Fallback: JazzDrive zero-rated delta sync (works without internet bundle)
+    if (AppConstants.jazzDriveDeltaUrl.isNotEmpty) {
       try {
-        final result = await _syncFromJazzDrive();
+        final result = await _syncFromJazzDriveDelta();
         return result;
       } catch (e) {
-        DebugLogger.logError('SYNC', 'JazzDrive fallback sync also failed', e);
+        DebugLogger.logError('SYNC', 'JazzDrive delta fallback also failed', e);
       }
     }
 
     return const SyncResult(
       success: false,
       itemsSynced: 0,
-      message: 'Sync failed: no internet and no JazzDrive fallback configured',
+      message: 'Sync failed: no internet and no JazzDrive delta fallback configured',
       isUpToDate: false,
     );
   }
@@ -80,19 +84,23 @@ class SyncService {
     );
   }
 
-  // ── JazzDrive zero-rated fallback sync ───────────────────────────────────
+  // ── JazzDrive zero-rated delta sync ──────────────────────────────────────
 
-  static Future<SyncResult> _syncFromJazzDrive() async {
-    DebugLogger.log('SYNC', 'Attempting JazzDrive db_update.json sync (zero-rated)');
+  /// Fetches delta.json from JazzDrive (zero-rated) and merges it into the
+  /// local catalog. Uses [LocalDb.mergeDeltaTitle] to preserve any share_url /
+  /// poster_path values written by a previous Oracle sync — critical because
+  /// the delta is metadata-only and does not carry streaming credentials.
+  static Future<SyncResult> _syncFromJazzDriveDelta() async {
+    DebugLogger.log('SYNC', 'Attempting JazzDrive delta.json sync (zero-rated)');
 
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 20),
       receiveTimeout: const Duration(seconds: 30),
     ));
 
-    final resp = await dio.get<dynamic>(AppConstants.jazzDriveDbUpdateUrl);
+    final resp = await dio.get<dynamic>(AppConstants.jazzDriveDeltaUrl);
     if (resp.statusCode != 200 || resp.data == null) {
-      throw Exception('JazzDrive sync: HTTP ${resp.statusCode}');
+      throw Exception('JazzDrive delta sync: HTTP ${resp.statusCode}');
     }
 
     final raw = resp.data is String
@@ -103,52 +111,57 @@ class SyncService {
     final localVersion = await LocalDb.getLastSyncVersion();
 
     if (localVersion >= remoteVersion && localVersion > 0) {
-      DebugLogger.log('SYNC', 'JazzDrive: already up to date (v$localVersion)');
+      DebugLogger.log('SYNC', 'JazzDrive delta: already up to date (v$localVersion)');
       return const SyncResult(
         success: true,
         itemsSynced: 0,
-        message: 'Already up to date (JazzDrive)',
+        message: 'Already up to date (JazzDrive delta)',
         isUpToDate: true,
       );
     }
 
     final titlesRaw = raw['titles'] as List<dynamic>? ?? [];
-    final episodesRaw = raw['episodes'] as List<dynamic>? ?? [];
+    int merged = 0;
 
-    final items = titlesRaw
-        .map((e) => CatalogItem.fromJson(e as Map<String, dynamic>))
-        .toList();
-
-    // Attach episodes to their parent items
-    final epsByTitle = <int, List<Map<String, dynamic>>>{};
-    for (final ep in episodesRaw) {
-      final m = ep as Map<String, dynamic>;
-      final tid = m['title_id'] as int? ?? 0;
-      epsByTitle.putIfAbsent(tid, () => []).add(m);
+    for (final t in titlesRaw) {
+      final row = t as Map<String, dynamic>;
+      await LocalDb.mergeDeltaTitle({
+        'id':          row['id'],
+        'title':       row['title'] ?? '',
+        'year':        row['year'],
+        'media_type':  row['media_type'] ?? 'movie',
+        'description': row['description'] ?? '',
+        'rating':      (row['rating'] as num?)?.toDouble() ?? 0.0,
+        'genres':      row['genres'] is List
+            ? json.encode(row['genres'])
+            : (row['genres'] as String? ?? '[]'),
+        'poster_url':  row['poster_url'] ?? '',
+        'is_free':     (row['is_free'] == true || row['is_free'] == 1) ? 1 : 0,
+        'db_version':  row['db_version'] ?? 0,
+        'language':    row['language'] ?? '',
+        'status':      row['status'] ?? 'released',
+        'is_ongoing':  (row['is_ongoing'] == true || row['is_ongoing'] == 1) ? 1 : 0,
+      });
+      merged++;
     }
-
-    final itemsWithEps = items.map((item) {
-      final eps = epsByTitle[item.id] ?? [];
-      return item.copyWithEpisodes(eps);
-    }).toList();
-
-    await _persistItems(itemsWithEps);
 
     final nowTs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     await LocalDb.setLastSyncVersion(remoteVersion);
     await LocalDb.setLastSyncTimestamp(nowTs);
 
-    DebugLogger.log('SYNC', 'JazzDrive sync complete: ${items.length} item(s)');
+    DebugLogger.log('SYNC', 'JazzDrive delta sync complete: $merged title(s) merged');
     return SyncResult(
       success: true,
-      itemsSynced: items.length,
-      message: 'Synced ${items.length} item(s) via JazzDrive (zero-rated)',
+      itemsSynced: merged,
+      message: 'Synced $merged title(s) via JazzDrive delta (zero-rated, metadata only)',
       isUpToDate: false,
     );
   }
 
   // ── Persistence ────────────────────────────────────────────────────────────
 
+  /// Full persist — used by Oracle sync. Replaces the full row including
+  /// share_url and file_id which come from the trusted Oracle server.
   static Future<void> _persistItems(List<CatalogItem> items) async {
     for (final item in items) {
       await LocalDb.upsertTitle(item);

@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-29
+> Last updated: 2026-05-29 (Phase 7 complete)
 > Read PRODUCT_CONTEXT.md first. This file tracks every task — done, in progress, and upcoming.
 > Update this file at the end of every session.
 
@@ -112,13 +112,13 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 7.1 | Server: auto-generate delta JSON every 24h | ⬜ | Cron job or APScheduler |
-| 7.2 | Delta JSON format: metadata only, NO file IDs, NO share URLs | ⬜ | id, title, year, description, poster_url, genres, is_free |
-| 7.3 | Server: auto-upload delta to JazzDrive (replace old file) | ⬜ | Use jazzdrive.py upload |
-| 7.4 | App: fetch delta from JazzDrive on startup (zero-rated) | ⬜ | jazzdrive_service.dart |
-| 7.5 | App: merge delta into local SQLite (INSERT OR IGNORE) | ⬜ | catalog_provider.dart |
-| 7.6 | Admin panel: Zero-Rating Manager UI update (show delta not full catalog) | ⬜ | zero_rating.py |
-| 7.7 | Remove full catalog from JazzDrive (security) | ⬜ | Only delta should be on JazzDrive |
+| 7.1 | Server: auto-generate delta JSON every 24h | ✅ | Cron job or APScheduler |
+| 7.2 | Delta JSON format: metadata only, NO file IDs, NO share URLs | ✅ | id, title, year, description, poster_url, genres, is_free |
+| 7.3 | Server: auto-upload delta to JazzDrive (replace old file) | ✅ | Use jazzdrive.py upload |
+| 7.4 | App: fetch delta from JazzDrive on startup (zero-rated) | ✅ | jazzdrive_service.dart |
+| 7.5 | App: merge delta into local SQLite (INSERT OR IGNORE) | ✅ | catalog_provider.dart |
+| 7.6 | Admin panel: Zero-Rating Manager UI update (show delta not full catalog) | ✅ | zero_rating.py |
+| 7.7 | Remove full catalog from JazzDrive (security) | ✅ | Only delta should be on JazzDrive |
 
 ---
 
@@ -163,7 +163,7 @@
 | BUG-P2 | stream cache TTL is 180 min but applies to both watch + download (ok) | constants.dart | Low |
 | BUG-P3 | AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder | constants.dart | Pre-launch |
 | BUG-P4 | Zero-Rating page shows stale 69 titles (old db_update.json, May 26) | zero_rating.py | Low |
-| BUG-P5 | Full catalog currently on JazzDrive (security risk) | zero_rating.py | High |
+| ~~BUG-P5~~ | ~~Full catalog currently on JazzDrive~~ | ~~zero_rating.py~~ | ~~High~~ |
 
 ---
 
