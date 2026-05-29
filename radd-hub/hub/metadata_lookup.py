@@ -248,6 +248,186 @@ def _ai_search(title: str, year: int | None, config: dict) -> dict | None:
 
     return None
 
+
+# ---------------------------------------------------------------------------
+# IMDbAPI.dev Fallback — free IMDB data, no key required
+# ---------------------------------------------------------------------------
+
+def _imdbapi_search(title: str, year: int | None, media_type: str = "movie") -> dict | None:
+    """Search IMDbAPI.dev — free, no API key needed.
+    Excellent for Pakistani/Punjabi/South-Asian content absent from TMDB+OMDB.
+    Returns same field structure as _tmdb_search / _omdb_search.
+    """
+    if not title:
+        return None
+    try:
+        kinds = ["movie"]
+        if media_type in ("tv", "drama", "anime", "series"):
+            kinds = ["tvSeries", "tvMiniSeries", "movie"]
+        for kind in kinds:
+            params = urllib.parse.urlencode({"q": title, "type": kind})
+            if year:
+                params += f"&year={year}"
+            url = f"https://imdbapi.dev/api/v1/titles/search?{params}"
+            data = _http_get_json(url, timeout=10)
+            if isinstance(data, dict):
+                data = data.get("results") or []
+            if not data or not isinstance(data, list):
+                continue
+            item   = data[0]
+            img    = item.get("primaryImage") or {}
+            poster = img.get("url") or item.get("poster") or ""
+            genres = item.get("genres") or []
+            genres_csv = ", ".join(
+                (g.get("text") if isinstance(g, dict) else str(g)) for g in genres
+            )
+            cast = []
+            for c in (item.get("cast") or [])[:8]:
+                n = c.get("name") or (c.get("fullName") or {}).get("text") or ""
+                if n:
+                    cast.append({"name": n})
+            yr_raw = item.get("startYear")
+            yr_int = int(yr_raw) if str(yr_raw).isdigit() else year
+            return {
+                "source":         "imdbapi",
+                "title":          item.get("primaryTitle") or item.get("title") or title,
+                "original_title": item.get("originalTitle") or item.get("primaryTitle") or title,
+                "year":           yr_int,
+                "original_lang":  "",
+                "lang_hint":      None,
+                "imdb_id":        item.get("id") or item.get("tconst") or "",
+                "tmdb_id":        None,
+                "media_type":     "tv" if "Series" in kind else "movie",
+                "release_date":   f"{yr_int or ''}-01-01",
+                "overview":       item.get("plot") or item.get("description") or "",
+                "genres_csv":     genres_csv,
+                "cast_names":     ", ".join(c["name"] for c in cast),
+                "director":       "",
+                "rating":         float(item["averageRating"]) if item.get("averageRating") else None,
+                "poster":         poster,
+                "alt_titles":     [],
+            }
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# YouTube Fallback — trailer thumbnail as last-resort poster
+# ---------------------------------------------------------------------------
+
+def _youtube_search(title: str, year: int | None) -> dict | None:
+    """Search YouTube for a trailer poster.
+    Tries YouTube Data API v3 (vault provider 'youtube') first, then
+    falls back to HTML scraping — works with no key at all.
+    """
+    if not title:
+        return None
+    query = f"{title} {year or ''} official trailer".strip()
+
+    for yt_key in keys.get_all_active_values("youtube"):
+        try:
+            q    = urllib.parse.quote_plus(query)
+            url  = (f"https://www.googleapis.com/youtube/v3/search"
+                    f"?key={yt_key}&q={q}&part=snippet&type=video&maxResults=1")
+            data = _http_get_json(url, timeout=10)
+            if not data:
+                continue
+            items = data.get("items") or []
+            if not items:
+                continue
+            vid_id  = items[0]["id"]["videoId"]
+            snippet = items[0].get("snippet") or {}
+            thumbs  = snippet.get("thumbnails") or {}
+            poster  = (thumbs.get("maxres") or thumbs.get("high") or
+                       thumbs.get("medium") or {}).get("url", "")
+            if not poster:
+                poster = f"https://img.youtube.com/vi/{vid_id}/hqdefault.jpg"
+            return {
+                "source":      "youtube_api",
+                "poster":      poster,
+                "trailer_url": f"https://www.youtube.com/watch?v={vid_id}",
+                "alt_titles":  [],
+            }
+        except Exception:
+            pass
+
+    # HTML scrape fallback — no key needed
+    try:
+        q   = urllib.parse.quote_plus(query)
+        req = urllib.request.Request(
+            f"https://www.youtube.com/results?search_query={q}",
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            html = resp.read().decode("utf-8", errors="replace")
+        ids = re.findall(r'"videoId":"([A-Za-z0-9_-]{11})"', html)
+        if ids:
+            vid_id = ids[0]
+            return {
+                "source":      "youtube_scrape",
+                "poster":      f"https://img.youtube.com/vi/{vid_id}/hqdefault.jpg",
+                "trailer_url": f"https://www.youtube.com/watch?v={vid_id}",
+                "alt_titles":  [],
+            }
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Google Knowledge Graph Fallback
+# ---------------------------------------------------------------------------
+
+def _google_search(title: str, year: int | None) -> dict | None:
+    """Search Google Knowledge Graph API.
+    Uses vault provider 'google' (Google API key with Knowledge Graph enabled).
+    No-op if no Google key is configured.
+    """
+    if not title:
+        return None
+    for g_key in keys.get_all_active_values("google"):
+        try:
+            q   = urllib.parse.quote_plus(f"{title} {year or ''}".strip())
+            url = (f"https://kgsearch.googleapis.com/v1/entities:search"
+                   f"?query={q}&key={g_key}&limit=3"
+                   f"&types=Movie&types=TVSeries&types=TVEpisode")
+            data = _http_get_json(url, timeout=10)
+            if not data:
+                continue
+            items = data.get("itemListElement") or []
+            if not items:
+                continue
+            result   = items[0].get("result") or {}
+            name     = result.get("name") or title
+            desc     = result.get("description") or ""
+            detailed = result.get("detailedDescription") or {}
+            overview = detailed.get("articleBody") or desc
+            img      = result.get("image") or {}
+            poster   = img.get("contentUrl") or img.get("url") or ""
+            types    = result.get("@type") or []
+            if isinstance(types, str):
+                types = [types]
+            mt = "tv" if any("TV" in t or "Series" in t for t in types) else "movie"
+            return {
+                "source":         "google_kg",
+                "title":          name,
+                "original_title": name,
+                "year":           year,
+                "original_lang":  "",
+                "lang_hint":      None,
+                "imdb_id":        None,
+                "tmdb_id":        None,
+                "media_type":     mt,
+                "release_date":   "",
+                "overview":       overview,
+                "poster":         poster,
+                "alt_titles":     [],
+            }
+        except Exception:
+            pass
+    return None
+
 def _load_cache() -> dict:
     with _cache_lock:
         if not _CACHE_PATH.exists():
@@ -492,9 +672,50 @@ def enrich(parsed, config: dict, log_fn=None) -> dict | None:
     except Exception as e:
         say(f"AI fallback error: {e}")
 
+    # 4. IMDbAPI.dev — free IMDB data, no key, great for Pakistani/Punjabi/South Asian
+    try:
+        _mt = getattr(parsed, "media_type", None) if not isinstance(parsed, dict) else parsed.get("media_type")
+        meta = _imdbapi_search(title, year, _mt or "movie")
+        if meta:
+            meta["_ts"] = int(time.time())
+            cache[ck] = meta
+            _save_cache(cache)
+            say(f"IMDbAPI.dev -> {meta['title']} ({meta.get('year')}) imdb={meta.get('imdb_id')!r}")
+            return {k: v for k, v in meta.items() if not k.startswith("_")}
+    except Exception as e:
+        say(f"IMDbAPI.dev error: {e}")
+
+    # 5. YouTube — trailer thumbnail as poster (no plot/cast metadata)
+    try:
+        meta = _youtube_search(title, year)
+        if meta:
+            meta["_ts"] = int(time.time())
+            cache[ck] = meta
+            _save_cache(cache)
+            say(f"YouTube ({meta.get('source','yt')}) -> poster+trailer for {title!r}")
+            return {k: v for k, v in meta.items() if not k.startswith("_")}
+    except Exception as e:
+        say(f"YouTube fallback error: {e}")
+
+    # 6. Google Knowledge Graph — name/description/poster (requires 'google' vault key)
+    try:
+        meta = _google_search(title, year)
+        if meta:
+            meta["_ts"] = int(time.time())
+            cache[ck] = meta
+            _save_cache(cache)
+            say(f"Google KG -> {meta.get('title')!r} ({meta.get('year')})")
+            return {k: v for k, v in meta.items() if not k.startswith("_")}
+    except Exception as e:
+        say(f"Google KG error: {e}")
+
     say("no provider returned metadata (continuing without enrichment)")
     return None
 def has_any_key(config: dict) -> bool:
+    """Return True if any enrichment source is available.
+    Vault providers: tmdb, omdb, groq, gemini, openai, openrouter, youtube, google.
+    IMDbAPI.dev and YouTube HTML scrape always work (no key needed).
+    """
     ai_providers = ("groq", "gemini", "openai", "openrouter")
     has_ai = any(keys.get_all_active_values(p) for p in ai_providers)
-    return bool(_tmdb_keys(config) or _omdb_keys(config) or has_ai)
+    return bool(_tmdb_keys(config) or _omdb_keys(config) or has_ai or True)

@@ -1,11 +1,12 @@
 """Title metadata enrichment for Radd Hub.
 
 Sources tried in order:
-  1. TMDB — best quality, covers international movies + TV
-  2. OMDB — IMDB-backed fallback, good for older content
-  3. AI (Groq / Gemini / OpenAI / OpenRouter) — regional content fallback
-     (Pakistani/Indian/Hindi/South/Punjabi/Chinese movies not in TMDB+OMDB)
-  4. YouTube — poster-only last resort (trailer thumbnail)
+  1. TMDB       — best quality, covers international movies + TV
+  2. OMDB       — IMDB-backed fallback, good for older content
+  3. IMDbAPI.dev — free IMDB search, no key, great for Pakistani/Punjabi/South Asian
+  4. AI (Groq / Gemini / OpenAI / OpenRouter) — regional content fallback
+  5. YouTube    — poster-only last resort (trailer thumbnail)
+  6. Google KG  — Google Knowledge Graph (requires 'google' vault API key)
 
 Public API
 ----------
@@ -365,6 +366,57 @@ def fetch_youtube_fallback(title: str, year: Optional[str] = None) -> dict:
     return {}
 
 
+
+# ---------------------------------------------------------------------------
+# Google Knowledge Graph Fallback
+# ---------------------------------------------------------------------------
+
+def fetch_google_kg(title: str, year=None, api_key: str = "") -> dict:
+    """Fetch from Google Knowledge Graph API.
+    Requires a Google API key with the Knowledge Graph Search API enabled.
+    Add key to vault provider 'google'. Returns empty dict on failure/no key.
+    """
+    if not api_key or not title:
+        return {}
+    try:
+        import requests as _req
+        import urllib.parse
+        q = urllib.parse.quote_plus(f"{title} {year or ''} film".strip())
+        r = _req.get(
+            f"https://kgsearch.googleapis.com/v1/entities:search"
+            f"?query={q}&key={api_key}&limit=3"
+            f"&types=Movie&types=TVSeries&types=TVEpisode",
+            timeout=10,
+        )
+        items = (r.json().get("itemListElement") or [])
+        if not items:
+            return {}
+        result   = items[0].get("result") or {}
+        name     = result.get("name") or title
+        desc     = result.get("description") or ""
+        detailed = result.get("detailedDescription") or {}
+        overview = detailed.get("articleBody") or desc
+        img      = result.get("image") or {}
+        poster   = img.get("contentUrl") or img.get("url") or ""
+        types    = result.get("@type") or []
+        if isinstance(types, str):
+            types = [types]
+        mt = "tv" if any("TV" in t or "Series" in t for t in types) else "movie"
+        return {
+            "title":          name,
+            "original_title": name,
+            "year":           str(year or "")[:4] or None,
+            "media_type":     mt,
+            "overview":       overview,
+            "plot":           overview,
+            "poster":         poster,
+            "_source":        "google_kg",
+        }
+    except Exception as e:
+        log.debug("fetch_google_kg failed for %r: %s", title, e)
+    return {}
+
+
 # ---------------------------------------------------------------------------
 # Unified enrichment
 # ---------------------------------------------------------------------------
@@ -455,6 +507,28 @@ def enrich_title(meta: dict, *,
                     enriched[k] = v
         except Exception as e:
             log.debug("youtube poster fallback failed for %r: %s", title, e)
+
+    # 6. Google Knowledge Graph — name/description/poster (requires 'google' vault key)
+    if not (enriched.get("poster") or meta.get("poster") or meta.get("poster_share_url")
+            or enriched.get("overview") or meta.get("overview") or meta.get("plot")):
+        _goog_keys = []
+        try:
+            from . import keys as _keys_mod
+            _goog_keys = _keys_mod.get_all_active_values("google")
+        except Exception:
+            pass
+        if _goog_keys:
+            try:
+                gk_data = fetch_google_kg(title, year, api_key=_goog_keys[0])
+                if gk_data:
+                    log.debug("Google KG fallback hit for %r", title)
+                    for k, v in gk_data.items():
+                        if k.startswith("_"):
+                            continue
+                        if k not in enriched or not enriched[k]:
+                            enriched[k] = v
+            except Exception as e:
+                log.debug("Google KG enrich failed for %r: %s", title, e)
 
     if not enriched:
         result = dict(meta)

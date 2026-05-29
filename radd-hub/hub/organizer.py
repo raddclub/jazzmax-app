@@ -31,6 +31,15 @@ from . import db
 from . import jazzdrive as jd
 from ._legacy import scanner as _scanner
 from .media_naming import derive_media_plan, MEDIA_EXTENSIONS
+# Lazy import — keeps organizer lightweight even when metadata_lookup is heavy
+_metadata_lookup = None
+
+def _get_metadata_lookup():
+    global _metadata_lookup
+    if _metadata_lookup is None:
+        from . import metadata_lookup as _ml
+        _metadata_lookup = _ml
+    return _metadata_lookup
 
 log = logging.getLogger("hub.organizer")
 
@@ -41,6 +50,38 @@ _SKIP_FOLDERS: set[str] = {
     'radd-heartbeat', 'raddhub', 'uploads_test_archive', 'radd-test-folder',
     'radd_test_folder', 'heartbeat (1)', 'radd-heartbeat (1)',
 }
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Metadata enrichment helper — uses full 6-tier fallback chain
+# ──────────────────────────────────────────────────────────────────────────────
+
+def enrich_title_metadata(title: str, year: str | int | None = None,
+                          media_type: str = "movie") -> dict | None:
+    """Enrich a single title using the full metadata fallback chain.
+
+    Fallback order (mirrors metadata_lookup.enrich):
+      1. TMDB  2. OMDB  3. AI  4. IMDbAPI.dev  5. YouTube  6. Google KG
+
+    Returns the enriched metadata dict, or None if all sources fail.
+    Useful for callers that need fresh metadata after organising/downloading
+    files without waiting for the next full scan cycle.
+    """
+    ml = _get_metadata_lookup()
+
+    class _Parsed:
+        pass
+
+    p = _Parsed()
+    p.title = str(title or "").strip()
+    p.year  = int(year) if year and str(year).isdigit() else None
+    p.media_type = media_type
+    try:
+        return ml.enrich(p, config={})
+    except Exception as e:
+        log.debug("enrich_title_metadata(%r, %r): %s", title, year, e)
+        return None
+
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -631,5 +672,19 @@ def auto_organize(account_id: int) -> Generator[str, None, None]:
         applied += result["applied"]
         failed  += result["failed"]
         yield f"data: {json.dumps({'type': 'apply_result', 'op_id': op['id'], 'ok': ok, 'i': i+1, 'total': len(safe_ops), 'name': op['current_name'], 'op_type': op['type']})}\n\n"
+
+    # ── Enrich any low-confidence titles that were renamed/touched ───────────────
+    try:
+        ml = _get_metadata_lookup()
+        _enrich_count = 0
+        for _t in db.list_low_confidence_titles(account_id=account_id, max_confidence=40, limit=10):
+            _m = ml.enrich(_t, config={})
+            if _m:
+                db.update_title(_t["id"], _m)
+                _enrich_count += 1
+        if _enrich_count:
+            yield f"data: {json.dumps({\'type\': \'enriched\', \'count\': _enrich_count})}\n\n"
+    except Exception:
+        pass  # enrichment is best-effort; never block the organizer
 
     yield f"data: {json.dumps({'type': 'done', 'applied': applied, 'failed': failed, 'unsafe_ops': unsafe_ops})}\n\n"

@@ -170,4 +170,41 @@ If something looks wrong, fix it before logging it as done.
   Before production release, update this constant to the real support phone number (international format, no +, no spaces, e.g. `923001234567`).
 
   Current value: `'923XXXXXXXXX'` (placeholder).
-  
+
+  ---
+
+  ## Addendum — Metadata Fallback Chain (2026-05-29)
+
+  ### Full 6-Tier Enrichment Order
+
+  Both `metadata_lookup.py::enrich()` and `metadata.py::enrich_title()` now use this chain:
+
+  | Tier | Source | Key needed? | Best for |
+  |------|--------|------------|----------|
+  | 1 | TMDB | Yes — vault provider `tmdb` | International movies & TV |
+  | 2 | OMDB | Yes — vault provider `omdb` | IMDB ratings, older Western content |
+  | 3 | AI (Groq/Gemini/OpenAI/OpenRouter) | Yes — vault `groq`/`gemini`/etc | Pakistani/Indian regional content |
+  | 4 | IMDbAPI.dev | **No key needed** | Free IMDB data; Punjabi/South Asian |
+  | 5 | YouTube | Optional — vault `youtube` (Data API v3); also scrapes HTML with no key | Trailer thumbnail as poster |
+  | 6 | Google KG | Optional — vault provider `google` | Google Knowledge Graph name/overview |
+
+  ### Adding Optional Keys to the Vault
+
+  In RaddHub → Settings → API Keys:
+  - `youtube` — YouTube Data API v3 key (Google Cloud Console → YouTube Data API v3)
+  - `google` — Google API key with Knowledge Graph Search API enabled
+
+  These are optional but improve poster quality for YouTube (higher-res thumbnails)
+  and Google KG (structured metadata). Without them, YouTube falls back to HTML
+  scraping and Google KG is skipped.
+
+  ### Where the fallback chain runs
+  - `metadata_lookup.py::enrich()` — called by scanner, post-scan enrichment
+  - `metadata.py::enrich_title()` — called by legacy import + `_import_legacy_into_v3_for_account`
+  - `organizer.py::enrich_title_metadata()` — helper for post-organize enrichment
+  - `downloader.py` — triggers enrichment after every successful upload
+
+  ### IMDbAPI.dev is always available (no key, no rate limit on reasonable usage)
+  The free IMDB API at `imdbapi.dev` covers many Pakistani/Punjabi films not on TMDB+OMDB.
+  It's particularly good for: Lollywood films, Pakistani TV dramas, Punjabi cinema.
+

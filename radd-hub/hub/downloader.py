@@ -23,6 +23,17 @@ from pathlib import Path
 from . import db, config
 from .query_parser import parse as parse_movie_query
 
+# Lazy import — avoids circular dependency at module load time
+_metadata_lookup = None
+
+def _get_metadata_lookup():
+    """Return metadata_lookup module (imported on first use)."""
+    global _metadata_lookup
+    if _metadata_lookup is None:
+        from . import metadata_lookup as _ml
+        _metadata_lookup = _ml
+    return _metadata_lookup
+
 log = logging.getLogger("hub.downloader")
 ...
 # ─────────────────────────────────────────────────────────────────────────────
@@ -629,6 +640,34 @@ def _process_job(job_row: dict) -> None:
             log_fn("Job complete!")
 
         _update_db(job_id, status=final_status, progress=100)
+
+        # ── Enrich title metadata using full 6-tier fallback chain ─────────────────
+        # After the download/scrape completes, we know the movie title and year hint.
+        # Try to enrich metadata (TMDB→OMDB→AI→IMDbAPI→YouTube→Google KG) so the
+        # admin panel immediately shows poster/plot/cast for the new title.
+        if final_status == "done" and clean_name:
+            try:
+                ml = _get_metadata_lookup()
+
+                class _DP:
+                    pass
+
+                _dp = _DP()
+                _dp.title      = clean_name
+                _dp.year       = int(year_hint) if year_hint and str(year_hint).isdigit() else None
+                _dp.media_type = "movie"
+                enriched_meta = ml.enrich(_dp, config={})
+                if enriched_meta:
+                    # Save to titles DB if the title already exists, or upsert it
+                    try:
+                        existing_title = db.find_title_by_name(clean_name)
+                        if existing_title:
+                            db.update_title(existing_title["id"], enriched_meta)
+                            log.debug("Enriched title %r after download (id=%s)", clean_name, existing_title["id"])
+                    except Exception:
+                        pass
+            except Exception as _ee:
+                log.debug("Post-download enrichment failed for %r: %s", clean_name, _ee)
 
         if site == "upload":
             from . import uploader

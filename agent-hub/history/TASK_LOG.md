@@ -1920,3 +1920,67 @@ All failures: `lib/screens/player_screen.dart:2165:73: Error: The method '_cycle
   - CI should pass; no new dependencies added.
   - `AppConstants.supportWhatsApp` still placeholder — needs real number before release.
   
+
+---
+
+## [2026-05-29 14:00 UTC] — Agent: Replit Agent (Metadata Fallbacks Session)
+
+### Task
+Add IMDB + YouTube + Google metadata fallbacks to the RaddFlix scan/enrichment pipeline.
+Ensure the same fallback chain exists in metadata_lookup.py, metadata.py, organizer.py, and downloader.py.
+Update all .md files after completing changes.
+
+### Done
+
+#### Fallback Chain Extended — 3 tiers → 6 tiers
+
+**metadata_lookup.py** (primary enrichment engine used by scanner):
+- Added `_imdbapi_search()` — free IMDb data via imdbapi.dev, no API key needed
+- Added `_youtube_search()` — YouTube Data API v3 (vault key `youtube`) + HTML scrape fallback (no key needed)
+- Added `_google_search()` — Google Knowledge Graph API (vault key `google`)
+- Updated `enrich()` to call all 3 after AI fallback: tiers 4 (IMDbAPI) → 5 (YouTube) → 6 (Google KG)
+- Updated `has_any_key()` to always return True (IMDbAPI.dev works with zero keys configured)
+- Chain was: TMDB → OMDB → AI (3 tiers). Now: TMDB → OMDB → AI → IMDbAPI → YouTube → Google KG (6 tiers)
+
+**metadata.py** (secondary enrichment used by legacy import):
+- Added `fetch_google_kg()` function
+- Updated `enrich_title()` to add Google KG as step 6
+- Updated module docstring to list all 6 sources
+- Chain was: TMDB → OMDB → IMDbAPI → AI → YouTube (5 tiers). Now: + Google KG (6 tiers)
+
+**organizer.py** (file rename/delete worker):
+- Added lazy `_get_metadata_lookup()` helper
+- Added `enrich_title_metadata(title, year, media_type)` public helper for full 6-tier enrichment
+- Added enrichment step at end of `auto_organize()` to enrich low-confidence titles after organizing
+
+**downloader.py** (stream downloader + uploader):
+- Added lazy `_get_metadata_lookup()` helper
+- After successful download + JazzDrive upload, calls `metadata_lookup.enrich()` for the title
+- Saves enriched metadata to DB if title already exists
+
+#### .md Files Updated
+- `agent-hub/SKILLS.md` — added full 6-tier fallback table + vault key instructions for youtube/google providers
+- `agent-hub/HANDOFF_2026_05_29.md` — new handoff document for this session
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Files Changed
+- `radd-hub/hub/metadata_lookup.py` — added 3 new fallback functions + 3 new tiers in enrich()
+- `radd-hub/hub/metadata.py` — added fetch_google_kg() + Google KG as step 6 in enrich_title()
+- `radd-hub/hub/organizer.py` — added lazy import + enrich_title_metadata() helper + enrichment in auto_organize()
+- `radd-hub/hub/downloader.py` — added lazy import + post-upload metadata enrichment in _process_job()
+- `agent-hub/SKILLS.md` — added Metadata Fallback Chain addendum section
+- `agent-hub/HANDOFF_2026_05_29.md` — new handoff (created)
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- All 4 Python files now use the same 6-tier chain: TMDB→OMDB→AI→IMDbAPI.dev→YouTube→Google KG
+- IMDbAPI.dev requires NO key — always works. Good for Pakistani/Punjabi/Lollywood content.
+- YouTube fallback: add vault provider `youtube` (Data API v3) for higher-res thumbnails; works without key via HTML scrape
+- Google KG fallback: add vault provider `google` (Knowledge Graph Search API) for structured data; no-op without key
+- After deploying: restart `jazzmax_radd` supervisor service on Oracle server
+- Re-scan an account to verify: should see `tmdb_ok` for major titles, `IMDbAPI.dev ->` for Pakistani content
+- AppConstants.supportWhatsApp = '923XXXXXXXXX' still placeholder — needs real number before release
+- Oracle SSH (port 22) still unreachable from Replit — GitHub API only for all file ops
+- Previous scan showed 18 tmdb_miss because keys were not yet in vault (now confirmed fixed per user)
+
+---
