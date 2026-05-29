@@ -2493,7 +2493,7 @@ class _ControlsOverlay extends StatelessWidget {
     required this.scale, required this.sleepLabel,
     this.seekThumb, this.currentEp, this.totalEps,
     required this.onBack, required this.onPlayPause, required this.onSeekBack,
-    required this.onSeekForward, required this.onLock, required this.onCycleFit,
+    required this.onSeekForward, this.onLongPressPlay, required this.onLock, required this.onCycleFit,
     required this.onSpeed, required this.onSubtitleFile, required this.onSubtitleTracks,
     required this.onAudioTracks, required this.onPiP, required this.onSleep,
     required this.onCast, required this.castConnected,
