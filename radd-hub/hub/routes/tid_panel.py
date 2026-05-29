@@ -326,7 +326,7 @@ def approve(payment_id: int):
 
     # ── SMS Amount validation ───────────────────────────────────────────────
     # If the admin hasn't force-confirmed, warn them if amount doesn't match plan price.
-    amount_pkr    = payment.get("amount_pkr")
+    amount_pkr    = dict(payment).get("amount_pkr")
     expected_price = PLAN_PRICES.get(plan)
     force_approve  = request.form.get("force_approve") == "1"
     if (not force_approve and amount_pkr is not None and expected_price is not None):
