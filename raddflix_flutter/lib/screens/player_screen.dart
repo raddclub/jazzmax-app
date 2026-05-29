@@ -1108,10 +1108,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     UsageService.addWatchSession(seconds: seconds, quality: _qualityFromRes);
   }
 
-  /// Check data quota before playback; pop + snackbar if exhausted.
+  /// Check data quota before playback; also enforces plan expiry for offline
+  /// files (task 6.9). Reads the quota cache — no network call needed.
   Future<void> _checkQuota() async {
     try {
       final quota = await UsageService.getCachedQuota();
+
+      // 6.9 — offline plan expiry: block if subscription has expired
+      if (widget.localPath != null) {
+        final subExpiresAt = quota['sub_expires_at'];
+        if (subExpiresAt != null && subExpiresAt is int && subExpiresAt > 0) {
+          final nowUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          if (subExpiresAt < nowUnix) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              Navigator.of(context).pushReplacementNamed(AppRoutes.planExpired);
+            });
+            return;
+          }
+        }
+      }
+
       if (quota['allowed'] == false) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
