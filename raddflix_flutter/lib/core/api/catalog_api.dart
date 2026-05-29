@@ -54,17 +54,18 @@ class CatalogApi {
     }).toList();
   }
 
-  /// Get a streaming URL for a specific file.
-  /// This is always fetched fresh — never cached in local DB.
-  /// Server generates a time-limited JazzDrive link (valid ~6 hours).
-  static Future<String> getStreamUrl(String fileId) async {
-    final response = await _client.post(ApiPaths.playUrl(fileId));
-    final data = response.data as Map<String, dynamic>;
-    final url = data['url'] as String?;
-    if (url == null || url.isEmpty) {
-      throw Exception('No stream URL returned from server');
+  /// Fetch the JazzDrive share_url for a specific file from Oracle catalog.
+  /// Called when the local SQLite DB doesn't have the share_url (e.g. after a
+  /// fresh install or before BUG-009 fix was synced).
+  /// Returns null if Oracle is unreachable or file not found.
+  static Future<String?> getShareUrl(String fileId) async {
+    try {
+      final response = await _client.get(ApiPaths.fileShareUrl(fileId));
+      final data = response.data as Map<String, dynamic>;
+      return data['share_url'] as String?;
+    } catch (_) {
+      return null;
     }
-    return url;
   }
 }
 
