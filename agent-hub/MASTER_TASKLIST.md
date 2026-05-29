@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-29 (Phase 5-6-8-9 ✅ server+client | Phase 7 ✅ | sqflite_sqlcipher 3.1.0+1)
+> Last updated: 2026-05-29 (Phase 11 ✅ full codebase audit | Phase 5-6-7-8-9 ✅ | sqflite_sqlcipher 3.1.0+1)
 > Read PRODUCT_CONTEXT.md first. This file tracks every task — done, in progress, and upcoming.
 > Update this file at the end of every session.
 
@@ -106,7 +106,7 @@
 | 6.6 | Server: monthly data counter per account | ✅ | db.get_usage_month() uses user_usage table |
 | 6.7 | App: cache last known quota from server | ✅ | quota_cache table + LocalDb.cacheQuota() / getCachedQuota() |
 | 6.8 | App: local quota enforcement (block when = 0) | ✅ | _checkQuota() in player_screen.dart — pops player + SnackBar when quota[allowed]==false |
-| 6.9 | App: offline plan expiry enforcement in player | ✅ | PlanExpiredScreen; _checkQuota() checks sub_expires_at from quota cache; mobile_api get_quota exposes sub_expires_at from app_subscriptions |
+| 6.9 | App: auto-downgrade to free tier when plan expires offline | 🔄 | Expires_at in subscription status; local enforcement TBD |
 | 6.10 | App: "Quota full — sync to unlock" screen | ✅ | QuotaFullScreen — dark screen, Upgrade Plan + SIMOSA 100MB buttons, commit 29a8ff0 |
 
 ---
@@ -155,6 +155,26 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 10.1 | WA bot status | ✅ | wa-bot managed via /api/whatsapp/* in api.py; admin panel has full WA bot UI |
+
+---
+
+## Phase 11 — Full Codebase Audit & Integration (2026-05-29)
+
+> Comprehensive audit of all implemented-but-missing features. All gaps wired up.
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 11.1 | Server: POST /api/app/check endpoint | ✅ | bp_app blueprint in mobile_api.py; reads app_current_version/min_code/blocked_code from settings table |
+| 11.2 | App: call AppUpdateService.check() on splash | ✅ | splash_screen.dart calls unawaited(AppUpdateService.check()) after RemoteConfig.fetch() |
+| 11.3 | App: Profile — dynamic version via PackageInfo | ✅ | PackageInfo.fromPlatform() replaces hardcoded v1.0.0 |
+| 11.4 | App: Profile — subscription expiry countdown | ✅ | _loadExtras() fetches SubscriptionApi.getStatus(); shows Xd remaining with ⚠ yellow when ≤7d |
+| 11.5 | Admin: DB Manager in nav | ✅ | base.html nav — DB Manager link added under SYSTEM section |
+| 11.6 | App: fix server 500s — analytics + subscriptions u.name | ✅ | NULL as name (column missing in app_users); done this session |
+| 11.7 | App: notification bell + sheet | ✅ | ALREADY DONE — NotificationBell in home screen AppBar, full sheet |
+| 11.8 | App: Continue Watching on home screen | ✅ | ALREADY DONE — catalog.recentlyWatched section |
+| 11.9 | App: TidStatusScreen after TID submission | ✅ | ALREADY DONE — direct MaterialPageRoute push |
+| 11.10 | App: VaultSettingsScreen accessible from vault | ✅ | ALREADY DONE — settings gear icon in vault AppBar |
+
 
 ---
 
