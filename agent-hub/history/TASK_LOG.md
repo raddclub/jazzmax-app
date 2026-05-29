@@ -1844,3 +1844,35 @@ All failures: `lib/screens/player_screen.dart:2165:73: Error: The method '_cycle
 - jq 1.7.1 available; for large files (>~3000 lines) always write JSON payload to disk with node, then POST with `--data-binary @file`
 
 ---
+
+## [2026-05-29 12:00 UTC] — Agent: Replit Agent (TTL + CI Node.js 24 Session)
+
+### Task
+1. Change stream cache TTL from 90 minutes to 180 minutes in both Dart files
+2. Fix Node.js 20 deprecation warnings in GitHub Actions workflows
+
+### Done
+
+#### TTL change (90 min → 180 min)
+- `jazzdrive_service.dart`: `_cacheTtl = Duration(minutes: 90)` → `Duration(minutes: 180)`
+- `constants.dart`: `streamCacheTtlSeconds = 5400` → `10800`; `streamLinkTtl = Duration(minutes: 90)` → `Duration(minutes: 180)`
+
+#### Node.js 24 CI fix
+- Added `env: FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true` at workflow level in both `.github/workflows/build-apk.yml` and `.github/workflows/ci-tests.yml`
+- This silences all "Node.js 20 actions are deprecated" warnings for `actions/checkout@v4`, `actions/setup-java@v4`, `actions/upload-artifact@v4`, `actions/setup-node@v4`
+- All 4 actions are still at v4 (no v5 available); the env var is the GitHub-recommended fix
+
+### Files Changed (commit a3970e85)
+- `raddflix_flutter/lib/core/services/jazzdrive_service.dart` — `_cacheTtl` 90→180 min
+- `raddflix_flutter/lib/core/constants.dart` — `streamCacheTtlSeconds` 5400→10800; `streamLinkTtl` 90→180 min
+- `.github/workflows/build-apk.yml` — added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+- `.github/workflows/ci-tests.yml` — added `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`
+
+### Notes for Next Agent
+- Stream cache TTL is now 180 min across all client-side cache logic
+- CI builds should no longer show Node.js 20 deprecation warnings
+- Oracle SSH (port 22) still unreachable from Replit — GitHub API only for all file ops
+- AppConstants.supportWhatsApp = '923XXXXXXXXX' still a placeholder — needs real number before release
+- For large file blobs (>~3000 lines): write JSON payload to disk with node, then POST with `--data-binary @file`
+
+---
