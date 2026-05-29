@@ -1729,3 +1729,56 @@ Continue the comprehensive audit of all Flutter application files. Identify feat
 
   ---
   
+
+  ---
+
+  ## Session 7 — 2025-05-29
+
+  ### Changes committed
+
+  | File | Commit | What |
+  |---|---|---|
+  | catalog_api.dart | 7fe6a32 | Replace getStreamUrl() with getShareUrl() — targeted per-file share_url lookup |
+  | player_screen.dart | 10fef73 | All 6 bugs fixed + layout cleanup (see below) |
+  | constants.dart | c197e2b | Add fileShareUrl ApiPath; streamCacheTtlSeconds + streamLinkTtl 6h → 90min |
+  | app_catalog.py | 87929bb | New GET /api/catalog/share_url?file_id=<id> endpoint |
+
+  ### Bugs fixed
+
+  #### BUG-GESTURE: vertical swipe zoomed video instead of brightness/volume
+  - **Root cause**: `_onScaleUpdate` line 1244 had `if (delta.dy < 0) { _dragIntent = 'swipe_zoom'; }` — swiping UP set zoom intent.
+  - **Fix**: Removed the `delta.dy < 0` branch entirely. Vertical swipe (both up and down) now always sets intent to `'brightness'` (left half) or `'volume'` (right half), matching MX Player behaviour. Removed the dead `swipe_zoom` case from the switch statement.
+
+  #### BUG-ORACLE-FALLBACK: Oracle play endpoint doesn't exist → always 404
+  - **Root cause**: `CatalogApi.getStreamUrl()` called `POST /watch/api/play/<id>` — Oracle only does catalog sync, never video streaming. So every JazzDrive failure cascaded into a guaranteed Oracle failure → error screen.
+  - **Fix**: Removed Oracle stream URL fallback entirely. Replaced `getStreamUrl` with `getShareUrl` which calls the new `/api/catalog/share_url?file_id=` endpoint that returns the JazzDrive share_url only.
+
+  #### BUG-SHARE-URL: local DB has null share_url (synced before BUG-009 fix)
+  - **Root cause**: On-device SQLite was last synced before the server-side BUG-009 fix that added share_url to episodes. `LocalDb.getShareUrl()` returned null → JazzDrive skipped → fallback always failed.
+  - **Fix (client)**: After local DB miss, `_openMedia` now calls `CatalogApi.getShareUrl(fileId)` as a live fallback.
+  - **Fix (server)**: Added `GET /api/catalog/share_url?file_id=` endpoint in `app_catalog.py` querying the `episodes` table.
+  - **Error messages**: "No stream link found. Please sync your library in Settings → Sync." (no share_url at all) vs "Stream link expired. Tap Retry to refresh." (JazzDrive error after getting share_url).
+
+  #### BUG-BUFFER: error overlay fired during normal buffering
+  - **Root cause**: `_jazzRetryTimer` fired at 8 s with condition `_duration == Duration.zero && !_isLinkLoading && !_playing`. All three can be true while the video is buffering (player.open() called, but MPV hasn't decoded the first frame yet).
+  - **Fix**: Added `&& !_buffering` to the condition. Timer only triggers error if the player is not actively buffering, preventing false error screens when the CDN link is valid but takes >8 s to buffer.
+
+  #### BUG-CACHE-TTL: stream cache / link TTL was 6 hours (CDN tokens expire in ~90 min)
+  - **Fix**: `streamCacheTtlSeconds` 21600 → 5400; `streamLinkTtl` Duration(hours: 6) → Duration(minutes: 90).
+
+  ### Layout changes
+
+  #### Right strip: 9 items → 5 items (MX Player style)
+  - **Kept in strip**: Audio, Sub, Fit, Speed, More
+  - **Moved to More panel**: Night mode, A-B Loop, Sleep timer, Bookmarks, EQ, Screenshot, Settings
+  - **Red dot badge**: appears on the More button when any secondary feature (Night/Loop/Sleep/Bookmarks) is active
+
+  #### New _MxMoreSheet bottom sheet
+  - Circular grid of feature buttons (72 px wide each)
+  - Active state: tinted background + border in the feature's accent colour
+  - Dismiss by tapping the dark backdrop
+  - Items: Night, A-B Loop, Sleep, Bookmarks, EQ, Screenshot, Settings
+
+  ### Build required
+  All changes are on `main` branch. A new APK build must be triggered via GitHub Actions (`.github/workflows/build_apk.yml`) to produce a distributable APK. The user has been running the build from commit 9ca5976; the fixes above require a fresh build.
+  
