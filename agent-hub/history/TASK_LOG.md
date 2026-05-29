@@ -2405,3 +2405,37 @@ Build 6.10 "Quota full" screen and fix BUG-P4 stale title count on Zero-Rating a
 - AppRoutes.planExpired added to constants.dart
 - PlanExpiredScreen registered in app.dart
 - Server: get_quota now includes sub_expires_at in quota cache
+
+---
+
+## Session 2026-05-29 (Part 2 — Full Codebase Audit)
+
+### Comprehensive Codebase Audit — All Gaps Wired Up
+
+#### Confirmed Gaps Found & Fixed (6 GitHub pushes, 3 Oracle SCPs):
+1. **POST /api/app/check** — new bp_app blueprint in mobile_api.py; reads app_current_version/
+   min_code/blocked_code/update_url from settings table; returns force_update/blocked/message
+2. **AppUpdateService.check() never called** — splash_screen.dart now calls
+   unawaited(AppUpdateService.check()) right after RemoteConfig.fetch()
+3. **Profile hardcoded v1.0.0** — ProfileScreen._loadExtras() now uses PackageInfo.fromPlatform()
+4. **Profile no subscription expiry countdown** — _loadExtras() calls SubscriptionApi.getStatus();
+   shows "Xd remaining" with warning yellow when <= 7 days remain
+5. **DB Manager not in admin nav** — base.html now has DB Manager (🗄) link under SYSTEM section
+6. **Server analytics/subscriptions 500** — NULL as name (app_users has no name column) — fixed
+
+#### Confirmed Already Working (false positives in initial audit):
+- NotificationBell widget already in home AppBar, full sheet, polling every 5 min
+- Continue Watching section in home_screen (catalog.recentlyWatched)
+- TidStatusScreen navigated to after TID submission (direct MaterialPageRoute)
+- VaultSettingsScreen accessible via gear icon in vault AppBar
+- vaultLock/showDetail/player registered in onGenerateRoute
+- All admin panels in nav: billing, analytics, subscriptions, plans, tid, app-users, zero-rating, broadcast
+
+#### Files modified:
+- radd-hub/hub/routes/mobile_api.py (bp_app + /check endpoint)
+- radd-hub/hub/app.py (register bp_app at /api/app)
+- radd-hub/hub/templates/base.html (DB Manager nav link)
+- raddflix_flutter/lib/screens/splash_screen.dart (AppUpdateService.check call)
+- raddflix_flutter/lib/screens/profile_screen.dart (PackageInfo + expiry countdown)
+- agent-hub/MASTER_TASKLIST.md (Phase 11 added)
+- agent-hub/history/TASK_LOG.md (this entry)
