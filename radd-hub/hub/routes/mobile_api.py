@@ -614,6 +614,53 @@ def save_history(file_id, _user_id, _phone):
     return jsonify({"ok": True})
 
 
+
+
+# ── App version / update check ─────────────────────────────────────────────
+
+bp_app = Blueprint("mobile_app_check", __name__)
+
+@bp_app.route("/check", methods=["POST"])
+def app_check():
+    """Called by AppUpdateService.check() on every cold start.
+    Reads force_update / blocked flags from the settings table.
+    Returns {force_update, blocked, message, update_url, current_version}."""
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        version_code = int(data.get("version_code") or 0)
+    except Exception:
+        version_code = 0
+
+    try:
+        with db.conn() as c:
+            def _s(k, default=""):
+                row = c.execute("SELECT v FROM settings WHERE k=?", (k,)).fetchone()
+                return row["v"] if row and row["v"] is not None else default
+
+            current_version = _s("app_current_version", "1.0.0")
+            min_code        = int(_s("app_min_version_code", "0") or 0)
+            blocked_code    = int(_s("app_blocked_version_code", "0") or 0)
+            update_url      = _s("app_update_url", "")
+            blocked_message = _s("app_blocked_message", "")
+            update_message  = _s("app_update_message", "")
+
+        force_update = version_code > 0 and min_code > 0 and version_code < min_code
+        blocked      = blocked_code > 0 and version_code == blocked_code
+        message      = (blocked_message if blocked else update_message)                        if (blocked or force_update) else ""
+
+        return jsonify({
+            "ok":              True,
+            "force_update":    force_update,
+            "blocked":         blocked,
+            "message":         message,
+            "update_url":      update_url,
+            "current_version": current_version,
+        })
+    except Exception as e:
+        log.warning("app_check error: %s", e)
+        return jsonify({"ok": True, "force_update": False, "blocked": False,
+                        "message": "", "update_url": "", "current_version": ""})
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _normalize_phone(phone: str) -> str:
