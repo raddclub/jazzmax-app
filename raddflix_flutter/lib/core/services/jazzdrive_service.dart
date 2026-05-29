@@ -27,8 +27,8 @@ class JazzDriveLink {
 ///   4. Cache result for 6 hours (shared between watch + download)
 class JazzDriveService {
   static const String _cloudBase = 'https://cloud.jazzdrive.com.pk';
-  // FIX-TTL: CDN tokens expire in ~1-2h — 90 min prevents stale-token playback failures
-    static const Duration _cacheTtl = Duration(minutes: 90);
+  // FIX-TTL: CDN tokens expire in ~1-2h — 180 min cache reduces re-fetches while staying safe
+    static const Duration _cacheTtl = Duration(minutes: 180);
 
   static final _inMemory = <String, _CacheEntry>{};
 

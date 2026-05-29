@@ -15,7 +15,7 @@ class AppConstants {
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'raddflix_catalog.db';
   static const int catalogDbVersion = 10;
-  static const int streamCacheTtlSeconds = 5400; // 90 min (CDN tokens expire ~1-2h)
+  static const int streamCacheTtlSeconds = 10800; // 180 min
 
   // ── JazzDrive (zero-rated CDN) ─────────────────────────────────────────────
   static const String jazzDriveCloudBase = 'https://cloud.jazzdrive.com.pk';
@@ -26,7 +26,7 @@ class AppConstants {
   static const String jazzDriveDbUpdateUrl = 'http://92.4.95.252/api/catalog/db_update';
 
   /// Stream link cache TTL. Same link reused for both watch + download within TTL.
-  static const Duration streamLinkTtl = Duration(minutes: 90); // CDN tokens expire ~1-2h
+  static const Duration streamLinkTtl = Duration(minutes: 180); // 180 min cache
 
   // ── Support ──────────────────────────────────────────────────────────────
   /// WhatsApp support number (international format, no +, no spaces).
