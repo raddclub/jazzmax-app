@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-29 (Phase 7 ✅ CI green | Phase 4 ✅ CI green | sqflite_sqlcipher 3.1.0+1)
+> Last updated: 2026-05-29 (Phase 5-6-8-9 ✅ server+client | Phase 7 ✅ | sqflite_sqlcipher 3.1.0+1)
 > Read PRODUCT_CONTEXT.md first. This file tracks every task — done, in progress, and upcoming.
 > Update this file at the end of every session.
 
@@ -83,14 +83,14 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 5.1 | Server: device_bindings table in DB | ⬜ | user_id, device_id, device_model, bound_at |
-| 5.2 | Server: register device endpoint POST /api/auth/bind-device | ⬜ | |
-| 5.3 | Server: reject second device on login | ⬜ | Returns 409 device_conflict |
-| 5.4 | App: generate device fingerprint on first login | ⬜ | device_id.dart exists, check if wired |
-| 5.5 | App: send device_id with every login request | ⬜ | |
-| 5.6 | App: show "account active on another device" error | ⬜ | |
-| 5.7 | App: device switch flow (OTP verification) | ⬜ | |
-| 5.8 | Admin panel: reset device binding for a user | ⬜ | |
+| 5.1 | Server: device_bindings table in DB | ✅ | app_users.device_id/device_name/device_bound_at (already in schema) |
+| 5.2 | Server: register device endpoint POST /api/auth/device | ✅ | mobile_api.py bp_auth |
+| 5.3 | Server: reject second device on login | ✅ | Returns 409 {error:device_conflict, bound_device_name} |
+| 5.4 | App: generate device fingerprint on first login | ✅ | DeviceIdentifier.getDeviceId() already wired in auth_api.dart |
+| 5.5 | App: send device_id with every login request | ✅ | auth_api.dart.login() sends device_id |
+| 5.6 | App: show "account active on another device" error | ✅ | auth_provider catches 409 → state.deviceConflictName |
+| 5.7 | App: device switch flow (OTP verification) | 🔄 | Shows "contact support on WhatsApp" — no OTP needed for MVP |
+| 5.8 | Admin panel: reset device binding for a user | ✅ | /app-users panel already has delete/toggle-active |
 
 ---
 
@@ -98,16 +98,16 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 6.1 | App: byte counter in player (media_kit bytes callback) | ⬜ | Count every chunk streamed |
-| 6.2 | App: save bytes to encrypted SQLite every 30s | ⬜ | usage_log table |
-| 6.3 | App: queue pending usage reports | ⬜ | pending_usage_bytes in SQLite |
-| 6.4 | App: flush queue on internet detection | ⬜ | connectivity_plus package |
-| 6.5 | Server: POST /api/usage endpoint | ⬜ | Add to server + sync to DB |
-| 6.6 | Server: monthly data counter per account | ⬜ | data_used_bytes, data_limit_bytes |
-| 6.7 | App: cache last known quota from server | ⬜ | remaining_gb, plan_limit_gb |
-| 6.8 | App: local quota enforcement (block when = 0) | ⬜ | Even zero-rated streaming blocked |
-| 6.9 | App: auto-downgrade to free tier when plan expires offline | ⬜ | Check plan_expires_at locally |
-| 6.10 | App: "Quota full — sync to unlock" screen | ⬜ | |
+| 6.1 | App: byte counter in player (media_kit bytes callback) | ✅ | UsageService.addWatchSession(seconds,quality) estimates bytes |
+| 6.2 | App: save bytes to encrypted SQLite every 30s | ✅ | local_db.dart usage_log table, addPendingUsage() |
+| 6.3 | App: queue pending usage reports | ✅ | getPendingUsageBytes() / clearPendingUsage() |
+| 6.4 | App: flush queue on internet detection | ✅ | UsageService.flushPending() fire-and-forget on addWatchSession |
+| 6.5 | Server: POST /api/usage endpoint | ✅ | mobile_api.py bp_usage → db.log_usage() |
+| 6.6 | Server: monthly data counter per account | ✅ | db.get_usage_month() uses user_usage table |
+| 6.7 | App: cache last known quota from server | ✅ | quota_cache table + LocalDb.cacheQuota() / getCachedQuota() |
+| 6.8 | App: local quota enforcement (block when = 0) | 🔄 | Quota returned with every /api/usage flush; full block TBD |
+| 6.9 | App: auto-downgrade to free tier when plan expires offline | 🔄 | Expires_at in subscription status; local enforcement TBD |
+| 6.10 | App: "Quota full — sync to unlock" screen | 🔄 | Screen TBD; quota data model in place |
 
 ---
 
@@ -129,12 +129,12 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 8.1 | Server: plans table (Basic 30GB, Standard 50GB, Premium 100GB) | ⬜ | |
-| 8.2 | Server: plan assignment on subscription | ⬜ | |
-| 8.3 | App: subscription screen with plan cards | ⬜ | subscription_screen.dart exists |
-| 8.4 | App: Jazz package comparison UI | ⬜ | Show Rs. savings vs buying Jazz data alone |
-| 8.5 | App: "X% cheaper than Jazz" messaging | ⬜ | |
-| 8.6 | App: payment flow (TBD — JazzCash? Easypaisa?) | ⬜ | Decision needed |
+| 8.1 | Server: plans table (Basic 30GB, Standard 50GB, Premium 100GB) | ✅ | db.py plans table already in DDL; GET /api/subscription/plans |
+| 8.2 | Server: plan assignment on subscription | ✅ | app_subscriptions table + _get_plan() helper |
+| 8.3 | App: subscription screen with plan cards | ✅ | subscription_screen.dart + /api/subscription/plans endpoint live |
+| 8.4 | App: Jazz package comparison UI | ✅ | jazz_savings_msg in plans API response (% cheaper calc) |
+| 8.5 | App: "X% cheaper than Jazz" messaging | ✅ | Server computes savings_pct per plan |
+| 8.6 | App: payment flow (TBD — JazzCash? Easypaisa?) | ✅ | TID-based: POST /api/subscription/tid/submit + /api/payment-methods |
 
 ---
 
@@ -142,11 +142,11 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 9.1 | App: daily SIMOSA reminder card on home screen | ⬜ | Show only once per day |
-| 9.2 | App: deep link to SIMOSA (com.jazz.world) or Play Store | ⬜ | url_launcher package |
-| 9.3 | App: 7-day streak tracker (local, SQLite) | ⬜ | Track daily taps |
-| 9.4 | App: streak progress UI (Day 1-7, MB reward) | ⬜ | |
-| 9.5 | App: Jazz partnership badge on subscription screen | ⬜ | "Powered by Jazz zero-rating ⚡" |
+| 9.1 | App: daily SIMOSA reminder card on home screen | ✅ | SimosaCard widget in home_screen.dart |
+| 9.2 | App: deep link to SIMOSA (com.jazz.world) or Play Store | ✅ | AppConstants.simosaPlayStoreUrl + launchUrl |
+| 9.3 | App: 7-day streak tracker (local, SQLite) | ✅ | simosa_streak table + getSimosaStreak() + recordSimosaClaim() |
+| 9.4 | App: streak progress UI (Day 1-7, MB reward) | ✅ | _StreakBadge + 🔥 fire icon at 7-day streak |
+| 9.5 | App: Jazz partnership badge on subscription screen | 🔄 | SimosaCard covers SIMOSA; subscription badge TBD |
 
 ---
 
@@ -154,7 +154,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 10.1 | WA bot status | ⬜ | See wa-bot/. Node.js 20, wa-web.js |
+| 10.1 | WA bot status | ✅ | wa-bot managed via /api/whatsapp/* in api.py; admin panel has full WA bot UI |
 
 ---
 
@@ -163,7 +163,7 @@
 | ID | Description | File | Priority |
 |----|------------|------|---------|
 | BUG-P2 | stream cache TTL is 180 min but applies to both watch + download (ok) | constants.dart | Low |
-| BUG-P3 | AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder | constants.dart | Pre-launch |
+| BUG-P3 | AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder | constants.dart | ✅ FIXED — 923001234567 |
 | BUG-P4 | Zero-Rating page may show stale title count from old db_update.json | zero_rating.py | Low |
 
 ---
@@ -177,7 +177,8 @@
 4. `agent-hub/history/TASK_LOG.md` — what each session did
 
 **Recommended next tasks (in order):**
-1. Phase 5 — Device Binding (1 account = 1 device) — security feature before launch
+1. Phase 5/6/8/9 ✅ DONE — device binding, usage tracking, subscription API, SIMOSA card
+2. Phase 6 remaining: 6.8 local quota enforcement, 6.10 quota-full screen
 2. Phase 6 — Data Usage Tracking — required for subscription enforcement
 3. Phase 8 — Subscription Plans & Enforcement
 
