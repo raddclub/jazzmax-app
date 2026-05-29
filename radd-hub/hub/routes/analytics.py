@@ -315,14 +315,17 @@ def index():
             GROUP BY day ORDER BY day
         """, (thirty_days_ago,)).fetchall()
 
-        # Top titles by watch events
-        top_rows = c.execute("""
-            SELECT t.title, COUNT(wh.id) as plays
-            FROM watch_history wh
-            JOIN files f ON f.id=wh.file_id
-            JOIN titles t ON t.id=f.title_id
-            GROUP BY t.id ORDER BY plays DESC LIMIT 10
-        """).fetchall()
+        # Top titles by watch events (try/except: schema varies between server versions)
+        try:
+            top_rows = c.execute("""
+                SELECT t.title, COUNT(*) as plays
+                FROM watch_history wh
+                JOIN files f ON f.id=CAST(wh.file_id AS INTEGER)
+                JOIN titles t ON t.id=f.title_id
+                GROUP BY t.id ORDER BY plays DESC LIMIT 10
+            """).fetchall()
+        except Exception:
+            top_rows = []
 
         # Recent signups
         sig_users = c.execute("""
