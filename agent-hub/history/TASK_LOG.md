@@ -2385,3 +2385,23 @@ Build 6.10 "Quota full" screen and fix BUG-P4 stale title count on Zero-Rating a
 - CI build will trigger on this commit — verify it passes before next session
 
 ---
+
+---
+
+## Session 2026-05-29
+
+### Oracle Server — Bugs Fixed
+- analytics.py: COUNT(wh.id) -> COUNT(*) + try/except (live watch_history has no id col)
+- analytics.py: u.name -> NULL as name (column missing in app_users)
+- tid_panel.py: payment.get() -> dict(payment).get() (sqlite3.Row has no .get())
+- subscriptions.py: u.name -> NULL as name
+- mobile_api.py get_quota: added sub_expires_at + sub_plan from app_subscriptions
+- Oracle restarted; notifications table created via init_db()
+- SSH key reformatted (single-line spaces -> proper PEM 64-char lines)
+
+### Task 6.9: Offline Plan Expiry Enforcement DONE
+- plan_expired_screen.dart created (lock icon, Renew Plan + Go Back)
+- _checkQuota() extended: if localPath != null AND sub_expires_at < now -> push planExpired
+- AppRoutes.planExpired added to constants.dart
+- PlanExpiredScreen registered in app.dart
+- Server: get_quota now includes sub_expires_at in quota cache
