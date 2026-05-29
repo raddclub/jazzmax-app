@@ -1876,3 +1876,47 @@ All failures: `lib/screens/player_screen.dart:2165:73: Error: The method '_cycle
 - For large file blobs (>~3000 lines): write JSON payload to disk with node, then POST with `--data-binary @file`
 
 ---
+
+  ---
+
+  ## Session — 2026-05-29
+
+  ### Completed tasks
+
+  #### 1. §3.15 Item 5 — Auto-select audio track by device locale
+  - Added `_autoSelectTrackByLocale()` method.
+  - For Hindi (`hi`) or Urdu (`ur`) device locale, prefers `hin`-tagged track first, then `urd` — **never defaults to Urdu**; Hindi tag is used for both Hindi and Urdu content in practice.
+  - Called from `_restoreTrackMemory()` when no saved audio preference is found.
+
+  #### 2. §3.16D — Long-press play button = restart from beginning
+  - Added `_onLongPressPlay()` method (seeks to `Duration.zero`, shows snackbar).
+  - Added `onLongPressPlay` optional callback to `_ControlsOverlay` field + constructor.
+  - Center red play button now wired with `onLongPress: onLongPressPlay`.
+  - Gated on `_prefs.longPressPlayRestart` (respects user setting).
+
+  #### 3. §3.16F — Headphone button double/triple press
+  - Added `_onHardwareKey()` via `HardwareKeyboard.instance.addHandler` (registered in `initState`, removed in `dispose`).
+  - Single press: play/pause. Double press (within 600ms): next episode. Triple press: seek back 10 s.
+  - Added `_mediaButtonPressCount` + `_mediaButtonTimer` state vars; timer cleaned up in `dispose`.
+
+  #### 4. MX Player-style auto-rotate
+  - Added `'auto'` to `_cycleRotation()` order: `sensor_landscape → auto → lock_left → lock_right → lock_portrait`.
+  - `'auto'` case in `_applyRotation()` now calls `SystemChrome.setPreferredOrientations([])` (empty list = OS/sensor controls all directions freely, including portrait and reverse-landscape).
+
+  #### 5. MKV multi-track title metadata
+  - `_buildAudioLabels()` now prefers `track.title` metadata over the ISO language code. Many MKV files set `title: "Urdu"` while the language code is `hin`; this ensures the panel shows the correct label.
+  - Subtitle labels already used title; audio labels now consistent.
+
+  #### 6. Hindi-first locale + no Urdu default
+  - `_autoSelectTrackByLocale()` checks device locale before selecting any track.
+  - For South-Asian locales (`hi`/`ur`): tries `hin` → `hi` → `urd` → `ur` in order — Hindi tag wins because virtually all Bollywood/Pakistani content is tagged `hin`.
+  - No hard-coded Urdu default anywhere in the player.
+
+  ### Commit
+  - `df34a95` — `feat(player): §3.15i5 locale auto-select, §3.16D long-press restart, §3.16F headphone multi-press, MX auto-rotate, MKV track title metadata, Hindi-first locale logic`
+  - File: `raddflix_flutter/lib/screens/player_screen.dart` (3330 → 3426 lines, +96)
+
+  ### Remaining / notes
+  - CI should pass; no new dependencies added.
+  - `AppConstants.supportWhatsApp` still placeholder — needs real number before release.
+  
