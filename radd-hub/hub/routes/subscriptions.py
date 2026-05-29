@@ -153,7 +153,7 @@ def index():
             params = ()
 
         rows = c.execute(f"""
-            SELECT u.id as user_id, u.phone, u.name,
+            SELECT u.id as user_id, u.phone, NULL as name,
                    s.id as sub_id, s.plan, s.started_at, s.expires_at
             FROM app_users u
             LEFT JOIN app_subscriptions s ON s.user_id=u.id
