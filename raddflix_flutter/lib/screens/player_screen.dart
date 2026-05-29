@@ -106,7 +106,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   double? _dragSeekDelta; // seconds offset while scrubbing
 
   // Long press 2×
-  bool _longPressFast = false;
+    bool _longPressFast = false;
+
+    // §3.16F: Headphone button double/triple press
+    int _mediaButtonPressCount = 0;
+    Timer? _mediaButtonTimer;
 
   // Panels
   bool _showSpeedPicker = false;
@@ -265,7 +269,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _initAudioSession();
     _loadSmartIntro();
     _loadBookmarks();
-  }
+      HardwareKeyboard.instance.addHandler(_onHardwareKey);
+    }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -693,9 +698,94 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             }
           }
         }
+        // §3.15 Item 5: if no saved audio pref, auto-select by device locale
+        if (savedAudioLang == null || !_prefs.rememberAudioTrack) {
+          _autoSelectTrackByLocale();
+        }
       } catch (_) {}
     }
+  
+    // §3.16F: Headphone button double/triple press ────────────────────────────
+    bool _onHardwareKey(KeyEvent event) {
+      if (event is! KeyDownEvent) return false;
+      if (event.logicalKey == LogicalKeyboardKey.mediaPlayPause) {
+        _handleMediaButtonPress();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.mediaTrackNext) {
+        if (_hasNextEp) _playNextEpisode();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.mediaTrackPrevious) {
+        _player.seek(_position - const Duration(seconds: 10));
+        return true;
+      }
+      return false;
+    }
 
+    void _handleMediaButtonPress() {
+      _mediaButtonPressCount++;
+      _mediaButtonTimer?.cancel();
+      _mediaButtonTimer = Timer(const Duration(milliseconds: 600), () {
+        if (!mounted) return;
+        final count = _mediaButtonPressCount;
+        _mediaButtonPressCount = 0;
+        if (count == 1) {
+          setState(() => _userPaused = _playing);
+          _player.playOrPause();
+        } else if (count == 2) {
+          // Double-press → next episode
+          if (_hasNextEp) _playNextEpisode();
+        } else {
+          // Triple-press → seek back 10 s
+          _player.seek(_position - const Duration(seconds: 10));
+        }
+      });
+    }
+
+    // §3.16D: Long-press play button = restart from beginning ─────────────────
+    void _onLongPressPlay() {
+      if (!_prefs.longPressPlayRestart) return;
+      _player.seek(Duration.zero);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('⏮ Restarting from beginning'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ));
+    }
+
+    // §3.15 Item 5: Auto-select audio track by device locale ──────────────────
+    void _autoSelectTrackByLocale() {
+      try {
+        final deviceLang =
+            WidgetsBinding.instance.platformDispatcher.locale.languageCode.toLowerCase();
+        final tracks = _player.state.tracks.audio;
+        if (tracks.isEmpty) return;
+        // For Hindi/Urdu device locales: prefer hin-tagged track first (most
+        // South-Asian content uses hin even for Urdu dubs), then urd.
+        // Never force-select Urdu as a default.
+        final List<String> preferred;
+        if (deviceLang == 'hi' || deviceLang == 'ur') {
+          preferred = ['hin', 'hi', 'urd', 'ur'];
+        } else {
+          preferred = [deviceLang];
+        }
+        for (final lang in preferred) {
+          for (int i = 0; i < tracks.length; i++) {
+            final tLang = (tracks[i].language ?? '').toLowerCase();
+            if (tLang == lang) {
+              if (_activeAudioIdx != i) {
+                setState(() => _activeAudioIdx = i);
+                _player.setAudioTrack(tracks[i]);
+              }
+              return;
+            }
+          }
+        }
+      } catch (_) {}
+    }
+  
     void _initBingeGuard() {
     _bingeGuardCtrl?.dispose();
     if (!_prefs.bingeGuardEnabled) return;
@@ -729,7 +819,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void _applyRotation(String mode) {
     switch (mode) {
       case 'auto':
-        SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+        // Empty list = OS controls all orientations (MX Player-style auto-rotate)
+        SystemChrome.setPreferredOrientations([]);
         break;
       case 'lock_left':
         SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeLeft]);
@@ -756,7 +847,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   void _cycleRotation() {
-    const order = ['sensor_landscape', 'lock_left', 'lock_right', 'lock_portrait'];
+    const order = ['sensor_landscape', 'auto', 'lock_left', 'lock_right', 'lock_portrait'];
     final idx = order.indexOf(_prefs.rotationMode);
     final next = order[(idx + 1) % order.length];
     _applyRotation(next);
@@ -1352,7 +1443,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     // Restore full auto-rotate so system works normally after player exit
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
-    super.dispose();
+      HardwareKeyboard.instance.removeHandler(_onHardwareKey);
+      _mediaButtonTimer?.cancel();
+      super.dispose();
   }
 
   void _scheduleHide() {
@@ -1843,6 +1936,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                 _player.playOrPause();
                 _userPaused = !_playing;
               },
+              onLongPressPlay: _prefs.longPressPlayRestart ? _onLongPressPlay : null,
               onSeekTo: (frac) {
                 final ms = (frac * _duration.inMilliseconds).toInt();
                 _player.seek(Duration(milliseconds: ms));
@@ -2339,6 +2433,7 @@ class _ControlsOverlay extends StatelessWidget {
   final int? currentEp, totalEps;
   final Uint8List? seekThumb;
   final VoidCallback onBack, onPlayPause, onSeekBack, onSeekForward;
+    final VoidCallback? onLongPressPlay; // §3.16D
   final VoidCallback onLock, onCycleFit, onSpeed;
   final VoidCallback onSubtitleFile, onSubtitleTracks, onAudioTracks;
   final VoidCallback onPiP, onSleep, onCast;
@@ -2536,6 +2631,7 @@ class _ControlsOverlay extends StatelessWidget {
                 const SizedBox(width: 16),
                 GestureDetector(
                   onTap: onPlayPause,
+                  onLongPress: onLongPressPlay, // §3.16D
                   child: Container(
                     width: 72, height: 72,
                     decoration: const BoxDecoration(
