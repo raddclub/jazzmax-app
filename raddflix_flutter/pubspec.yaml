@@ -30,9 +30,12 @@ dependencies:
   video_thumbnail: ^0.5.3
 
   # Local SQLite — SQLCipher edition (AES-256 full-file encryption).
-  # Pinned to 3.2.0 — last version compatible with Flutter 3.22.x.
-  # 3.2.1+ bumped flutter constraint to >=3.27.0 which CI does not meet.
-  sqflite_sqlcipher: 3.2.0
+  # Pinned to 3.1.1 — the last release before 3.2.0 introduced
+  # flutter.compileSdkVersion in build.gradle, which breaks Gradle on
+  # Flutter 3.22.x CI (AGP version mismatch).
+  # 3.2.x: uses flutter.compileSdkVersion → Gradle build failure
+  # 3.2.1+: also requires Flutter >=3.27.0 → version solving failure
+  sqflite_sqlcipher: 3.1.1
   path_provider: ^2.1.2
   path: ^1.9.0
 
