@@ -19,10 +19,10 @@ class UsageService {
 
   // Quality → estimated bytes per second
   static const Map<String, int> _bpsEstimate = {
-    '1080p': 2_200_000,
-    '720p':  1_100_000,
-    '480p':    600_000,
-    '360p':    300_000,
+    '1080p': 2200000,
+    '720p':  1100000,
+    '480p':   600000,
+    '360p':   300000,
   };
 
   static int _estimateBytes({required int seconds, required String quality}) {
