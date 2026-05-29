@@ -170,7 +170,7 @@ _HTML = """
     </div>
     <div class="s-tile">
       <div class="k">Titles in Delta</div>
-      <div class="v" style="color:var(--ok)">{{ delta_titles }}</div>
+      <div class="v" style="color:{% if delta_exists and delta_titles != published_titles %}var(--warn,#f59e0b){% else %}var(--ok){% endif %}">{{ delta_titles }}{% if delta_exists and delta_titles != published_titles %} ⚠{% endif %}</div>
     </div>
     <div class="s-tile">
       <div class="k">Delta Generated</div>
@@ -187,6 +187,15 @@ _HTML = """
       </div>
     </div>
   </div>
+
+  {% if delta_exists and delta_titles != published_titles %}
+  <div style="background:rgba(180,83,9,0.12);border:1px solid rgba(245,158,11,0.4);
+              border-radius:8px;padding:10px 14px;margin:0 0 18px;font-size:13px;color:#f59e0b">
+    ⚠ <b>Delta is stale</b> — delta.json has <b>{{ delta_titles }}</b> title{{ delta_titles|pluralize }}
+    but <b>{{ published_titles }}</b> are published.
+    Click <b>Generate Delta Now</b> below to sync.
+  </div>
+  {% endif %}
 
   <!-- ── STEP 1: GENERATE DELTA ─────────────────────────────────────────── -->
   <div class="card card-accent">

@@ -160,6 +160,9 @@ class _SubscriptionScreenState extends ConsumerState<SubscriptionScreen> {
         const Text('Zero-rated on Jazz · HD quality · All content',
             style: TextStyle(color: AppColors.textMuted, fontSize: 13))
             .animate(delay: 80.ms).fadeIn(duration: 300.ms),
+        const SizedBox(height: 10),
+        const _JazzPartnerBadge()
+            .animate(delay: 120.ms).fadeIn(duration: 400.ms),
         const SizedBox(height: 16),
 
         // Plan cards
@@ -477,4 +480,52 @@ class _FeatureTable extends StatelessWidget {
   Widget _cell(bool yes) => Expanded(child: Center(child: Icon(
       yes ? Icons.check_circle_rounded : Icons.remove_rounded,
       size: 16, color: yes ? AppColors.success : AppColors.textDisabled)));
+}
+
+
+// ── Jazz Partnership Badge (Phase 9.5) ────────────────────────────────────────
+class _JazzPartnerBadge extends StatelessWidget {
+  const _JazzPartnerBadge();
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF006633), Color(0xFF00A651)],
+          begin: Alignment.centerLeft, end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF00A651).withOpacity(0.25),
+              blurRadius: 12, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 20, height: 20,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle, color: Colors.white),
+          child: const Center(
+            child: Text('J', style: TextStyle(
+              color: Color(0xFF006633), fontSize: 11,
+              fontWeight: FontWeight.w900))),
+        ),
+        const SizedBox(width: 8),
+        const Text('Official Jazz Partner',
+            style: TextStyle(color: Colors.white, fontSize: 12,
+                fontWeight: FontWeight.w700, letterSpacing: 0.3)),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(4)),
+          child: const Text('Zero-Rated', style: TextStyle(
+              color: Colors.white, fontSize: 9,
+              fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+        ),
+      ]),
+    );
+  }
 }

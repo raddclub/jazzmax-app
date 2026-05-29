@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../core/constants.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
@@ -29,8 +30,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     try {
       await ref.read(authProvider.notifier).login(
         phone: _phoneCtrl.text.trim(), password: _passCtrl.text);
+      // Device conflict: notifier sets state and returns without throwing
+      final s = ref.read(authProvider);
+      if (s.isDeviceConflict) {
+        setState(() { _loading = false; });
+        return;
+      }
       if (mounted) Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     } catch (e) {
+      final s = ref.read(authProvider);
+      if (s.isDeviceConflict) {
+        setState(() { _loading = false; });
+        return;
+      }
       setState(() { _error = _friendly(e.toString()); _loading = false; });
     }
   }
@@ -53,6 +65,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     return LoadingOverlay(
       loading: _loading,
       child: Scaffold(
@@ -132,7 +145,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             .slideY(begin: 0.2, end: 0, duration: 350.ms, curve: AppCurves.standard),
                       ]),
                     ),
-                    if (_error != null) ...[
+                    // Device conflict panel — shown when another device is bound
+                    if (authState.isDeviceConflict) ...[
+                      const SizedBox(height: 14),
+                      _DeviceConflictPanel(deviceName: authState.deviceConflictName ?? 'another device')
+                          .animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0, duration: 300.ms),
+                    ] else if (_error != null) ...[
                       const SizedBox(height: 14),
                       _ErrorBanner(message: _error!)
                           .animate().fadeIn(duration: 250.ms).shakeX(hz: 3, amount: 4),
@@ -178,6 +196,68 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 }
 
+// ── Device Conflict Panel ──────────────────────────────────────────────────────
+class _DeviceConflictPanel extends StatelessWidget {
+  final String deviceName;
+  const _DeviceConflictPanel({required this.deviceName});
+
+  Future<void> _openWhatsApp(BuildContext context, String phone) async {
+    final msg = Uri.encodeComponent(
+      'Hi RaddFlix Support, I need to switch my account to a new device. '
+      'Currently signed in on: $phone');
+    final url = Uri.parse('https://wa.me/${AppConstants.supportWhatsApp}?text=$msg');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot open WhatsApp. Install it first.')));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFB45309).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: const Color(0xFFB45309).withOpacity(0.4), width: 1),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.devices_outlined, color: Color(0xFFF59E0B), size: 18),
+          const SizedBox(width: 8),
+          const Text('Device Conflict',
+              style: TextStyle(color: Color(0xFFF59E0B), fontSize: 14,
+                  fontWeight: FontWeight.w700)),
+        ]),
+        const SizedBox(height: 8),
+        Text(
+          'This account is already signed in on "$deviceName". '
+          'RaddFlix allows only one device per account.',
+          style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Color(0xFF25D366), width: 1),
+              foregroundColor: const Color(0xFF25D366),
+              padding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+            icon: const Icon(Icons.chat_outlined, size: 16),
+            label: const Text('Contact Support on WhatsApp',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            onPressed: () => _openWhatsApp(context, ''),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+// ── Logo ───────────────────────────────────────────────────────────────────────
 class _Logo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -214,6 +294,7 @@ class _Logo extends StatelessWidget {
   }
 }
 
+// ── Error Banner ───────────────────────────────────────────────────────────────
 class _ErrorBanner extends StatelessWidget {
   final String message;
   const _ErrorBanner({required this.message});
@@ -238,6 +319,7 @@ class _ErrorBanner extends StatelessWidget {
   }
 }
 
+// ── Gradient Button ────────────────────────────────────────────────────────────
 class _GradientButton extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;

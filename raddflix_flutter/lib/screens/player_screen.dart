@@ -44,6 +44,7 @@ import '../widgets/player/ab_loop_panel.dart';
 import '../widgets/player/track_badges.dart';
 import '../widgets/player/video_enhance_panel.dart';
 import '../widgets/player/transparent_player_layer.dart';
+import '../core/services/usage_service.dart';
 import '../widgets/player/subtitle_overlay.dart';
 
 // ── PiP Method Channel ────────────────────────────────────────────────────────
@@ -147,6 +148,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   Timer? _slowConnTimer;
   bool _playing = false;
   bool _ended = false;
+  DateTime? _sessionStartTime; // track watch-time for usage reporting
   Duration _bufferedPosition = Duration.zero;
 
   // Position notifier — updates slider/time WITHOUT rebuilding full tree
@@ -269,6 +271,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _initAudioSession();
     _loadSmartIntro();
     _loadBookmarks();
+    _checkQuota();
       HardwareKeyboard.instance.addHandler(_onHardwareKey);
     }
 
@@ -938,8 +941,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _player.stream.playing.listen((p) {
       if (!mounted) return;
       setState(() => _playing = p);
-      if (p) { _bingeGuardCtrl?.onPlay(); }
-      else   { _bingeGuardCtrl?.onPause(); }
+      if (p) {
+        _bingeGuardCtrl?.onPlay();
+        _sessionStartTime ??= DateTime.now();
+      } else {
+        _bingeGuardCtrl?.onPause();
+      }
     });
     _player.stream.buffer.listen((b) {
       if (!mounted) return;
@@ -1065,6 +1072,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   }
 
   void _onPlaybackEnded() {
+    _logWatchSession();
     // FIX-SLEEP: if "End of episode" sleep timer is set, pause here
     if (_sleepAtEpisodeEnd) {
       _sleepAtEpisodeEnd = false;
@@ -1078,6 +1086,45 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     } else {
       setState(() => _showControls = true);
     }
+  }
+
+
+  // ── Usage tracking helpers ────────────────────────────────────────────────
+  /// Maps player resolution string (e.g. "1920x1080") to a quality label.
+  String get _qualityFromRes {
+    if (_piRes.contains('1080')) return '1080p';
+    if (_piRes.contains('720'))  return '720p';
+    if (_piRes.contains('480'))  return '480p';
+    return '360p';
+  }
+
+  /// Call at session end or dispose to record watch time to usage log.
+  void _logWatchSession() {
+    final start = _sessionStartTime;
+    if (start == null) return;
+    _sessionStartTime = null;
+    final seconds = DateTime.now().difference(start).inSeconds;
+    if (seconds < 5) return; // ignore very short views
+    UsageService.addWatchSession(seconds: seconds, quality: _qualityFromRes);
+  }
+
+  /// Check data quota before playback; pop + snackbar if exhausted.
+  Future<void> _checkQuota() async {
+    try {
+      final quota = await UsageService.getCachedQuota();
+      if (quota['allowed'] == false) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          Navigator.of(context).pop();
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Daily data limit reached. Upgrade your plan to continue streaming.'),
+            backgroundColor: Color(0xFFE8002D),
+            duration: Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ));
+        });
+      }
+    } catch (_) {}
   }
 
   void _startNextEpCountdown() {
@@ -1430,6 +1477,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _tapTimer?.cancel();
     _ambilightCtrl?.dispose();
     _bingeGuardCtrl?.dispose();
+    _logWatchSession(); // log partial session on exit
     if (_position.inMilliseconds > 0 && _duration.inMilliseconds > 0) {
       LocalDb.saveWatchPosition(
           fileId: widget.fileId,
