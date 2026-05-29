@@ -329,7 +329,7 @@ def index():
 
         # Recent signups
         sig_users = c.execute("""
-            SELECT u.phone, u.name,
+            SELECT u.phone, NULL as name,
                    COALESCE(s.plan,'free') as plan,
                    DATE(u.created_at,'unixepoch') as joined
             FROM app_users u
