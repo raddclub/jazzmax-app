@@ -2154,18 +2154,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
               Positioned(
                 bottom: 0, left: 0, right: 0,
                 child: _MxMoreSheet(
-                  cinematicMode: _cinematicMode,
-                  abLoopActive: _abLoop.isActive,
-                  sleepActive: _sleepRemainingSeconds != null || _sleepAtEpisodeEnd,
-                  bookmarkCount: _bookmarks.length,
-                  onNight: () { setState(() { _showMorePanel = false; }); _toggleCinematic(); },
-                  onLoop: () { setState(() { _showMorePanel = false; _showAbPanel = !_showAbPanel; }); },
-                  onSleep: () { setState(() { _showMorePanel = false; _showSleepMenu = !_showSleepMenu; }); },
-                  onBookmarks: () { setState(() { _showMorePanel = false; _showBookmarksPanel = !_showBookmarksPanel; }); },
-                  onEq: () { setState(() { _showMorePanel = false; _showEqPanel = true; }); },
-                  onScreenshot: () { setState(() => _showMorePanel = false); _takeScreenshot(); },
-                  onSettings: () { setState(() { _showMorePanel = false; _showQuickSettings = true; }); },
-                ),
+                    cinematicMode: _cinematicMode,
+                    abLoopActive: _abLoop.isActive,
+                    sleepActive: _sleepRemainingSeconds != null || _sleepAtEpisodeEnd,
+                    bookmarkCount: _bookmarks.length,
+                    speed: _speed,
+                    fitLabel: _ratios[_ratioIdx] == BoxFit.contain ? 'Fit'
+                        : _ratios[_ratioIdx] == BoxFit.cover ? 'Crop' : 'Fill',
+                    castConnected: _castConnected,
+                    onFit: () { setState(() => _showMorePanel = false); _cycleAspect(); },
+                    onSpeed: () { setState(() { _showMorePanel = false; _showSpeedPicker = !_showSpeedPicker; }); },
+                    onNight: () { setState(() { _showMorePanel = false; }); _toggleCinematic(); },
+                    onLoop: () { setState(() { _showMorePanel = false; _showAbPanel = !_showAbPanel; }); },
+                    onSleep: () { setState(() { _showMorePanel = false; _showSleepMenu = !_showSleepMenu; }); },
+                    onBookmarks: () { setState(() { _showMorePanel = false; _showBookmarksPanel = !_showBookmarksPanel; }); },
+                    onEq: () { setState(() { _showMorePanel = false; _showEqPanel = true; }); },
+                    onScreenshot: () { setState(() => _showMorePanel = false); _takeScreenshot(); },
+                    onCast: () { setState(() => _showMorePanel = false); _enterCast(); },
+                    onPiP: () { setState(() => _showMorePanel = false); _enterPiP(); },
+                    onRotation: () { setState(() => _showMorePanel = false); _cycleRotation(); },
+                    onSettings: () { setState(() { _showMorePanel = false; _showQuickSettings = true; }); },
+                  ),
               ),
   
           // ── Audio Sync Panel ──
@@ -2445,202 +2454,141 @@ class _ControlsOverlay extends StatelessWidget {
         ),
       ),
 
-      // ── TOP BAR (MX Player: back + title, minimal right controls) ──────────
-      Positioned(
-        top: 0, left: 0, right: 0,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(4, 6, 8, 6),
-            child: Row(children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
-                onPressed: onBack,
-                padding: const EdgeInsets.all(8),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (currentEp != null && totalEps != null)
-                      Text('EP ${currentEp! + 1} / $totalEps',
-                          style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w500)),
-                    Text(title,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-              // ── Rotation badge (kept; Audio/Sub/count badges removed) ──
-              // FIX-UI: Track badges removed from top bar — they duplicated
-              // the Audio + Sub buttons already in the right-side strip.
-              GestureDetector(
-                onTap: onCycleRotation,
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    border: Border.all(color: Colors.white.withOpacity(0.18), width: 0.8),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(_rotationIcon(rotationMode), color: Colors.white54, size: 11),
-                    const SizedBox(width: 3),
-                    Text(_rotationLabel(rotationMode),
-                        style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-              // ── Delay + zoom badges ──
-              if (audioDelayMs != 0)
-                _MxBadge(label: 'A${audioDelayMs > 0 ? '+' : ''}${audioDelayMs}ms', color: const Color(0xFFE8002D), onTap: onAudioSync),
-              if (subDelayMs != 0)
-                _MxBadge(label: 'S${subDelayMs > 0 ? '+' : ''}${subDelayMs}ms', color: const Color(0xFFE8002D), onTap: onSubSync),
-              if (onResetZoom != null)
-                _MxBadge(label: '${scale.toStringAsFixed(1)}×', color: Colors.white70, onTap: onResetZoom!),
-              IconButton(
-                icon: Icon(castConnected ? Icons.cast_connected_rounded : Icons.cast_rounded,
-                    color: castConnected ? const Color(0xFF4FC3F7) : Colors.white54, size: 20),
-                onPressed: onCast,
-                padding: const EdgeInsets.all(6),
-                constraints: const BoxConstraints(),
-              ),
-              IconButton(
-                icon: const Icon(Icons.picture_in_picture_alt_rounded, color: Colors.white54, size: 20),
-                onPressed: onPiP,
-                padding: const EdgeInsets.all(6),
-                constraints: const BoxConstraints(),
-              ),
-              if (!locked)
+      // ── TOP BAR (exact MX Player: back | title | audio? | sub? | ⋮) ────────
+        Positioned(
+          top: 0, left: 0, right: 0,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(4, 6, 4, 6),
+              child: Row(children: [
                 IconButton(
-                  icon: const Icon(Icons.lock_outline_rounded, color: Colors.white54, size: 20),
-                  onPressed: onLock,
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20, color: Colors.white),
+                  onPressed: onBack,
+                  padding: const EdgeInsets.all(8),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (currentEp != null && totalEps != null)
+                        Text('EP ${currentEp! + 1} / $totalEps',
+                            style: const TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w500)),
+                      Text(title,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+                if (audioDelayMs != 0)
+                  _MxBadge(label: 'A${audioDelayMs > 0 ? '+' : ''}${audioDelayMs}ms', color: const Color(0xFFE8002D), onTap: onAudioSync),
+                if (subDelayMs != 0)
+                  _MxBadge(label: 'S${subDelayMs > 0 ? '+' : ''}${subDelayMs}ms', color: const Color(0xFFE8002D), onTap: onSubSync),
+                if (onResetZoom != null)
+                  _MxBadge(label: '${scale.toStringAsFixed(1)}×', color: Colors.white70, onTap: onResetZoom!),
+                if (audioLabels.length > 1)
+                  IconButton(
+                    icon: const Icon(Icons.audiotrack_rounded, color: Colors.white70, size: 20),
+                    onPressed: onAudioTracks,
+                    padding: const EdgeInsets.all(6),
+                    constraints: const BoxConstraints(),
+                  ),
+                IconButton(
+                  icon: Icon(
+                    Icons.subtitles_rounded,
+                    color: (subLabels.isNotEmpty && activeSubIdx < subLabels.length)
+                        ? Colors.white : Colors.white38,
+                    size: 20,
+                  ),
+                  onPressed: onSubtitleTracks,
                   padding: const EdgeInsets.all(6),
                   constraints: const BoxConstraints(),
                 ),
-            ]),
-          ),
-        ),
-      ),
-
-      // ── RIGHT SIDE VERTICAL STRIP (MX Player: clean 5-button strip) ────────
-        if (!locked)
-          Positioned(
-            right: 6, top: 0, bottom: 0,
-            child: SafeArea(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _MxSideBtn(
-                    icon: Icons.audiotrack_rounded,
-                    label: audioLabels.isEmpty
-                        ? 'Audio'
-                        : (activeAudioIdx < audioLabels.length
-                            ? audioLabels[activeAudioIdx].split(' ').first
-                            : 'Audio'),
-                    onTap: onAudioTracks,
-                    active: audioLabels.length > 1,
-                  ),
-                  const SizedBox(height: 6),
-                  _MxSideBtn(
-                    icon: Icons.subtitles_outlined,
-                    label: 'Sub',
-                    onTap: onSubtitleTracks,
-                    active: subLabels.isNotEmpty && activeSubIdx < subLabels.length,
-                  ),
-                  const SizedBox(height: 6),
-                  _MxSideBtn(icon: Icons.fit_screen_rounded, label: fitLabel, onTap: onCycleFit),
-                  const SizedBox(height: 6),
-                  _MxSideBtn(
-                    icon: Icons.speed_rounded,
-                    label: speed == 1.0 ? '1×' : '${speed}×',
-                    onTap: onSpeed,
-                    active: speed != 1.0,
-                  ),
-                  const SizedBox(height: 8),
-                  // Divider between core and More
-                  Container(width: 20, height: 1, color: Colors.white12),
-                  const SizedBox(height: 8),
-                  // Badge dot if any secondary feature is active
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      _MxSideBtn(icon: Icons.more_vert_rounded, label: 'More', onTap: onMorePanel),
-                      if (cinematicMode || abLoop.isActive || sleepLabel.isNotEmpty || bookmarks.isNotEmpty)
-                        Positioned(
-                          top: 2, right: 2,
-                          child: Container(
-                            width: 6, height: 6,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xFFE8002D),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
+                IconButton(
+                  icon: const Icon(Icons.more_vert_rounded, color: Colors.white, size: 24),
+                  onPressed: onMorePanel,
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                ),
+              ]),
             ),
           ),
+        ),
+  
 
-      // ── CENTER CONTROLS (MX Player: large red circle + circular seek btns) ─
-      if (!locked)
-        Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              _MxSeekBtn(isForward: false, seconds: 15, onTap: onSeekBack),
-              const SizedBox(width: 24),
-              // MX Player signature: large red circle play/pause
-              GestureDetector(
-                onTap: onPlayPause,
-                child: Container(
-                  width: 76, height: 76,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color(0xFFE8002D),
-                    boxShadow: [BoxShadow(color: Color(0x55E8002D), blurRadius: 24, spreadRadius: 4)],
-                  ),
-                  child: Icon(
-                    playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    color: Colors.white, size: 44,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 24),
-              _MxSeekBtn(isForward: true, seconds: 15, onTap: onSeekForward),
-              if (hasNext) ...[
-                const SizedBox(width: 20),
+      // ── CENTER CONTROLS (exact MX Player: plain seek icons + red play circle) ─
+        if (!locked)
+          Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
                 GestureDetector(
-                  onTap: onNextEpisode,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.white24),
-                    ),
-                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                      Text('Next', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                      SizedBox(width: 4),
-                      Icon(Icons.skip_next_rounded, color: Colors.white, size: 18),
+                  onTap: onSeekBack,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.replay_rounded, color: Colors.white, size: 34),
+                      const Text('15s', style: TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.w500)),
                     ]),
                   ),
                 ),
+                const SizedBox(width: 16),
+                GestureDetector(
+                  onTap: onPlayPause,
+                  child: Container(
+                    width: 72, height: 72,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Color(0xFFE8002D),
+                      boxShadow: [BoxShadow(color: Color(0x55E8002D), blurRadius: 24, spreadRadius: 4)],
+                    ),
+                    child: Icon(
+                      playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white, size: 42,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                GestureDetector(
+                  onTap: onSeekForward,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.forward_10_rounded, color: Colors.white, size: 34),
+                      const Text('15s', style: TextStyle(color: Colors.white60, fontSize: 9, fontWeight: FontWeight.w500)),
+                    ]),
+                  ),
+                ),
+                if (hasNext) ...[
+                  const SizedBox(width: 16),
+                  GestureDetector(
+                    onTap: onNextEpisode,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.white24),
+                      ),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text('Next', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                        SizedBox(width: 4),
+                        Icon(Icons.skip_next_rounded, color: Colors.white, size: 18),
+                      ]),
+                    ),
+                  ),
+                ],
               ],
-            ],
-          ).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
-        ),
+            ).animate().fadeIn(duration: 150.ms, curve: Curves.easeOut),
+          ),
 
+  
       // ── BOTTOM BAR (MX Player: clean progress + time) ──────────────────────
       Positioned(
         bottom: 0, left: 0, right: 0,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 58, 12),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             // Seek thumbnail (local files)
             if (seekThumb != null && sliderDragging && isLocal)
@@ -3250,155 +3198,133 @@ class _NextEpisodeOverlay extends StatelessWidget {
 
   // ── More Panel (MX Player–style bottom sheet) ────────────────────────────────
   class _MxMoreSheet extends StatelessWidget {
-    final bool cinematicMode;
-    final bool abLoopActive;
-    final bool sleepActive;
-    final int bookmarkCount;
-    final VoidCallback onNight;
-    final VoidCallback onLoop;
-    final VoidCallback onSleep;
-    final VoidCallback onBookmarks;
-    final VoidCallback onEq;
-    final VoidCallback onScreenshot;
-    final VoidCallback onSettings;
+      final bool cinematicMode;
+      final bool abLoopActive;
+      final bool sleepActive;
+      final int bookmarkCount;
+      final double speed;
+      final String fitLabel;
+      final bool castConnected;
+      final VoidCallback onFit;
+      final VoidCallback onSpeed;
+      final VoidCallback onNight;
+      final VoidCallback onLoop;
+      final VoidCallback onSleep;
+      final VoidCallback onBookmarks;
+      final VoidCallback onEq;
+      final VoidCallback onScreenshot;
+      final VoidCallback onCast;
+      final VoidCallback onPiP;
+      final VoidCallback onRotation;
+      final VoidCallback onSettings;
 
-    const _MxMoreSheet({
-      required this.cinematicMode,
-      required this.abLoopActive,
-      required this.sleepActive,
-      required this.bookmarkCount,
-      required this.onNight,
-      required this.onLoop,
-      required this.onSleep,
-      required this.onBookmarks,
-      required this.onEq,
-      required this.onScreenshot,
-      required this.onSettings,
-    });
+      const _MxMoreSheet({
+        required this.cinematicMode,
+        required this.abLoopActive,
+        required this.sleepActive,
+        required this.bookmarkCount,
+        required this.speed,
+        required this.fitLabel,
+        required this.castConnected,
+        required this.onFit,
+        required this.onSpeed,
+        required this.onNight,
+        required this.onLoop,
+        required this.onSleep,
+        required this.onBookmarks,
+        required this.onEq,
+        required this.onScreenshot,
+        required this.onCast,
+        required this.onPiP,
+        required this.onRotation,
+        required this.onSettings,
+      });
 
-    @override
-    Widget build(BuildContext context) {
-      return Container(
-        decoration: const BoxDecoration(
-          color: Color(0xF0111120),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 28),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          // drag handle
-          Container(
-            width: 36, height: 4,
-            margin: const EdgeInsets.only(bottom: 18),
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
-            ),
+      @override
+      Widget build(BuildContext context) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xF2101018),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
           ),
-          const Text('More Options',
-              style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600,
-                  letterSpacing: 0.8)),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 16, runSpacing: 16,
-            children: [
-              _MoreBtn(
-                icon: Icons.dark_mode_rounded,
-                label: 'Night',
-                active: cinematicMode,
-                activeColor: const Color(0xFF3B82F6),
-                onTap: onNight,
-              ),
-              _MoreBtn(
-                icon: Icons.loop_rounded,
-                label: 'A-B Loop',
-                active: abLoopActive,
-                activeColor: const Color(0xFFE8002D),
-                onTap: onLoop,
-              ),
-              _MoreBtn(
-                icon: sleepActive ? Icons.bedtime_rounded : Icons.bedtime_outlined,
-                label: 'Sleep',
-                active: sleepActive,
-                activeColor: Colors.orange,
-                onTap: onSleep,
-              ),
-              _MoreBtn(
-                icon: bookmarkCount > 0 ? Icons.bookmarks_rounded : Icons.bookmark_border_rounded,
-                label: 'Bookmarks',
-                active: bookmarkCount > 0,
-                activeColor: Colors.amber,
-                onTap: onBookmarks,
-              ),
-              _MoreBtn(
-                icon: Icons.equalizer_rounded,
-                label: 'EQ',
-                active: false,
-                onTap: onEq,
-              ),
-              _MoreBtn(
-                icon: Icons.screenshot_monitor_rounded,
-                label: 'Screenshot',
-                active: false,
-                onTap: onScreenshot,
-              ),
-              _MoreBtn(
-                icon: Icons.tune_rounded,
-                label: 'Settings',
-                active: false,
-                onTap: onSettings,
-              ),
-            ],
-          ),
-        ]),
-      );
-    }
-  }
-
-  class _MoreBtn extends StatelessWidget {
-    final IconData icon;
-    final String label;
-    final bool active;
-    final Color? activeColor;
-    final VoidCallback onTap;
-
-    const _MoreBtn({
-      required this.icon, required this.label,
-      required this.active, this.activeColor,
-      required this.onTap,
-    });
-
-    @override
-    Widget build(BuildContext context) {
-      final color = active ? (activeColor ?? const Color(0xFFE8002D)) : Colors.white54;
-      return GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 72,
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
           child: Column(mainAxisSize: MainAxisSize.min, children: [
             Container(
-              width: 52, height: 52,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: active
-                    ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.18)
-                    : Colors.white.withOpacity(0.06),
-                border: Border.all(
-                  color: active
-                      ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.5)
-                      : Colors.white12,
-                  width: 1,
-                ),
-              ),
-              child: Icon(icon, color: color, size: 24),
+              width: 36, height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
             ),
-            const SizedBox(height: 6),
-            Text(label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w500)),
+            Wrap(
+              spacing: 12, runSpacing: 14,
+              children: [
+                _MoreBtn(icon: Icons.fit_screen_rounded, label: fitLabel, active: fitLabel != 'Fit', onTap: onFit),
+                _MoreBtn(icon: Icons.speed_rounded,
+                  label: speed == 1.0 ? '1× Speed' : '${speed}× Speed',
+                  active: speed != 1.0, activeColor: const Color(0xFFE8002D), onTap: onSpeed),
+                _MoreBtn(icon: Icons.dark_mode_rounded, label: 'Night',
+                  active: cinematicMode, activeColor: const Color(0xFF3B82F6), onTap: onNight),
+                _MoreBtn(icon: Icons.loop_rounded, label: 'A-B Loop',
+                  active: abLoopActive, activeColor: const Color(0xFFE8002D), onTap: onLoop),
+                _MoreBtn(icon: sleepActive ? Icons.bedtime_rounded : Icons.bedtime_outlined,
+                  label: 'Sleep', active: sleepActive, activeColor: Colors.orange, onTap: onSleep),
+                _MoreBtn(icon: bookmarkCount > 0 ? Icons.bookmarks_rounded : Icons.bookmark_border_rounded,
+                  label: 'Bookmarks', active: bookmarkCount > 0, activeColor: Colors.amber, onTap: onBookmarks),
+                _MoreBtn(icon: Icons.equalizer_rounded, label: 'EQ', active: false, onTap: onEq),
+                _MoreBtn(icon: Icons.screenshot_monitor_rounded, label: 'Screenshot', active: false, onTap: onScreenshot),
+                _MoreBtn(icon: castConnected ? Icons.cast_connected_rounded : Icons.cast_rounded,
+                  label: 'Cast', active: castConnected, activeColor: const Color(0xFF4FC3F7), onTap: onCast),
+                _MoreBtn(icon: Icons.picture_in_picture_alt_rounded, label: 'PiP', active: false, onTap: onPiP),
+                _MoreBtn(icon: Icons.screen_rotation_outlined, label: 'Rotate', active: false, onTap: onRotation),
+                _MoreBtn(icon: Icons.tune_rounded, label: 'Settings', active: false, onTap: onSettings),
+              ],
+            ),
           ]),
-        ),
-      );
+        );
+      }
     }
-  }
+
+    class _MoreBtn extends StatelessWidget {
+      final IconData icon;
+      final String label;
+      final bool active;
+      final Color? activeColor;
+      final VoidCallback onTap;
+
+      const _MoreBtn({
+        required this.icon, required this.label,
+        required this.active, this.activeColor, required this.onTap,
+      });
+
+      @override
+      Widget build(BuildContext context) {
+        final col = active ? (activeColor ?? const Color(0xFFE8002D)) : Colors.white54;
+        return GestureDetector(
+          onTap: onTap,
+          child: SizedBox(
+            width: 72,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 52, height: 52,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: active
+                      ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.15)
+                      : Colors.white.withOpacity(0.07),
+                  border: Border.all(
+                    color: active
+                        ? (activeColor ?? const Color(0xFFE8002D)).withOpacity(0.4)
+                        : Colors.white12,
+                  ),
+                ),
+                child: Icon(icon, color: col, size: 24),
+              ),
+              const SizedBox(height: 5),
+              Text(label,
+                  textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: col, fontSize: 10, fontWeight: FontWeight.w500)),
+            ]),
+          ),
+        );
+      }
+    }
+  
