@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart' as p;
@@ -132,6 +133,30 @@ class LocalDb {
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
     await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
     await db.execute('CREATE INDEX idx_stream_cache_expires ON stream_cache(expires_at)');
+    // Phase 6 — usage tracking
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS usage_log (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        bytes       INTEGER NOT NULL DEFAULT 0,
+        flushed     INTEGER NOT NULL DEFAULT 0,
+        created_at  INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    // Phase 6 — quota cache (last known server quota)
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS quota_cache (
+        k TEXT PRIMARY KEY,
+        v TEXT
+      )
+    ''');
+    // Phase 9 — SIMOSA streak tracker
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS simosa_streak (
+        id         INTEGER PRIMARY KEY,
+        streak     INTEGER NOT NULL DEFAULT 0,
+        last_claim TEXT
+      )
+    ''');
   }
 
   static Future<void> _migrate(Database db, int oldV, int newV) async {
@@ -194,6 +219,35 @@ class LocalDb {
         await db.execute(
           'CREATE INDEX IF NOT EXISTS idx_stream_cache_expires ON stream_cache(expires_at)',
         );
+      } catch (_) {}
+    }
+    if (oldV < 11) {
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS usage_log (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            bytes      INTEGER NOT NULL DEFAULT 0,
+            flushed    INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS quota_cache (
+            k TEXT PRIMARY KEY,
+            v TEXT
+          )
+        ''');
+      } catch (_) {}
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS simosa_streak (
+            id         INTEGER PRIMARY KEY,
+            streak     INTEGER NOT NULL DEFAULT 0,
+            last_claim TEXT
+          )
+        ''');
       } catch (_) {}
     }
   }
@@ -553,6 +607,79 @@ class LocalDb {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+
+  // ── Phase 6: Usage Tracking ────────────────────────────────────────────
+
+  static Future<void> addPendingUsage({required int bytes}) async {
+    final db = await instance;
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    await db.insert('usage_log', {'bytes': bytes, 'flushed': 0, 'created_at': now});
+  }
+
+  static Future<int> getPendingUsageBytes() async {
+    final db = await instance;
+    final rows = await db.query('usage_log', where: 'flushed = ?', whereArgs: [0]);
+    int total = 0;
+    for (final r in rows) { total += (r['bytes'] as int? ?? 0); }
+    return total;
+  }
+
+  static Future<void> clearPendingUsage() async {
+    final db = await instance;
+    await db.update('usage_log', {'flushed': 1}, where: 'flushed = ?', whereArgs: [0]);
+  }
+
+  static Future<void> cacheQuota(Map<String, dynamic> quota) async {
+    final db = await instance;
+    final v = const JsonEncoder().convert(quota);
+    await db.insert('quota_cache', {'k': 'last_quota', 'v': v},
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<Map<String, dynamic>> getCachedQuota() async {
+    final db = await instance;
+    final rows = await db.query('quota_cache', where: 'k = ?', whereArgs: ['last_quota']);
+    if (rows.isEmpty) return {'allowed': true};
+    final v = rows.first['v'] as String? ?? '{}';
+    try {
+      return Map<String, dynamic>.from(
+          const JsonDecoder().convert(v) as Map);
+    } catch (_) {
+      return {'allowed': true};
+    }
+  }
+
+  // ── Phase 9: SIMOSA Streak ──────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> getSimosaStreak() async {
+    final db = await instance;
+    final rows = await db.query('simosa_streak', where: 'id = ?', whereArgs: [1]);
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    if (rows.isEmpty) return {'streak': 0, 'claimed_today': false};
+    final row = rows.first;
+    final lastClaim = row['last_claim'] as String?;
+    final claimedToday = lastClaim == today;
+    // Reset streak if more than 2 days since last claim
+    int streak = (row['streak'] as int?) ?? 0;
+    if (lastClaim != null && lastClaim != today) {
+      final last = DateTime.tryParse(lastClaim);
+      final diff = DateTime.now().difference(last ?? DateTime.now()).inDays;
+      if (diff > 1) streak = 0;
+    }
+    return {'streak': streak, 'claimed_today': claimedToday};
+  }
+
+  static Future<void> recordSimosaClaim() async {
+    final db = await instance;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final info = await getSimosaStreak();
+    final claimedToday = info['claimed_today'] as bool;
+    if (claimedToday) return;
+    final streak = (info['streak'] as int) + 1;
+    await db.insert('simosa_streak', {
+      'id': 1, 'streak': streak, 'last_claim': today
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
 
   static CatalogItem _rowToItem(Map<String, dynamic> row) {
     return CatalogItem(

@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/api/auth_api.dart';
@@ -11,22 +12,33 @@ class AuthState {
   final AuthStatus status;
   final AppUser? user;
   final String? error;
+  /// Set when login fails with a device_conflict (409).
+  /// Contains the name of the device already bound to the account.
+  final String? deviceConflictName;
 
   const AuthState({
     this.status = AuthStatus.unknown,
     this.user,
     this.error,
+    this.deviceConflictName,
   });
 
-  AuthState copyWith({AuthStatus? status, AppUser? user, String? error}) {
+  AuthState copyWith({
+    AuthStatus? status,
+    AppUser? user,
+    String? error,
+    String? deviceConflictName,
+  }) {
     return AuthState(
-      status: status ?? this.status,
-      user: user ?? this.user,
-      error: error,
+      status:             status ?? this.status,
+      user:               user ?? this.user,
+      error:              error,
+      deviceConflictName: deviceConflictName,
     );
   }
 
   bool get isAuthenticated => status == AuthStatus.authenticated;
+  bool get isDeviceConflict => error == 'device_conflict';
 }
 
 class AuthNotifier extends StateNotifier<AuthState> {
@@ -62,17 +74,54 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> login({required String phone, required String password}) async {
-    state = state.copyWith(error: null);
-    final result = await AuthApi.login(phone: phone, password: password);
-    await Keystore.saveTokens(
-      accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
-      userId: result.userId.toString(),
-    );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(StorageKeys.isGuest);
-    final user = await AuthApi.getMe();
-    state = AuthState(status: AuthStatus.authenticated, user: user);
+    state = const AuthState(status: AuthStatus.unknown);
+    try {
+      final result = await AuthApi.login(phone: phone, password: password);
+      await Keystore.saveTokens(
+        accessToken:  result.accessToken,
+        refreshToken: result.refreshToken,
+        userId:       result.userId.toString(),
+      );
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(StorageKeys.isGuest);
+      final user = await AuthApi.getMe();
+      state = AuthState(status: AuthStatus.authenticated, user: user);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        // Device conflict — another device is already bound to this account
+        final body = e.response?.data;
+        String deviceName = 'Another Device';
+        if (body is Map) {
+          deviceName = (body['bound_device_name'] as String?)
+              ?? (body['message'] as String?)
+              ?? deviceName;
+        }
+        state = AuthState(
+          status:             AuthStatus.unauthenticated,
+          error:              'device_conflict',
+          deviceConflictName: deviceName,
+        );
+        return;
+      }
+      // Other HTTP errors
+      final body = e.response?.data;
+      String message = 'Login failed. Please try again.';
+      if (body is Map && body['error'] != null) {
+        message = body['error'] as String;
+      } else if (e.type == DioExceptionType.connectionError ||
+                 e.type == DioExceptionType.connectionTimeout) {
+        message = 'Cannot connect. Check your internet.';
+      }
+      state = AuthState(
+        status: AuthStatus.unauthenticated,
+        error:  message,
+      );
+    } catch (e) {
+      state = AuthState(
+        status: AuthStatus.unauthenticated,
+        error:  'Login failed. Please try again.',
+      );
+    }
   }
 
   Future<void> register({required String phone, required String password}) async {
@@ -83,9 +132,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> continueAsGuest() async {
     final token = await AuthApi.guestLogin();
     await Keystore.saveTokens(
-      accessToken: token,
+      accessToken:  token,
       refreshToken: '',
-      userId: '0',
+      userId:       '0',
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(StorageKeys.isGuest, true);
@@ -105,6 +154,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   void refreshUser(AppUser user) {
     state = state.copyWith(user: user);
+  }
+
+  void clearError() {
+    state = state.copyWith(error: null);
   }
 }
 

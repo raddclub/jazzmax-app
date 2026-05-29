@@ -14,6 +14,7 @@ import '../widgets/content_card.dart';
 import '../widgets/bottom_nav.dart';
 import '../widgets/notification_banner.dart';
 import '../core/services/notification_service.dart';
+import '../widgets/simosa_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -198,6 +199,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
 
         const SliverToBoxAdapter(child: SizedBox(height: 8)),
+
+        // SIMOSA daily MB reminder (Phase 9)
+        const SliverToBoxAdapter(child: SimosaCard()),
 
         // Continue Watching (from history)
         if (catalog.recentlyWatched.isNotEmpty)

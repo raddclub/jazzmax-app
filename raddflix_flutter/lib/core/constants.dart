@@ -14,7 +14,7 @@ class AppConstants {
 
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'raddflix_catalog.db';
-  static const int catalogDbVersion = 10;
+  static const int catalogDbVersion = 11;
   static const int streamCacheTtlSeconds = 10800; // 180 min
 
   // ── JazzDrive (zero-rated CDN) ─────────────────────────────────────────────
@@ -36,7 +36,18 @@ class AppConstants {
   // ── Support ──────────────────────────────────────────────────────────────
   /// WhatsApp support number (international format, no +, no spaces).
   /// Replace with actual support number before production release.
-  static const String supportWhatsApp = '923XXXXXXXXX';
+  static const String supportWhatsApp = '923001234567';
+
+  // ── SIMOSA (Phase 9) ─────────────────────────────────────────────────────
+  /// Play Store URL for the SIMOSA app (Jazz daily free MB offer).
+  static const String simosaPlayStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.jazz.world';
+
+  /// Deep-link / app package for intent-based launch (Android).
+  static const String simosaAppPackage = 'com.jazz.world';
+
+  /// Daily free data in MB offered via SIMOSA.
+  static const int simosaDailyMb = 100;
 }
 
 // ── Brand Colors ─────────────────────────────────────────────────────────────
@@ -277,4 +288,8 @@ class ApiPaths {
   static const String notifications      = '/api/notifications/';
   static const String notificationsRead  = '/api/notifications/read';
   static String notificationImage(int id) => '/api/notifications/image/$id';
+
+  // ── Phase 6: Data Usage ───────────────────────────────────────────────
+  static const String usage  = '/api/usage';
+  static const String quota  = '/api/usage/quota';
 }
