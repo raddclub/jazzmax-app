@@ -302,3 +302,26 @@ def db_update():
     response.headers["Content-Disposition"] = "attachment; filename=db_update.json"
     response.headers["Cache-Control"] = "no-cache"
     return response
+
+  @bp.route("/share_url")
+  def share_url():
+      """Return the JazzDrive share_url for a single file.
+      Used by Flutter player as fallback when local DB has no share_url.
+      GET /api/catalog/share_url?file_id=<series/ep_idx>
+      """
+      file_id = request.args.get("file_id", "").strip()
+      if not file_id:
+          return jsonify({"error": "file_id required"}), 400
+
+      with db.conn() as c:
+          # Episodes table stores file_id as "{title_id}/{ep_index}" or similar
+          row = c.execute(
+              "SELECT share_url FROM episodes WHERE file_id = ?",
+              (file_id,)
+          ).fetchone()
+
+      if not row:
+          return jsonify({"error": "not found"}), 404
+
+      return jsonify({"share_url": row["share_url"] or ""})
+  
