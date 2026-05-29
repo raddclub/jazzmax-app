@@ -442,6 +442,39 @@ _DDL = [
         UNIQUE(normalized_title, season, episode, quality)
     )""",
     "CREATE INDEX IF NOT EXISTS idx_media_idx_lookup ON media_index(normalized_title, season, episode)",
+    # ── watch_history — per-user per-file resume position (Phase 5)
+    """CREATE TABLE IF NOT EXISTS watch_history (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL REFERENCES app_users(id),
+        file_id     TEXT NOT NULL,
+        position_ms INTEGER DEFAULT 0,
+        duration_ms INTEGER DEFAULT 0,
+        watched_at  INTEGER DEFAULT (strftime('%s','now')),
+        UNIQUE(user_id, file_id)
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_watch_history_user ON watch_history(user_id, watched_at)",
+    # ── notifications — push notification inbox (Phase 9)
+    """CREATE TABLE IF NOT EXISTS notifications (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER REFERENCES app_users(id),
+        title       TEXT NOT NULL,
+        body        TEXT,
+        image_url   TEXT,
+        action_url  TEXT,
+        is_read     INTEGER DEFAULT 0,
+        created_at  INTEGER DEFAULT (strftime('%s','now'))
+    )""",
+    "CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, created_at)",
+    # ── payment_methods — admin-configurable gateways (Phase 8)
+    """CREATE TABLE IF NOT EXISTS payment_methods (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        code           TEXT UNIQUE NOT NULL,
+        name           TEXT NOT NULL,
+        account_number TEXT,
+        instructions   TEXT,
+        is_enabled     INTEGER DEFAULT 1,
+        sort_order     INTEGER DEFAULT 0
+    )""",
 ]
 
 

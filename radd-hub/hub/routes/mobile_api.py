@@ -1,0 +1,664 @@
+"""Mobile app authentication & subscription API endpoints.
+
+Serves:
+  /api/auth/*          — register, login, guest, refresh, logout, me, device-bind
+  /api/subscription/*  — plans, status, tid submit/status
+  /api/usage/*         — log bytes, get quota
+  /api/payment-methods — enabled payment gateways
+  /api/notifications/* — push notification inbox
+  /api/history/*       — watch history
+
+JWT authentication (HS256, signed with SESSION_SECRET):
+  Access token  — 15-min lifetime
+  Refresh token — 90-day lifetime, hash stored in app_refresh_tokens
+
+Device binding (Phase 5):
+  app_users.device_id = first device that logged in
+  Login from a different device returns 409 {"error": "device_conflict"}
+  Admin resets via /app-users panel
+"""
+from __future__ import annotations
+import base64 as _b64
+import hashlib
+import hmac as _hmac
+import json
+import logging
+import os
+import time
+from functools import wraps
+from typing import Optional
+
+from flask import Blueprint, jsonify, request
+
+from .. import db
+
+log = logging.getLogger("hub.mobile_api")
+
+# ── JWT helpers ────────────────────────────────────────────────────────────
+
+def _secret() -> str:
+    return (os.environ.get("SESSION_SECRET")
+            or os.environ.get("FLASK_SECRET_KEY")
+            or "raddflix-dev-secret-change-in-prod")
+
+def _b64url_encode(data: bytes) -> str:
+    return _b64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+def _b64url_decode(s: str) -> bytes:
+    s += "=" * ((4 - len(s) % 4) % 4)
+    return _b64.urlsafe_b64decode(s)
+
+def _make_jwt(payload: dict, lifetime_s: int) -> str:
+    header = _b64url_encode(b'{"alg":"HS256","typ":"JWT"}')
+    payload = dict(payload)
+    payload["exp"] = int(time.time()) + lifetime_s
+    body   = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode())
+    sig_input = f"{header}.{body}".encode()
+    sig    = _hmac.new(_secret().encode(), sig_input, hashlib.sha256).digest()
+    return f"{header}.{body}.{_b64url_encode(sig)}"
+
+def _verify_jwt(token: str) -> Optional[dict]:
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        header, body, sig = parts
+        sig_input = f"{header}.{body}".encode()
+        expected  = _hmac.new(_secret().encode(), sig_input, hashlib.sha256).digest()
+        actual    = _b64url_decode(sig)
+        if not _hmac.compare_digest(expected, actual):
+            return None
+        payload = json.loads(_b64url_decode(body))
+        if payload.get("exp", 0) < time.time():
+            return None
+        return payload
+    except Exception:
+        return None
+
+def _access_token(user_id: int, phone: str) -> str:
+    return _make_jwt({"sub": user_id, "phone": phone, "type": "access"}, 900)
+
+def _refresh_token_jwt(user_id: int, device_id: str) -> str:
+    return _make_jwt({"sub": user_id, "type": "refresh", "device": device_id}, 7_776_000)
+
+def _hash_password(pw: str) -> str:
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+def _require_auth(fn):
+    """Decorator: validate Bearer access token; injects _user_id and _phone."""
+    @wraps(fn)
+    def wrapper(*a, **kw):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "auth required"}), 401
+        token   = auth_header[7:]
+        payload = _verify_jwt(token)
+        if not payload or payload.get("type") != "access":
+            return jsonify({"error": "invalid or expired token"}), 401
+        # Guest tokens (sub=0) are valid but have limited access
+        kw["_user_id"] = int(payload["sub"])
+        kw["_phone"]   = payload.get("phone", "")
+        return fn(*a, **kw)
+    return wrapper
+
+# ── Blueprints ─────────────────────────────────────────────────────────────
+bp_auth  = Blueprint("mobile_auth",  __name__)
+bp_sub   = Blueprint("mobile_sub",   __name__)
+bp_usage = Blueprint("mobile_usage", __name__)
+bp_pay   = Blueprint("mobile_pay",   __name__)
+bp_notif = Blueprint("mobile_notif", __name__)
+bp_hist  = Blueprint("mobile_hist",  __name__)
+
+# ── Auth ───────────────────────────────────────────────────────────────────
+
+@bp_auth.route("/register", methods=["POST"])
+def register():
+    data     = request.get_json(silent=True) or {}
+    phone    = _normalize_phone((data.get("phone") or "").strip())
+    password = (data.get("password") or "").strip()
+    if not phone or not password:
+        return jsonify({"error": "phone and password required"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+    pw_hash = _hash_password(password)
+    now     = int(time.time())
+    try:
+        with db.conn() as c:
+            existing = c.execute(
+                "SELECT id FROM app_users WHERE phone=?", (phone,)
+            ).fetchone()
+            if existing:
+                return jsonify({"error": "Phone already registered"}), 409
+            c.execute(
+                "INSERT INTO app_users(phone, password_hash, created_at) VALUES(?,?,?)",
+                (phone, pw_hash, now)
+            )
+        return jsonify({"ok": True, "message": "Account created. Please log in."})
+    except Exception as e:
+        log.error("register error: %s", e)
+        return jsonify({"error": "Registration failed"}), 500
+
+
+@bp_auth.route("/login", methods=["POST"])
+def login():
+    data        = request.get_json(silent=True) or {}
+    phone       = _normalize_phone((data.get("phone") or "").strip())
+    password    = (data.get("password") or "").strip()
+    device_id   = (data.get("device_id") or "").strip()
+    device_name = (data.get("device_name") or "Android Device").strip()
+
+    if not phone or not password:
+        return jsonify({"error": "phone and password required"}), 400
+
+    pw_hash = _hash_password(password)
+    now     = int(time.time())
+
+    with db.conn() as c:
+        user = c.execute(
+            "SELECT * FROM app_users WHERE phone=? AND password_hash=?",
+            (phone, pw_hash)
+        ).fetchone()
+        if not user:
+            return jsonify({"error": "Invalid phone or password"}), 401
+        user = dict(user)
+        if not user.get("is_active", 1):
+            return jsonify({"error": "Account suspended. Contact support."}), 403
+
+        # ── Phase 5: Device binding enforcement ────────────────────────────
+        bound_device = user.get("device_id")
+        if device_id:
+            if bound_device and bound_device != device_id:
+                # A different device is already bound — return 409
+                log.warning(
+                    "device_conflict: user_id=%s bound=%s... attempted=%s...",
+                    user["id"], bound_device[:8], device_id[:8]
+                )
+                return jsonify({
+                    "error":             "device_conflict",
+                    "message":           (
+                        "This account is active on another device. "
+                        "Contact support on WhatsApp to switch devices."
+                    ),
+                    "bound_device_name": user.get("device_name") or "Another Device",
+                }), 409
+            if not bound_device:
+                # First login — bind this device
+                c.execute(
+                    "UPDATE app_users SET device_id=?, device_name=?, device_bound_at=? WHERE id=?",
+                    (device_id, device_name, now, user["id"])
+                )
+                user["device_id"] = device_id
+
+        # Update last_login_at
+        c.execute("UPDATE app_users SET last_login_at=? WHERE id=?", (now, user["id"]))
+
+    # Issue tokens
+    access  = _access_token(user["id"], phone)
+    refresh = _refresh_token_jwt(user["id"], device_id)
+    refresh_hash = _hash_token(refresh)
+
+    with db.conn() as c:
+        # Replace any existing refresh token for this device
+        c.execute(
+            "UPDATE app_refresh_tokens SET revoked=1 WHERE user_id=? AND device_id=?",
+            (user["id"], device_id)
+        )
+        c.execute(
+            "INSERT INTO app_refresh_tokens(user_id, token_hash, device_id, expires_at) "
+            "VALUES(?,?,?,?)",
+            (user["id"], refresh_hash, device_id, now + 7_776_000)
+        )
+
+    return jsonify({
+        "ok":            True,
+        "access_token":  access,
+        "refresh_token": refresh,
+        "user_id":       user["id"],
+        "phone":         phone,
+        "user": {
+            "id":    user["id"],
+            "phone": phone,
+            "plan":  _get_plan(user["id"]),
+        },
+    })
+
+
+@bp_auth.route("/guest", methods=["POST"])
+def guest():
+    token = _make_jwt(
+        {"sub": 0, "phone": "guest", "type": "access", "guest": True},
+        86_400  # 24h
+    )
+    return jsonify({"ok": True, "access_token": token})
+
+
+@bp_auth.route("/refresh", methods=["POST"])
+def refresh_token():
+    data  = request.get_json(silent=True) or {}
+    token = (data.get("refresh_token") or "").strip()
+    if not token:
+        return jsonify({"error": "refresh_token required"}), 400
+    payload = _verify_jwt(token)
+    if not payload or payload.get("type") != "refresh":
+        return jsonify({"error": "invalid or expired refresh token"}), 401
+    token_hash = _hash_token(token)
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT * FROM app_refresh_tokens "
+            "WHERE token_hash=? AND revoked=0 AND expires_at>?",
+            (token_hash, int(time.time()))
+        ).fetchone()
+        if not row:
+            return jsonify({"error": "refresh token revoked or expired"}), 401
+        user = c.execute(
+            "SELECT * FROM app_users WHERE id=?", (row["user_id"],)
+        ).fetchone()
+        if not user or not user["is_active"]:
+            return jsonify({"error": "account not found or suspended"}), 401
+    user = dict(user)
+    new_access = _access_token(user["id"], user["phone"])
+    return jsonify({
+        "ok":           True,
+        "access_token": new_access,
+        "user_id":      user["id"],
+    })
+
+
+@bp_auth.route("/logout", methods=["POST"])
+def logout():
+    data  = request.get_json(silent=True) or {}
+    token = (data.get("refresh_token") or "").strip()
+    if token:
+        token_hash = _hash_token(token)
+        with db.conn() as c:
+            c.execute(
+                "UPDATE app_refresh_tokens SET revoked=1 WHERE token_hash=?",
+                (token_hash,)
+            )
+    return jsonify({"ok": True})
+
+
+@bp_auth.route("/me")
+@_require_auth
+def me(_user_id, _phone):
+    if _user_id == 0:
+        return jsonify({"ok": True, "id": 0, "phone": "guest",
+                        "plan": "free", "subscription": {"is_active": False}})
+    with db.conn() as c:
+        user = c.execute(
+            "SELECT id, phone, device_name, is_active, created_at, last_login_at "
+            "FROM app_users WHERE id=?", (_user_id,)
+        ).fetchone()
+    if not user:
+        return jsonify({"error": "user not found"}), 404
+    user = dict(user)
+    sub  = _get_subscription_status(_user_id)
+    return jsonify({
+        "ok":          True,
+        "id":          user["id"],
+        "phone":       user["phone"],
+        "plan":        sub.get("plan", "free"),
+        "device_name": user.get("device_name"),
+        "subscription": sub,
+        "is_active":   bool(user.get("is_active", 1)),
+    })
+
+
+@bp_auth.route("/device", methods=["POST"])
+@_require_auth
+def bind_device(_user_id, _phone):
+    data        = request.get_json(silent=True) or {}
+    device_id   = (data.get("device_id") or "").strip()
+    device_name = (data.get("device_name") or "Android Device").strip()
+    if not device_id:
+        return jsonify({"error": "device_id required"}), 400
+    now = int(time.time())
+    with db.conn() as c:
+        user = c.execute(
+            "SELECT device_id FROM app_users WHERE id=?", (_user_id,)
+        ).fetchone()
+        if user and user["device_id"] and user["device_id"] != device_id:
+            return jsonify({
+                "error":   "device_conflict",
+                "message": "Another device is already bound to this account.",
+            }), 409
+        c.execute(
+            "UPDATE app_users SET device_id=?, device_name=?, device_bound_at=? WHERE id=?",
+            (device_id, device_name, now, _user_id)
+        )
+    return jsonify({"ok": True, "bound": True})
+
+
+# ── Subscription API ────────────────────────────────────────────────────────
+
+@bp_sub.route("/plans")
+def plans():
+    plan_rows = db.list_plans(active_only=True)
+    out = []
+    for p in plan_rows:
+        try:
+            features = json.loads(p.get("features") or "[]")
+        except Exception:
+            features = []
+        # Derive Jazz savings message
+        gb = p.get("monthly_limit_gb") or 0
+        price = p.get("price_pkr") or 0
+        jazz_cost = round(gb * 15, 0) if gb else 0  # ~Rs.15/GB on Jazz bundles
+        savings_pct = round((1 - price / jazz_cost) * 100) if jazz_cost and price else 0
+        savings_msg = (
+            f"{savings_pct}% cheaper than Jazz data alone"
+            if savings_pct > 0 else ""
+        )
+        out.append({
+            "id":              str(p["id"]),
+            "name":            p.get("name", ""),
+            "price_monthly":   price,
+            "data_gb":         gb,
+            "max_devices":     p.get("max_devices") or 1,
+            "duration_days":   p.get("duration_days") or 30,
+            "features":        features,
+            "is_active":       bool(p.get("is_active", 1)),
+            "color":           p.get("color") or "#E8002D",
+            "jazz_savings_msg": savings_msg,
+        })
+    # Seed default plans if none exist
+    if not out:
+        out = [
+            {"id": "basic",    "name": "Basic",    "price_monthly": 149,
+             "data_gb": 30,  "max_devices": 1, "duration_days": 30,
+             "features": ["Zero-data streaming", "SD 480p quality", "Free content"],
+             "is_active": True, "color": "#E8002D",
+             "jazz_savings_msg": ""},
+            {"id": "standard", "name": "Standard", "price_monthly": 249,
+             "data_gb": 50,  "max_devices": 1, "duration_days": 30,
+             "features": ["Zero-data streaming", "HD 720p quality", "All content"],
+             "is_active": True, "color": "#7C5CFF",
+             "jazz_savings_msg": ""},
+            {"id": "premium",  "name": "Premium",  "price_monthly": 399,
+             "data_gb": 100, "max_devices": 2, "duration_days": 30,
+             "features": ["Zero-data streaming", "Full HD 1080p", "All content", "2 devices"],
+             "is_active": True, "color": "#22C55E",
+             "jazz_savings_msg": ""},
+        ]
+    return jsonify({"ok": True, "plans": out})
+
+
+@bp_sub.route("/status")
+@_require_auth
+def subscription_status(_user_id, _phone):
+    if _user_id == 0:
+        return jsonify({"ok": True, "is_active": False, "plan": "free"})
+    sub = _get_subscription_status(_user_id)
+    return jsonify({"ok": True, **sub})
+
+
+@bp_sub.route("/tid/submit", methods=["POST"])
+@_require_auth
+def tid_submit(_user_id, _phone):
+    data           = request.get_json(silent=True) or {}
+    phone          = (data.get("phone") or _phone).strip()
+    tid            = (data.get("tid") or "").strip()
+    plan           = (data.get("plan") or "basic").strip()
+    payment_method = (data.get("payment_method") or "jazzcash").strip()
+    if not tid:
+        return jsonify({"error": "Transaction ID is required"}), 400
+    if len(tid) < 5:
+        return jsonify({"error": "Enter a valid Transaction ID"}), 400
+    now = int(time.time())
+    with db.conn() as c:
+        c.execute(
+            "INSERT INTO tid_payments"
+            "(user_id, phone, amount_pkr, tid, payment_method, plan, submitted_at) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (_user_id, phone, 0, tid, payment_method, plan, now)
+        )
+    return jsonify({
+        "ok":      True,
+        "message": "TID submitted. You'll be notified within 24 hours.",
+    })
+
+
+@bp_sub.route("/tid/status")
+@_require_auth
+def tid_status(_user_id, _phone):
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT * FROM tid_payments WHERE user_id=? ORDER BY submitted_at DESC LIMIT 1",
+            (_user_id,)
+        ).fetchone()
+    if not row:
+        return jsonify({"ok": True, "status": "none", "tid": None})
+    row = dict(row)
+    return jsonify({
+        "ok":           True,
+        "status":       row.get("status", "pending"),
+        "tid":          row.get("tid"),
+        "plan":         row.get("plan"),
+        "admin_note":   row.get("admin_note"),
+        "submitted_at": row.get("submitted_at"),
+        "reviewed_at":  row.get("reviewed_at"),
+    })
+
+
+# ── Usage API (Phase 6) ─────────────────────────────────────────────────────
+
+@bp_usage.route("", methods=["POST"])
+@_require_auth
+def log_usage_endpoint(_user_id, _phone):
+    """Accept bytes_used report from the Flutter app."""
+    if _user_id == 0:
+        return jsonify({"ok": True, "quota": {"allowed": True}})
+    data       = request.get_json(silent=True) or {}
+    bytes_used = int(data.get("bytes_used") or data.get("bytes") or 0)
+    if bytes_used < 0:
+        return jsonify({"error": "bytes_used must be non-negative"}), 400
+    user_jid = f"app_{_user_id}"
+    db.log_usage(user_jid, bytes_used=bytes_used, requests=1)
+    quota = db.check_quota(user_jid)
+    return jsonify({"ok": True, "quota": quota})
+
+
+@bp_usage.route("/quota")
+@_require_auth
+def get_quota(_user_id, _phone):
+    if _user_id == 0:
+        return jsonify({"ok": True, "quota": {"allowed": True, "plan_name": "guest"}})
+    user_jid = f"app_{_user_id}"
+    quota    = db.check_quota(user_jid)
+    today    = db.get_usage_today(user_jid)
+    month    = db.get_usage_month(user_jid)
+    return jsonify({
+        "ok":    True,
+        "quota": quota,
+        "today": today,
+        "month": month,
+    })
+
+
+# ── Payment methods API ─────────────────────────────────────────────────────
+
+@bp_pay.route("")
+def payment_methods():
+    """Public — returns enabled payment gateways (no auth required)."""
+    try:
+        with db.conn() as c:
+            rows = c.execute(
+                "SELECT code, name, account_number, instructions, is_enabled "
+                "FROM payment_methods WHERE is_enabled=1 ORDER BY sort_order ASC"
+            ).fetchall()
+        if rows:
+            methods = [dict(r) for r in rows]
+        else:
+            raise Exception("no rows")
+    except Exception:
+        methods = [
+            {"code": "jazzcash",  "name": "JazzCash",
+             "account_number": "03xxxxxxxxx",
+             "instructions":   "Send to this JazzCash number, then enter your Transaction ID.",
+             "is_enabled": True},
+            {"code": "easypaisa", "name": "EasyPaisa",
+             "account_number": "03xxxxxxxxx",
+             "instructions":   "Send to this EasyPaisa account, then enter your Transaction ID.",
+             "is_enabled": True},
+        ]
+    out = [{
+        "code":           m.get("code", ""),
+        "name":           m.get("name", ""),
+        "account_number": m.get("account_number") or "",
+        "instructions":   m.get("instructions") or "",
+        "enabled":        bool(m.get("is_enabled", True)),
+    } for m in methods]
+    return jsonify({"ok": True, "methods": out})
+
+
+# ── Notifications API ───────────────────────────────────────────────────────
+
+@bp_notif.route("/")
+@_require_auth
+def list_notifications(_user_id, _phone):
+    try:
+        with db.conn() as c:
+            rows = c.execute(
+                "SELECT id, title, body, image_url, action_url, is_read, created_at "
+                "FROM notifications WHERE (user_id=? OR user_id IS NULL) "
+                "ORDER BY created_at DESC LIMIT 50",
+                (_user_id,)
+            ).fetchall()
+        return jsonify({"ok": True, "notifications": [dict(r) for r in rows]})
+    except Exception:
+        return jsonify({"ok": True, "notifications": []})
+
+
+@bp_notif.route("/read", methods=["POST"])
+@_require_auth
+def mark_read(_user_id, _phone):
+    try:
+        with db.conn() as c:
+            c.execute(
+                "UPDATE notifications SET is_read=1 WHERE user_id=? OR user_id IS NULL",
+                (_user_id,)
+            )
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
+@bp_notif.route("/image/<int:notif_id>")
+def notif_image(notif_id):
+    try:
+        with db.conn() as c:
+            row = c.execute(
+                "SELECT image_url FROM notifications WHERE id=?", (notif_id,)
+            ).fetchone()
+        if row and row["image_url"]:
+            from flask import redirect
+            return redirect(row["image_url"])
+    except Exception:
+        pass
+    return jsonify({"error": "not found"}), 404
+
+
+# ── Watch History API ───────────────────────────────────────────────────────
+
+@bp_hist.route("")
+@_require_auth
+def get_history(_user_id, _phone):
+    if _user_id == 0:
+        return jsonify({"ok": True, "history": []})
+    try:
+        with db.conn() as c:
+            rows = c.execute(
+                "SELECT file_id, position_ms, duration_ms, watched_at "
+                "FROM watch_history WHERE user_id=? ORDER BY watched_at DESC LIMIT 50",
+                (_user_id,)
+            ).fetchall()
+        return jsonify({"ok": True, "history": [dict(r) for r in rows]})
+    except Exception:
+        return jsonify({"ok": True, "history": []})
+
+
+@bp_hist.route("/<file_id>", methods=["POST"])
+@_require_auth
+def save_history(file_id, _user_id, _phone):
+    if _user_id == 0:
+        return jsonify({"ok": True})
+    data        = request.get_json(silent=True) or {}
+    position_ms = int(data.get("position_ms") or 0)
+    duration_ms = int(data.get("duration_ms") or 0)
+    now         = int(time.time())
+    try:
+        with db.conn() as c:
+            c.execute(
+                "INSERT INTO watch_history"
+                "(user_id, file_id, position_ms, duration_ms, watched_at) "
+                "VALUES(?,?,?,?,?) "
+                "ON CONFLICT(user_id, file_id) DO UPDATE SET "
+                "position_ms=excluded.position_ms, "
+                "duration_ms=excluded.duration_ms, "
+                "watched_at=excluded.watched_at",
+                (_user_id, file_id, position_ms, duration_ms, now)
+            )
+    except Exception as e:
+        log.warning("save_history error: %s", e)
+    return jsonify({"ok": True})
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+def _normalize_phone(phone: str) -> str:
+    phone = phone.strip().replace(" ", "").replace("-", "")
+    if phone.startswith("+92"):
+        phone = "0" + phone[3:]
+    elif phone.startswith("92") and len(phone) == 12:
+        phone = "0" + phone[2:]
+    return phone
+
+
+def _get_plan(user_id: int) -> str:
+    now = int(time.time())
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT plan FROM app_subscriptions "
+            "WHERE user_id=? AND is_active=1 AND expires_at>? "
+            "ORDER BY id DESC LIMIT 1",
+            (user_id, now)
+        ).fetchone()
+    return row["plan"] if row else "free"
+
+
+def _get_subscription_status(user_id: int) -> dict:
+    now = int(time.time())
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT s.plan, s.expires_at, p.name as plan_name, "
+            "p.monthly_limit_gb, p.daily_limit_gb "
+            "FROM app_subscriptions s "
+            "LEFT JOIN plans p ON LOWER(p.name)=LOWER(s.plan) "
+            "WHERE s.user_id=? AND s.is_active=1 AND s.expires_at>? "
+            "ORDER BY s.id DESC LIMIT 1",
+            (user_id, now)
+        ).fetchone()
+    if not row:
+        return {"is_active": False, "plan": "free", "expires_at": None}
+    row = dict(row)
+    return {
+        "is_active":          True,
+        "plan":               row.get("plan", "free"),
+        "plan_name":          row.get("plan_name") or row.get("plan", "free").title(),
+        "expires_at":         _epoch_to_iso(row.get("expires_at")),
+        "monthly_limit_gb":   row.get("monthly_limit_gb"),
+        "daily_limit_gb":     row.get("daily_limit_gb"),
+    }
+
+
+def _epoch_to_iso(ts) -> Optional[str]:
+    if not ts:
+        return None
+    try:
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(int(ts), tz=timezone.utc).isoformat()
+    except Exception:
+        return None

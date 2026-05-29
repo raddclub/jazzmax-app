@@ -73,7 +73,7 @@ def create_app() -> Flask:
     from .routes import home, settings as settings_route, library, scan, upload, \
                         stream, admin, bots, api, db_mgmt, organizer as organizer_route, \
                         tid_panel, app_users_panel, analytics, subscriptions, broadcast, zero_rating, \
-                        plans_panel, payment_gateway
+                        plans_panel, payment_gateway, mobile_api
     app.register_blueprint(auth.bp,                    url_prefix="/auth")
     app.register_blueprint(home.bp)
     app.register_blueprint(settings_route.bp,          url_prefix="/settings")
@@ -94,6 +94,13 @@ def create_app() -> Flask:
     app.register_blueprint(zero_rating.bp,             url_prefix="/zero-rating")
     app.register_blueprint(plans_panel.bp,            url_prefix="/plans")
     app.register_blueprint(payment_gateway.bp,        url_prefix="/billing")
+    # ── Mobile app API (Phase 5-9) ────────────────────────────────────────
+    app.register_blueprint(mobile_api.bp_auth,         url_prefix="/api/auth")
+    app.register_blueprint(mobile_api.bp_sub,          url_prefix="/api/subscription")
+    app.register_blueprint(mobile_api.bp_usage,        url_prefix="/api/usage")
+    app.register_blueprint(mobile_api.bp_pay,          url_prefix="/api/payment-methods")
+    app.register_blueprint(mobile_api.bp_notif,        url_prefix="/api/notifications")
+    app.register_blueprint(mobile_api.bp_hist,         url_prefix="/api/history")
 
     # ------------------------------------------------------------------
     # Download proxy — /d/<remote_id>
