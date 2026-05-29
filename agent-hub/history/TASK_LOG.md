@@ -1782,3 +1782,18 @@ Continue the comprehensive audit of all Flutter application files. Identify feat
   ### Build required
   All changes are on `main` branch. A new APK build must be triggered via GitHub Actions (`.github/workflows/build_apk.yml`) to produce a distributable APK. The user has been running the build from commit 9ca5976; the fixes above require a fresh build.
   
+
+  ---
+
+  ## Session 7b — 2025-05-29 (MX Player exact layout)
+
+  ### Commit: `20fda619`
+
+  ### Changes
+  - **Right strip DELETED** — was 5 items (Audio/Sub/Fit/Speed/More), now zero. Nothing floats on the right side during playback.
+  - **Top bar simplified** — back | title | audio-track icon (only when >1 track) | subtitle icon | ⋮ (more_vert). Removed: rotation badge, cast, PiP, lock icons.
+  - **Center seek buttons** — replaced `_MxSeekBtn` (had circle outline) with plain Column(Icon + "15s" text) — exactly MX Player's style.
+  - **Bottom bar** — right padding 58→12 (was offset to avoid the now-deleted strip).
+  - **More sheet expanded** — now contains all controls: Fit, Speed, Night, A-B Loop, Sleep, Bookmarks, EQ, Screenshot, Cast, PiP, Rotate, Settings.
+  - Cast/PiP/Rotation moved from top bar into More sheet.
+  
