@@ -101,6 +101,7 @@ def create_app() -> Flask:
     app.register_blueprint(mobile_api.bp_pay,          url_prefix="/api/payment-methods")
     app.register_blueprint(mobile_api.bp_notif,        url_prefix="/api/notifications")
     app.register_blueprint(mobile_api.bp_hist,         url_prefix="/api/history")
+    register_blueprint(mobile_api.bp_app,          url_prefix="/api/app")
 
     # ------------------------------------------------------------------
     # Download proxy — /d/<remote_id>
