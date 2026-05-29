@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -361,12 +361,8 @@ class _HeroCard extends StatelessWidget {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: Stack(fit: StackFit.expand, children: [
-            // Background image
-            item.posterUrl != null
-                ? CachedNetworkImage(imageUrl: item.posterUrl!, fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => Container(color: AppColors.card,
-                        child: const Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 48)))
-                : Container(color: AppColors.card),
+            // Task 3.5: prefer local cached poster file; fallback to network URL
+            _buildPosterImage(),
             // Gradient
             Builder(builder: (ctx) => DecoratedBox(decoration: BoxDecoration(gradient: ctx.raddHeroGradient))),
             // Content
@@ -411,6 +407,40 @@ class _HeroCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildPosterImage() {
+    const placeholder = DecoratedBox(
+      decoration: BoxDecoration(color: AppColors.card),
+      child: Center(child: Icon(Icons.movie_outlined, color: AppColors.textMuted, size: 48)),
+    );
+
+    // 1. Local file (permanent cached poster — zero network, instant load)
+    if (item.posterPath != null) {
+      return Image.file(
+        File(item.posterPath!),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => item.posterUrl != null
+            ? CachedNetworkImage(
+                imageUrl: item.posterUrl!,
+                fit: BoxFit.cover,
+                errorWidget: (_, __, ___) => placeholder,
+              )
+            : placeholder,
+      );
+    }
+
+    // 2. Network URL (TMDB/OMDB — requires internet)
+    if (item.posterUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: item.posterUrl!,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => placeholder,
+      );
+    }
+
+    // 3. No image available
+    return placeholder;
   }
 }
 

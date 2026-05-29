@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import '../db/local_db.dart';
 import '../debug/debug_logger.dart';
+import 'poster_service.dart';
 
 /// Result of a successful JazzDrive link generation.
 class JazzDriveLink {
@@ -76,13 +78,16 @@ class JazzDriveService {
   ///
   /// [fileId]   — the file's ID (used as cache key)
   /// [shareUrl] — the JazzDrive share URL (stored in local DB)
+  /// [titleId]  — optional title ID; when provided, the JazzDrive poster thumbnail
+  ///              is saved permanently to device storage at no extra network cost.
   ///
   /// Returns a [JazzDriveLink] with streamUrl + optional posterUrl.
   /// Throws if all attempts fail.
   static Future<JazzDriveLink> getStreamLink(
     String fileId,
-    String shareUrl,
-  ) async {
+    String shareUrl, {
+    int? titleId,
+  }) async {
     // 1. Check in-memory cache
     final mem = _inMemory[fileId];
     if (mem != null && mem.expiresAt.isAfter(DateTime.now())) {
@@ -132,6 +137,13 @@ class JazzDriveService {
       posterUrl: link.posterUrl,
       expiresAt: expiresAt.millisecondsSinceEpoch ~/ 1000,
     );
+
+    // Task 3.7 — poster comes free with every fresh link; save it permanently.
+    // Fire-and-forget: never blocks playback. Only runs when a fresh API call was needed.
+    if (titleId != null && titleId > 0 &&
+        link.posterUrl != null && link.posterUrl!.isNotEmpty) {
+      unawaited(PosterService.saveFromJazzDrive(titleId, link.posterUrl!));
+    }
 
     DebugLogger.log('JAZZDRIVE', 'Generated + cached link for file $fileId → ${link.filename}');
     return link;

@@ -58,9 +58,9 @@
 | 3.2 | runBackgroundSync() — 100 posters/day background download | ✅ | Called from catalog_provider |
 | 3.3 | saveFromJazzDrive() — zero-rated poster saving method | 🔧 Built | **Gap 3: never called from jazzdrive_service.dart** |
 | 3.4 | poster_path column in local SQLite | ✅ | Schema exists |
-| 3.5 | **FIX**: home_screen — use local poster_path not network URL | ⬜ | CachedNetworkImage ignores local file |
-| 3.6 | **FIX**: downloadAndCache → call LocalDb.savePosterPath() | ⬜ | Path never saved to DB after download |
-| 3.7 | **FIX**: jazzdrive_service → call PosterService.saveFromJazzDrive() | ⬜ | Method exists but nothing calls it |
+| 3.5 | **FIX**: home_screen — use local poster_path not network URL | ✅ | CachedNetworkImage ignores local file |
+| 3.6 | **FIX**: downloadAndCache → call LocalDb.savePosterPath() | ✅ | Path never saved to DB after download |
+| 3.7 | **FIX**: jazzdrive_service → call PosterService.saveFromJazzDrive() | ✅ | Method exists but nothing calls it |
 
 ---
 
@@ -159,7 +159,7 @@
 
 | ID | Description | File | Priority |
 |----|------------|------|---------|
-| BUG-P1 | Poster system 3 gaps (home_screen, savePosterPath, saveFromJazzDrive) | poster_service.dart, home_screen.dart, jazzdrive_service.dart | High |
+| ~~BUG-P1~~ | ~~Poster system 3 gaps~~ | ~~Fixed (2026-05-29)~~ | ~~High~~ |
 | BUG-P2 | stream cache TTL is 180 min but applies to both watch + download (ok) | constants.dart | Low |
 | BUG-P3 | AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder | constants.dart | Pre-launch |
 | BUG-P4 | Zero-Rating page shows stale 69 titles (old db_update.json, May 26) | zero_rating.py | Low |

@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
+import '../db/local_db.dart';
 import '../debug/debug_logger.dart';
-import 'jazzdrive_service.dart';
 
 /// Manages poster images with a smart priority chain and permanent hidden storage.
 ///
@@ -59,6 +59,7 @@ class PosterService {
   }
 
   /// Download a poster from [url] and save it permanently.
+  /// Also persists the local path to SQLite so home_screen can find it instantly.
   /// No-op if already on disk. Safe to call multiple times.
   static Future<String?> downloadAndCache(int titleId, String url) async {
     await init();
@@ -68,6 +69,8 @@ class PosterService {
 
     try {
       await _dio.download(url, file.path);
+      // Task 3.6: persist local path so CatalogItem.posterPath is populated on next load
+      await LocalDb.savePosterPath(titleId, file.path);
       DebugLogger.log('POSTER', 'Saved poster for title $titleId');
       return file.path;
     } catch (e) {
@@ -87,6 +90,8 @@ class PosterService {
     if (await file.exists()) return;
     try {
       await _dio.download(jdUrl, file.path);
+      // Persist path so UI picks it up on next app launch
+      await LocalDb.savePosterPath(titleId, file.path);
       DebugLogger.log('POSTER', 'Saved JazzDrive poster for title $titleId');
     } catch (e) {
       DebugLogger.logError('POSTER', 'JazzDrive poster save failed for $titleId', e);

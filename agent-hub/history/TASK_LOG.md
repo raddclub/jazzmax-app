@@ -2083,3 +2083,34 @@ agent (or this agent after memory loss) can instantly resume work with full cont
 - CI builds should be passing (last fix: 39ccbd77)
 
 ---
+
+## [2026-05-29 16:00 UTC] — Agent: Replit Agent (Poster System Fix Session)
+
+### Task
+Fix the 3 poster system gaps identified in Phase 3: tasks 3.5, 3.6, 3.7.
+
+### Done
+- Read REINCARNATION.md, MASTER_TASKLIST.md, SKILLS.md, TASK_LOG.md — full context loaded
+- Verified CI: last build successful (commit 97455c9)
+- Fetched and analysed home_screen.dart, poster_service.dart, jazzdrive_service.dart, local_db.dart
+- **Fix 3.5** — `home_screen.dart` `_HeroCard`: was using `CachedNetworkImage(posterUrl)` exclusively, ignoring `item.posterPath`. Refactored into `_buildPosterImage()` helper: checks `posterPath` (local File) first → falls back to `CachedNetworkImage(posterUrl)` → falls back to placeholder. Added `import 'dart:io';`.
+- **Fix 3.6** — `poster_service.dart` `downloadAndCache()`: after successful `_dio.download()`, now calls `LocalDb.savePosterPath(titleId, file.path)` so the path is persisted to SQLite immediately. Also added same call inside `saveFromJazzDrive()`. Removed unused `import 'jazzdrive_service.dart'` (was dead import, caused circular-import risk); added `import '../db/local_db.dart'` instead.
+- **Fix 3.7** — `jazzdrive_service.dart` `getStreamLink()`: added optional `{int? titleId}` parameter. After generating a fresh JazzDrive link (step 3 only — not cache hits), fires `unawaited(PosterService.saveFromJazzDrive(titleId, link.posterUrl!))` so the JazzDrive thumbnail is saved permanently at zero extra network cost. Added `import 'dart:async'` and `import 'poster_service.dart'`.
+- Committed all 3 files + MASTER_TASKLIST + TASK_LOG in one atomic commit
+
+### Files Changed
+- `raddflix_flutter/lib/screens/home_screen.dart` — added `dart:io` import; `_HeroCard` now uses `_buildPosterImage()` that checks local file before network URL
+- `raddflix_flutter/lib/core/services/poster_service.dart` — removed dead `jazzdrive_service` import; added `local_db` import; `downloadAndCache` + `saveFromJazzDrive` both call `LocalDb.savePosterPath` after saving file
+- `raddflix_flutter/lib/core/services/jazzdrive_service.dart` — added `dart:async` + `poster_service` imports; `getStreamLink` has new optional `{int? titleId}` param; fires `PosterService.saveFromJazzDrive` on fresh link generation
+- `agent-hub/MASTER_TASKLIST.md` — tasks 3.5, 3.6, 3.7 marked ✅; BUG-P1 removed (all 3 sub-gaps fixed)
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- Phase 3 poster system is now complete (all 3 gaps fixed)
+- BUG-P1 is resolved — remove from open issues list
+- Callers of `JazzDriveService.getStreamLink` should pass `titleId` to get free poster saving (optional — existing callers without it still work correctly)
+- Recommended next: Phase 4 SQLCipher (task 4.1–4.5) — security foundation before public launch
+- Oracle SSH still unreachable from Replit — GitHub API only
+- CI triggered by this commit — verify it passes before next session
+
+---
