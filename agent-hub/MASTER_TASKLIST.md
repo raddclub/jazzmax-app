@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-29 (Phase 7 complete)
+> Last updated: 2026-05-29 (Phase 7 complete, CI green — sqflite_sqlcipher 3.1.0+1)
 > Read PRODUCT_CONTEXT.md first. This file tracks every task — done, in progress, and upcoming.
 > Update this file at the end of every session.
 
@@ -68,7 +68,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 4.1 | Add sqflite_sqlcipher to pubspec | ✅ | Replaces sqflite |
+| 4.1 | Add sqflite_sqlcipher to pubspec | ✅ | 3.1.0+1 — last release before Gradle break |
 | 4.2 | Android Keystore key generation on first run | ✅ | keystore.dart exists, wire it to DB open |
 | 4.3 | Open SQLite with SQLCipher + Keystore key | ✅ | local_db.dart openDatabase call |
 | 4.4 | Encrypt JazzDrive share folder URLs in SQLite | ✅ | Most critical field to protect |
