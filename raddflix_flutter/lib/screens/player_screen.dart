@@ -2162,7 +2162,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     fitLabel: _ratios[_ratioIdx] == BoxFit.contain ? 'Fit'
                         : _ratios[_ratioIdx] == BoxFit.cover ? 'Crop' : 'Fill',
                     castConnected: _castConnected,
-                    onFit: () { setState(() => _showMorePanel = false); _cycleAspect(); },
+                    onFit: () { setState(() => _showMorePanel = false); _cycleFit(); },
                     onSpeed: () { setState(() { _showMorePanel = false; _showSpeedPicker = !_showSpeedPicker; }); },
                     onNight: () { setState(() { _showMorePanel = false; }); _toggleCinematic(); },
                     onLoop: () { setState(() { _showMorePanel = false; _showAbPanel = !_showAbPanel; }); },
