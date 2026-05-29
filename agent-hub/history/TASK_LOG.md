@@ -2149,3 +2149,66 @@ Implement Phase 4: encrypt the local SQLite database with SQLCipher + Android Ke
 - CI triggered by this commit — verify it passes (sqflite_sqlcipher adds a native Android library, build time will be slightly longer).
 
 ---
+
+## [2026-05-29 17:00 UTC] — Agent: Replit Agent (Phase 7 CI + Phase 4 sqflite fix)
+
+### Task
+1. Verify Phase 7 CI results (f84ea34 — Delta JSON system)
+2. Fix Phase 4 pubspec Gradle failure (sqflite_sqlcipher version)
+
+### Done
+- Confirmed Phase 7 CI green on commit `f84ea34` (both build-apk + ci-tests ✅)
+- Diagnosed Phase 4 Gradle failure root cause: `sqflite_sqlcipher 3.2.0` changed `build.gradle` line 25 to use `flutter.compileSdkVersion` — a Flutter DSL property unavailable in the `LibraryExtension` context when building with Flutter 3.22 CI's AGP setup
+- Attempt 1: Tried downgrading to `3.1.1` — pub.dev reports "doesn't match any versions" (3.1.1 does not exist; actual versions are 3.1.0, 3.1.0+1)
+- Attempt 2: Queried pub.dev API for all sqflite_sqlcipher versions and their SDK requirements:
+  - 3.0.0, 3.1.0, 3.1.0+1: dart >=3.3.0, flutter >=3.19.0 ✅ compatible
+  - 3.2.0: has Gradle build.gradle issue
+  - 3.2.1+: requires Flutter >=3.27.0 (fails pub version solving on Flutter 3.22)
+- Pinned to `sqflite_sqlcipher: 3.1.0+1` (last version before 3.2.0's Gradle change)
+- Commit `053eb86`: pubspec fix — sqflite_sqlcipher 3.1.0+1
+- CI result: **both `Build RaddFlix APK ✅` and `RaddFlix CI ✅`** — fully green
+- Commit `c0d940a`: MASTER_TASKLIST updated with CI-green note
+- Saved memory in `.agents/memory/` for sqflite version constraint
+
+### Files Changed
+- `raddflix_flutter/pubspec.yaml` — `sqflite_sqlcipher: 3.1.0+1` (exact pin)
+- `agent-hub/MASTER_TASKLIST.md` — Phase 4 task 4.1 note updated; CI-green confirmed
+
+### Notes for Next Agent
+- **sqflite_sqlcipher MUST stay pinned to exactly `3.1.0+1`** — no caret, no upgrade until CI upgrades to Flutter 3.27+
+- Phase 3 ✅, Phase 4 ✅, Phase 7 ✅ — all CI green as of commit `c0d940a`
+- Recommended next: Phase 5 (Device Binding) or Phase 6 (Data Usage Tracking)
+- The build-apk.yml already includes a Gradle namespace auto-patch step — do not remove it
+
+---
+
+## [2026-05-29 17:30 UTC] — Agent: Replit Agent (Documentation + Reincarnation Update)
+
+### Task
+Update all .md files and write comprehensive reincarnation prompt for next AI session.
+
+### Done
+- Rewrote `agent-hub/REINCARNATION.md` — 392 lines, fully standalone reincarnation prompt covering:
+  - All CRITICAL RULES (including new sqflite version lock)
+  - Complete GitHub API commit pattern
+  - What's built in each phase (1, 2, 3, 4, 7)
+  - **Full Review & Test Checklist** (Steps 0–10) with bash commands for every verification
+  - Technical notes (version lock, Gradle patch, mergeDeltaTitle vs upsertTitle)
+  - Key file locations
+  - Recommended next tasks (Phase 5 vs 6 vs 8)
+- Updated `agent-hub/MASTER_TASKLIST.md` — added sqflite version lock warning to Phase 4, corrected all statuses, added CI-verified marker
+- Appended to `agent-hub/history/TASK_LOG.md` — two new session entries
+- Wrote `agent-hub/HANDOFF_2026_05_29.md` — end-of-day handoff document
+
+### Files Changed
+- `agent-hub/REINCARNATION.md`
+- `agent-hub/MASTER_TASKLIST.md`
+- `agent-hub/history/TASK_LOG.md`
+- `agent-hub/HANDOFF_2026_05_29.md`
+
+### Notes for Next Agent
+- Read REINCARNATION.md first — it's been fully updated with everything needed
+- Run the 10-step verification checklist before writing any code
+- CI is green on `c0d940a` — all phases 1-4 and 7 verified
+
+---

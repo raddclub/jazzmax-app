@@ -1,12 +1,12 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-29 (Phase 7 complete, CI green — sqflite_sqlcipher 3.1.0+1)
+> Last updated: 2026-05-29 (Phase 7 ✅ CI green | Phase 4 ✅ CI green | sqflite_sqlcipher 3.1.0+1)
 > Read PRODUCT_CONTEXT.md first. This file tracks every task — done, in progress, and upcoming.
 > Update this file at the end of every session.
 
 ---
 
 ## How to read this file
-- ✅ Done and verified
+- ✅ Done and CI-verified
 - 🔧 Built but has known gaps (see notes)
 - ⬜ Not started
 - 🔲 Blocked (reason noted)
@@ -17,9 +17,9 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 0.1 | GitHub Actions CI (build-apk.yml + ci-tests.yml) | ✅ | Running, Node.js 24 env var added |
+| 0.1 | GitHub Actions CI (build-apk.yml + ci-tests.yml) | ✅ | Running, Node.js 24, Java 17, Flutter 3.22.x |
 | 0.2 | Oracle server running (Flask admin + Watch API) | ✅ | Supervisor managed |
-| 0.3 | SSH from Replit to Oracle | 🔲 Blocked | Port 22 unreachable from Replit container. Use GitHub API for all file changes. |
+| 0.3 | SSH from Replit to Oracle | 🔲 Blocked | Port 22 unreachable from Replit. Use GitHub API for all file changes. |
 
 ---
 
@@ -56,11 +56,11 @@
 |---|------|--------|-------|
 | 3.1 | PosterService — permanent storage, never re-download | ✅ | poster_service.dart |
 | 3.2 | runBackgroundSync() — 100 posters/day background download | ✅ | Called from catalog_provider |
-| 3.3 | saveFromJazzDrive() — zero-rated poster saving method | 🔧 Built | **Gap 3: never called from jazzdrive_service.dart** |
+| 3.3 | saveFromJazzDrive() — zero-rated poster saving method | ✅ | Called from jazzdrive_service.dart |
 | 3.4 | poster_path column in local SQLite | ✅ | Schema exists |
-| 3.5 | **FIX**: home_screen — use local poster_path not network URL | ✅ | CachedNetworkImage ignores local file |
-| 3.6 | **FIX**: downloadAndCache → call LocalDb.savePosterPath() | ✅ | Path never saved to DB after download |
-| 3.7 | **FIX**: jazzdrive_service → call PosterService.saveFromJazzDrive() | ✅ | Method exists but nothing calls it |
+| 3.5 | **FIX**: home_screen — use local poster_path not network URL | ✅ | _buildPosterImage() helper checks local File first |
+| 3.6 | **FIX**: downloadAndCache → call LocalDb.savePosterPath() | ✅ | Path saved to DB after download |
+| 3.7 | **FIX**: jazzdrive_service → call PosterService.saveFromJazzDrive() | ✅ | Called on fresh link generation |
 
 ---
 
@@ -68,11 +68,14 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 4.1 | Add sqflite_sqlcipher to pubspec | ✅ | 3.1.0+1 — last release before Gradle break |
-| 4.2 | Android Keystore key generation on first run | ✅ | keystore.dart exists, wire it to DB open |
-| 4.3 | Open SQLite with SQLCipher + Keystore key | ✅ | local_db.dart openDatabase call |
-| 4.4 | Encrypt JazzDrive share folder URLs in SQLite | ✅ | Most critical field to protect |
-| 4.5 | FlutterSecureStorage for auth tokens (not SQLite) | ✅ | Check if already done |
+| 4.1 | Add sqflite_sqlcipher to pubspec | ✅ | **3.1.0+1 exact pin** — NEVER upgrade without checking CI |
+| 4.2 | Android Keystore key generation on first run | ✅ | keystore.dart — getOrCreateDbKey() |
+| 4.3 | Open SQLite with SQLCipher + Keystore key | ✅ | local_db.dart — password: dbKey |
+| 4.4 | Encrypt JazzDrive share folder URLs in SQLite | ✅ | Full-DB AES-256-CBC encryption covers all columns |
+| 4.5 | FlutterSecureStorage for auth tokens (not SQLite) | ✅ | Pre-existing in keystore.dart |
+
+> **sqflite_sqlcipher version lock:** 3.1.0+1 is the ONLY version compatible with Flutter 3.22 CI.
+> 3.2.0 = Gradle break (flutter.compileSdkVersion). 3.2.1+ = requires Flutter >=3.27.0.
 
 ---
 
@@ -82,7 +85,7 @@
 |---|------|--------|-------|
 | 5.1 | Server: device_bindings table in DB | ⬜ | user_id, device_id, device_model, bound_at |
 | 5.2 | Server: register device endpoint POST /api/auth/bind-device | ⬜ | |
-| 5.3 | Server: reject second device on login | ⬜ | |
+| 5.3 | Server: reject second device on login | ⬜ | Returns 409 device_conflict |
 | 5.4 | App: generate device fingerprint on first login | ⬜ | device_id.dart exists, check if wired |
 | 5.5 | App: send device_id with every login request | ⬜ | |
 | 5.6 | App: show "account active on another device" error | ⬜ | |
@@ -95,7 +98,7 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 6.1 | App: byte counter in player (media_player bytes callback) | ⬜ | Count every chunk streamed |
+| 6.1 | App: byte counter in player (media_kit bytes callback) | ⬜ | Count every chunk streamed |
 | 6.2 | App: save bytes to encrypted SQLite every 30s | ⬜ | usage_log table |
 | 6.3 | App: queue pending usage reports | ⬜ | pending_usage_bytes in SQLite |
 | 6.4 | App: flush queue on internet detection | ⬜ | connectivity_plus package |
@@ -112,13 +115,13 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 7.1 | Server: auto-generate delta JSON every 24h | ✅ | Cron job or APScheduler |
-| 7.2 | Delta JSON format: metadata only, NO file IDs, NO share URLs | ✅ | id, title, year, description, poster_url, genres, is_free |
-| 7.3 | Server: auto-upload delta to JazzDrive (replace old file) | ✅ | Use jazzdrive.py upload |
-| 7.4 | App: fetch delta from JazzDrive on startup (zero-rated) | ✅ | jazzdrive_service.dart |
-| 7.5 | App: merge delta into local SQLite (INSERT OR IGNORE) | ✅ | catalog_provider.dart |
-| 7.6 | Admin panel: Zero-Rating Manager UI update (show delta not full catalog) | ✅ | zero_rating.py |
-| 7.7 | Remove full catalog from JazzDrive (security) | ✅ | Only delta should be on JazzDrive |
+| 7.1 | Server: auto-generate delta JSON every 24h | ✅ | APScheduler in scheduler.py |
+| 7.2 | Delta JSON format: metadata only, NO file IDs, NO share URLs | ✅ | generate_delta_payload() verified |
+| 7.3 | Server: auto-upload delta to JazzDrive (replace old file) | ✅ | upload_delta_to_jazzdrive() |
+| 7.4 | App: fetch delta from JazzDrive on startup (zero-rated) | ✅ | _syncFromJazzDriveDelta() |
+| 7.5 | App: merge delta into local SQLite (preserve share_url) | ✅ | LocalDb.mergeDeltaTitle() — ON CONFLICT DO UPDATE |
+| 7.6 | Admin panel: Zero-Rating Manager UI (delta + legacy cards) | ✅ | zero_rating.py rebuilt |
+| 7.7 | Remove full catalog from JazzDrive (security) | ✅ | Only delta on JazzDrive now |
 
 ---
 
@@ -131,7 +134,7 @@
 | 8.3 | App: subscription screen with plan cards | ⬜ | subscription_screen.dart exists |
 | 8.4 | App: Jazz package comparison UI | ⬜ | Show Rs. savings vs buying Jazz data alone |
 | 8.5 | App: "X% cheaper than Jazz" messaging | ⬜ | |
-| 8.6 | App: payment flow (what gateway? TBD) | ⬜ | Decide: JazzCash? Easypaisa? |
+| 8.6 | App: payment flow (TBD — JazzCash? Easypaisa?) | ⬜ | Decision needed |
 
 ---
 
@@ -159,25 +162,25 @@
 
 | ID | Description | File | Priority |
 |----|------------|------|---------|
-| ~~BUG-P1~~ | ~~Poster system 3 gaps~~ | ~~Fixed (2026-05-29)~~ | ~~High~~ |
 | BUG-P2 | stream cache TTL is 180 min but applies to both watch + download (ok) | constants.dart | Low |
 | BUG-P3 | AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder | constants.dart | Pre-launch |
-| BUG-P4 | Zero-Rating page shows stale 69 titles (old db_update.json, May 26) | zero_rating.py | Low |
-| ~~BUG-P5~~ | ~~Full catalog currently on JazzDrive~~ | ~~zero_rating.py~~ | ~~High~~ |
+| BUG-P4 | Zero-Rating page may show stale title count from old db_update.json | zero_rating.py | Low |
 
 ---
 
 ## Next Session Starting Point
 
 **Read in order:**
-1. `agent-hub/PRODUCT_CONTEXT.md` — full context
-2. `agent-hub/MASTER_TASKLIST.md` — this file, check what's ⬜
-3. `agent-hub/STREAMING_ARCHITECTURE.md` — streaming rules
+1. `agent-hub/REINCARNATION.md` — full reincarnation prompt (start here!)
+2. `agent-hub/PRODUCT_CONTEXT.md` — full context
+3. `agent-hub/MASTER_TASKLIST.md` — this file
 4. `agent-hub/history/TASK_LOG.md` — what each session did
 
 **Recommended next tasks (in order):**
-1. Phase 3 Tasks 3.5, 3.6, 3.7 — Fix poster system gaps (small, targeted, high impact)
-2. Phase 4 — SQLCipher encryption (security foundation, needed before public launch)
-3. Phase 7 — Delta JSON system (zero-rating catalog updates)
-4. Phase 6 — Data usage tracking (needed for subscription enforcement)
+1. Phase 5 — Device Binding (1 account = 1 device) — security feature before launch
+2. Phase 6 — Data Usage Tracking — required for subscription enforcement
+3. Phase 8 — Subscription Plans & Enforcement
 
+**Before touching ANY code:**
+- Run the Full Review & Test Checklist from REINCARNATION.md (Step 0–10)
+- Confirm CI is green on latest commit
