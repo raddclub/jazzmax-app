@@ -1984,3 +1984,52 @@ Update all .md files after completing changes.
 - Previous scan showed 18 tmdb_miss because keys were not yet in vault (now confirmed fixed per user)
 
 ---
+
+## [2026-05-29 14:30 UTC] — Agent: Replit Agent (Verification + Build Fix Session #2)
+
+### Task
+Find what the last previous Replit agent did and verify whether it was done correctly.
+
+### What the Previous Agent Did (last session — Metadata Fallbacks, 14:00 UTC)
+Added a 6-tier metadata enrichment fallback chain to 4 Python files:
+- `metadata_lookup.py` — added `_imdbapi_search()`, `_youtube_search()`, `_google_search()`; extended `enrich()` to tiers 4–6; `has_any_key()` now always returns True (IMDbAPI.dev needs no key)
+- `metadata.py` — added `fetch_google_kg()`; `enrich_title()` extended to 6 steps
+- `organizer.py` — added `_get_metadata_lookup()` lazy import + `enrich_title_metadata()` helper + post-organize enrichment in `auto_organize()`
+- `downloader.py` — added lazy import + post-upload enrichment in `_process_job()`
+- Commit: `6d3f2696`
+
+### Was the Last Session Correct?
+**The metadata session (6d3f2696) itself was correct and complete.** All 4 files verified line-by-line against the log — every claimed function exists and is wired correctly.
+
+**However, it inherited a pre-existing compile error from the player features session (3c3c67a6) that was still breaking every CI build:**
+
+`lib/screens/player_screen.dart:1939:15: Error: No named parameter with the name 'onLongPressPlay'.`
+`lib/screens/player_screen.dart:2436:25: Error: Final field 'onLongPressPlay' is not initialized.`
+
+Root cause: The player features session declared `final VoidCallback? onLongPressPlay;` in `_ControlsOverlay` and wired it at the call site (line 1939) and usage site (line 2634), but **forgot to add `this.onLongPressPlay,` to the constructor parameter list**. This broke every build from commit `3c3c67a6` onward (5+ consecutive failed CI runs across multiple sessions).
+
+### Done
+- Ran install script (SSH key written; Oracle port 22 still unreachable from Replit)
+- Read README.md, SKILLS.md, TASK_LOG.md from GitHub
+- Verified all recent commits (6d3f2696, 3c3c67a6, a3970e85, dc88e8a0, etc.)
+- Checked GitHub Actions CI logs — identified exact compile error
+- Confirmed metadata_lookup.py, metadata.py, organizer.py, downloader.py all match claimed changes
+- Fixed `player_screen.dart`: added `this.onLongPressPlay,` to `_ControlsOverlay` constructor (after `onSeekForward`)
+- Pushed fix via GitHub API (no force push) — commit `39ccbd771d719a19b73bc73af61c97c2d2794dec`
+- Verified fix via GitHub contents API (bypassing CDN cache) — constructor line confirmed correct
+- Appended this entry to TASK_LOG.md
+
+### Files Changed
+- `raddflix_flutter/lib/screens/player_screen.dart` — constructor line 2496: added `this.onLongPressPlay,` (commit 39ccbd77)
+- `agent-hub/history/TASK_LOG.md` — appended this entry
+
+### Notes for Next Agent
+- All CI runs from `3c3c67a6` through `6d3f2696` failed with the same compile error — now fixed in `39ccbd77`
+- New CI runs triggered by `39ccbd77` — check their result before any more work
+- The metadata fallback session (6d3f2696) was otherwise 100% correct — no other bugs found
+- Oracle SSH (port 22) still unreachable from Replit — use GitHub API only for all file operations
+- AppConstants.supportWhatsApp = '923XXXXXXXXX' still placeholder — needs real number before release
+- For large files (>3000 lines): write JSON payload to disk with node, POST with `--data-binary @file`
+- jq 1.7.1 available in Replit bash
+
+---
