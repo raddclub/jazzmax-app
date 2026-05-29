@@ -2033,3 +2033,53 @@ Root cause: The player features session declared `final VoidCallback? onLongPres
 - jq 1.7.1 available in Replit bash
 
 ---
+
+## [2026-05-29 15:00 UTC] — Agent: Replit Agent (Context Preservation Session)
+
+### Task
+Create complete task list, full product context docs, and reincarnation system so any future
+agent (or this agent after memory loss) can instantly resume work with full context.
+
+### Done
+- Discussed and documented complete streaming architecture (JazzDrive-only, no server stream URLs)
+- Discussed and documented security goals (SQLCipher + Android Keystore — protect share folder URLs)
+- Discussed and documented data usage tracking (client-side counting + server sync)
+- Discussed zero-rated full flow (100% works without server after first install)
+- Audited poster system — found 3 gaps (see MASTER_TASKLIST.md Phase 3)
+- Discussed device binding (1 account = 1 device)
+- Discussed SIMOSA integration (daily free MB reminder + streak tracker)
+- Discussed Jazz package comparison feature (show RaddFlix value vs raw Jazz data cost)
+- Created agent-hub/PRODUCT_CONTEXT.md — full product context, every architectural decision
+- Created agent-hub/MASTER_TASKLIST.md — every task with status, phases 0-10
+- Created agent-hub/REINCARNATION.md — Rule 0, reincarnation checklist, 7 key facts
+- Updated agent-hub/SKILLS.md — added Rule 0 (reincarnation) before all other rules
+- Created agent-hub/STREAMING_ARCHITECTURE.md — streaming rules (created earlier this session)
+
+### Files Changed
+- `agent-hub/PRODUCT_CONTEXT.md` — new (320 lines, full context)
+- `agent-hub/MASTER_TASKLIST.md` — new (183 lines, all tasks phases 0-10)
+- `agent-hub/REINCARNATION.md` — new (69 lines, Rule 0 + key facts)
+- `agent-hub/STREAMING_ARCHITECTURE.md` — new (127 lines, streaming rules)
+- `agent-hub/SKILLS.md` — updated (Rule 0 added at top)
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Key Decisions Made This Session
+1. Stream URLs = generated locally from SQLite (JazzDrive share folder URLs). NEVER from server.
+2. Security = SQLCipher + Android Keystore. Goal: protect share folder URLs, not prevent all access.
+3. Plans = data-volume based (30GB/50GB/100GB). No quality tiers.
+4. Zero-rated works fully after first install (catalog in SQLite, stream from JazzDrive).
+5. Data tracking = client-side byte counter + server sync when internet available.
+6. Device binding = 1 account = 1 device (fingerprint locked at first login).
+7. Delta JSON on JazzDrive = metadata only (no file IDs, no share URLs). Auto-rotate every 24h.
+8. SIMOSA integration = daily free MB reminder, streak tracker, Jazz partnership badge.
+
+### Notes for Next Agent
+- READ REINCARNATION.md FIRST (Rule 0 — now at top of SKILLS.md)
+- Recommended next tasks: Phase 3 poster gaps (3.5, 3.6, 3.7) — small, targeted, high impact
+- After that: Phase 4 SQLCipher (security foundation before launch)
+- After that: Phase 7 Delta JSON system (zero-rating catalog updates)
+- Oracle SSH still unreachable from Replit — GitHub API only
+- AppConstants.supportWhatsApp = '923XXXXXXXXX' still placeholder
+- CI builds should be passing (last fix: 39ccbd77)
+
+---

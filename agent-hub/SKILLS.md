@@ -5,6 +5,35 @@
 
 ---
 
+## Rule 0 — Reincarnation (READ THIS FIRST, EVERY SESSION)
+
+Before doing anything else, read these 4 files from GitHub in this order:
+
+```
+1. agent-hub/REINCARNATION.md      ← checklist + the 7 most important facts
+2. agent-hub/PRODUCT_CONTEXT.md    ← full product, architecture, every decision ever made
+3. agent-hub/MASTER_TASKLIST.md    ← every task with status ✅/🔧/⬜, what to do next
+4. agent-hub/history/TASK_LOG.md   ← what each previous session did (most recent at bottom)
+```
+
+Fetch them like this:
+```bash
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/REINCARNATION.md"
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/PRODUCT_CONTEXT.md"
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/MASTER_TASKLIST.md"
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/history/TASK_LOG.md"
+```
+
+After reading, tell the user:
+- What the last session did
+- What the recommended next tasks are
+- Ask what they want to work on
+
+**Never start coding without completing Rule 0.**
+
+---
+
+
 ## Rule 1 — Read Before You Touch
 
 Before making any change:
