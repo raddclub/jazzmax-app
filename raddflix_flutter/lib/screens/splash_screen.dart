@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 import '../core/remote_config.dart';
 import '../providers/auth_provider.dart';
+import '../core/services/app_update_service.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -28,6 +30,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   Future<void> _start() async {
     await RemoteConfig.fetch();
+    unawaited(AppUpdateService.check()); // populate _ForceUpdateGuard
     await Future.delayed(const Duration(milliseconds: 1000));
     if (!mounted) return;
 
