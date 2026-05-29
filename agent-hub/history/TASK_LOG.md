@@ -2306,3 +2306,40 @@ Commits pushed to main; CI builds APK from Flutter source. All changes are addit
 7. Wire `UsageService.addWatchSession()` into player_screen.dart on playback end
 
 ---
+
+---
+
+## [2026-05-29] — Agent: Replit Agent (Verification Session)
+
+### Task
+Verify which items flagged as "remaining" by the last agent were actually done in code vs genuinely incomplete. Update MASTER_TASKLIST accordingly.
+
+### Findings
+
+| Item | MASTER_TASKLIST was | Code reality | Action |
+|------|-------------------|--------------|--------|
+| 6.8 — Local quota enforcement in player | 🔄 | ✅ DONE — `_checkQuota()` in `player_screen.dart` pops player + shows SnackBar when `quota['allowed'] == false` | Ticked ✅ |
+| 9.5 — Jazz partnership badge on subscription screen | 🔄 | ✅ DONE — `_JazzPartnerBadge` class (line 487) in `subscription_screen.dart`, rendered at line 164 with green Jazz gradient + "Zero-Rated" chip | Ticked ✅ |
+| Login device conflict UI panel | Not in tasklist | ✅ DONE — `_DeviceConflictPanel` widget in `login_screen.dart` lines 148–200 | No tasklist entry to tick; confirmed done |
+| `UsageService.addWatchSession()` wired in player | Not in tasklist | ✅ DONE — `_logWatchSession()` in `player_screen.dart` line 1108 | Confirmed done |
+| 6.10 — "Quota full" dedicated screen | 🔄 | ❌ NOT done — only a SnackBar + pop, no dedicated screen | Remains 🔄 |
+| 5.7 — Device switch OTP flow | 🔄 | Intentional MVP decision — "contact support on WhatsApp" is the chosen flow | Remains 🔄 (by design) |
+| BUG-P4 — Zero-rating page stale count | Open | ❌ NOT fixed — `zero_rating.py` still reads `len(data.get("titles", []))` from static `db_update.json` | Remains open |
+
+### Done
+- Read MASTER_TASKLIST, TASK_LOG, and actual source files (player_screen.dart, login_screen.dart, subscription_screen.dart, zero_rating.py)
+- Ticked 6.8 ✅ and 9.5 ✅ in MASTER_TASKLIST (code was done, checklist was stale)
+- Confirmed 2 more items done in code that had no tasklist entries
+
+### Files Changed
+- `agent-hub/MASTER_TASKLIST.md` — 6.8 and 9.5 marked ✅ with accurate notes
+- `agent-hub/history/TASK_LOG.md` — this entry appended
+
+### Notes for Next Agent
+- **Genuine remaining work:** 6.10 (quota-full screen), BUG-P4 (zero_rating.py stale count), 5.7 (OTP flow, intentionally deferred)
+- **6.8 is done** — do not re-implement quota block; `_checkQuota()` already exists in player_screen.dart
+- **9.5 is done** — `_JazzPartnerBadge` already in subscription_screen.dart
+- Oracle SSH still unreachable from Replit — use GitHub API only
+- CI is green on last build — do not break it
+
+---

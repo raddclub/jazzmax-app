@@ -105,7 +105,7 @@
 | 6.5 | Server: POST /api/usage endpoint | ✅ | mobile_api.py bp_usage → db.log_usage() |
 | 6.6 | Server: monthly data counter per account | ✅ | db.get_usage_month() uses user_usage table |
 | 6.7 | App: cache last known quota from server | ✅ | quota_cache table + LocalDb.cacheQuota() / getCachedQuota() |
-| 6.8 | App: local quota enforcement (block when = 0) | 🔄 | Quota returned with every /api/usage flush; full block TBD |
+| 6.8 | App: local quota enforcement (block when = 0) | ✅ | _checkQuota() in player_screen.dart — pops player + SnackBar when quota[allowed]==false |
 | 6.9 | App: auto-downgrade to free tier when plan expires offline | 🔄 | Expires_at in subscription status; local enforcement TBD |
 | 6.10 | App: "Quota full — sync to unlock" screen | 🔄 | Screen TBD; quota data model in place |
 
@@ -146,7 +146,7 @@
 | 9.2 | App: deep link to SIMOSA (com.jazz.world) or Play Store | ✅ | AppConstants.simosaPlayStoreUrl + launchUrl |
 | 9.3 | App: 7-day streak tracker (local, SQLite) | ✅ | simosa_streak table + getSimosaStreak() + recordSimosaClaim() |
 | 9.4 | App: streak progress UI (Day 1-7, MB reward) | ✅ | _StreakBadge + 🔥 fire icon at 7-day streak |
-| 9.5 | App: Jazz partnership badge on subscription screen | 🔄 | SimosaCard covers SIMOSA; subscription badge TBD |
+| 9.5 | App: Jazz partnership badge on subscription screen | ✅ | _JazzPartnerBadge widget in subscription_screen.dart — green Jazz gradient badge, "Official Jazz Partner" + "Zero-Rated" chip |
 
 ---
 
