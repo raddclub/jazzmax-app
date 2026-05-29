@@ -242,6 +242,7 @@ class AppRoutes {
   static const String vaultLock    = '/vault-lock';
   static const String showDetail   = '/show-detail';
   static const String adminQueue   = '/admin-queue';
+  static const String quotaFull    = '/quota-full';
 }
 
 // ── Storage Keys ──────────────────────────────────────────────────────────────

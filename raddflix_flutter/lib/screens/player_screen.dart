@@ -1115,13 +1115,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       if (quota['allowed'] == false) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          Navigator.of(context).pop();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Daily data limit reached. Upgrade your plan to continue streaming.'),
-            backgroundColor: Color(0xFFE8002D),
-            duration: Duration(seconds: 5),
-            behavior: SnackBarBehavior.floating,
-          ));
+          Navigator.of(context).pushReplacementNamed(AppRoutes.quotaFull);
         });
       }
     } catch (_) {}

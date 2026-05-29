@@ -23,6 +23,7 @@ import 'screens/player_settings_screen.dart';
 import 'screens/vault_screen.dart';
 import 'screens/local_media_screen.dart';
 import 'screens/local_folder_screen.dart';
+import 'screens/quota_full_screen.dart';
 import 'core/services/app_update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -50,6 +51,7 @@ class RaddFlixApp extends ConsumerWidget {
         AppRoutes.search:       (_) => const SearchScreen(),
         AppRoutes.vault:         (_) => const VaultScreen(),
         AppRoutes.adminQueue:    (_) => const AdminQueueScreen(),
+        AppRoutes.quotaFull:     (_) => const QuotaFullScreen(),
         AppRoutes.localMedia:    (_) => const LocalMediaScreen(),
         '/player-settings':      (_) => const PlayerSettingsScreen(),
       },

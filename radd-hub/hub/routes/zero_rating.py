@@ -169,8 +169,11 @@ _HTML = """
       </div>
     </div>
     <div class="s-tile">
-      <div class="k">Titles in Delta</div>
-      <div class="v" style="color:{% if delta_exists and delta_titles != published_titles %}var(--warn,#f59e0b){% else %}var(--ok){% endif %}">{{ delta_titles }}{% if delta_exists and delta_titles != published_titles %} ⚠{% endif %}</div>
+      <div class="k">Published Titles</div>
+      <div class="v" style="color:var(--ok)">{{ published_titles }}</div>
+      {% if delta_exists and delta_titles != published_titles %}
+      <div style="font-size:.72rem;color:#f59e0b;margin-top:4px">Delta: {{ delta_titles }} ⚠ stale</div>
+      {% endif %}
     </div>
     <div class="s-tile">
       <div class="k">Delta Generated</div>
