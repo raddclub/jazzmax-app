@@ -29,9 +29,10 @@ dependencies:
   # Video thumbnail generation for local/downloaded files
   video_thumbnail: ^0.5.3
 
-  # Local SQLite — SQLCipher edition (encrypts entire DB file with AES-256)
-  # Replaces plain sqflite. Drop-in compatible API, adds `password` parameter.
-  sqflite_sqlcipher: ^3.3.0
+  # Local SQLite — SQLCipher edition (AES-256 full-file encryption).
+  # Pinned to 3.2.0 — last version compatible with Flutter 3.22.x.
+  # 3.2.1+ bumped flutter constraint to >=3.27.0 which CI does not meet.
+  sqflite_sqlcipher: 3.2.0
   path_provider: ^2.1.2
   path: ^1.9.0
 
