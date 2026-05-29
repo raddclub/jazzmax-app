@@ -672,7 +672,7 @@ async function phase9_userScenarios() {
   console.log('\n  [Scenario B] Jazz SIM user (zero-rated streaming)');
   if (state.firstEpisode?.share_url?.includes('jazzdrive')) {
     pass(9, 'Jazz SIM path: share_url present → JazzDrive flow would be used ✓');
-    pass(9, 'Jazz SIM path: link expires in 6h → refreshed from stream_cache ✓');
+    pass(9, 'Jazz SIM path: link expires in 180 min → refreshed from stream_cache ✓');
     warn(9, 'Jazz SIM path: actual zero-rating', 'Cannot verify from Replit — must test on real Jazz SIM device');
   } else {
     warn(9, 'Jazz SIM zero-rated flow', 'No share_urls in catalog — JazzDrive flow disabled until added in admin');
@@ -800,7 +800,7 @@ async function phase10_vault() {
 async function phase11_cache() {
   section('PHASE 11 — Stream Cache & TTL Logic');
 
-  const TTL_SECONDS = 6 * 60 * 60; // 6 hours
+  const TTL_SECONDS = 180 * 60; // 180 minutes
 
   // 11.1 Cache entry creation
   const now    = Math.floor(Date.now() / 1000);
@@ -815,10 +815,10 @@ async function phase11_cache() {
   if (isExpired) pass(11, 'Expired cache entry correctly detected ✓');
   else           fail(11, 'Expired cache detection', 'Old entry not detected as expired');
 
-  // 11.3 TTL = exactly 6 hours
-  const ttlHours = TTL_SECONDS / 3600;
-  if (ttlHours === 6) pass(11, 'Cache TTL is exactly 6 hours ✓');
-  else                fail(11, 'Cache TTL', `Expected 6h, got ${ttlHours}h`);
+  // 11.3 TTL = exactly 180 minutes
+  const ttlMinutes = TTL_SECONDS / 60;
+  if (ttlMinutes === 180) pass(11, 'Cache TTL is exactly 180 minutes ✓');
+  else                fail(11, 'Cache TTL', `Expected 180 min, got ${ttlMinutes} min`);
 
   // 11.4 Same link used for both watch AND download (shared cache)
   const watchKey   = 'file_123';
