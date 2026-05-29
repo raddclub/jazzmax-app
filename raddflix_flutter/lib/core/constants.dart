@@ -243,6 +243,7 @@ class AppRoutes {
   static const String showDetail   = '/show-detail';
   static const String adminQueue   = '/admin-queue';
   static const String quotaFull    = '/quota-full';
+  static const String planExpired  = '/plan-expired';
 }
 
 // ── Storage Keys ──────────────────────────────────────────────────────────────
