@@ -484,6 +484,13 @@ code{background:var(--panel2);padding:1px 6px;border-radius:4px;font-size:12px;
       <a href="/admin/" class="{{ 'active' if active=='admin' }}" onclick="closeSidebar()">
         <span class="icon">♛</span> Admin
       </a>
+      <a href="/api/db_mgmt/" class="{{ 'active' if active=='db_mgmt' }}" onclick="closeSidebar()">
+        <span class="icon">🗄</span>
+        <span class="nav-label">
+          <span class="nav-title">DB Manager</span>
+          <span class="nav-sub">Browse &amp; edit database</span>
+        </span>
+      </a>
       <hr>
       <a href="/auth/logout"><span class="icon">⏻</span> Sign out</a>
 
