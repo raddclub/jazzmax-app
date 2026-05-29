@@ -107,7 +107,7 @@
 | 6.7 | App: cache last known quota from server | ✅ | quota_cache table + LocalDb.cacheQuota() / getCachedQuota() |
 | 6.8 | App: local quota enforcement (block when = 0) | ✅ | _checkQuota() in player_screen.dart — pops player + SnackBar when quota[allowed]==false |
 | 6.9 | App: auto-downgrade to free tier when plan expires offline | 🔄 | Expires_at in subscription status; local enforcement TBD |
-| 6.10 | App: "Quota full — sync to unlock" screen | 🔄 | Screen TBD; quota data model in place |
+| 6.10 | App: "Quota full — sync to unlock" screen | ✅ | QuotaFullScreen — dark screen, Upgrade Plan + SIMOSA 100MB buttons, commit 29a8ff0 |
 
 ---
 
@@ -164,7 +164,7 @@
 |----|------------|------|---------|
 | BUG-P2 | stream cache TTL is 180 min but applies to both watch + download (ok) | constants.dart | Low |
 | BUG-P3 | AppConstants.supportWhatsApp = '923XXXXXXXXX' placeholder | constants.dart | ✅ FIXED — 923001234567 |
-| BUG-P4 | Zero-Rating page may show stale title count from old db_update.json | zero_rating.py | Low |
+| BUG-P4 | Zero-Rating page may show stale title count from old db_update.json | zero_rating.py | ✅ FIXED — tile now shows published_titles from live DB; delta count shown as secondary with ⚠ if stale |
 
 ---
 
@@ -178,7 +178,7 @@
 
 **Recommended next tasks (in order):**
 1. Phase 5/6/8/9 ✅ DONE — device binding, usage tracking, subscription API, SIMOSA card
-2. Phase 6 remaining: 6.8 local quota enforcement, 6.10 quota-full screen
+2. Phase 6 remaining: 6.9 auto-downgrade offline enforcement only
 2. Phase 6 — Data Usage Tracking — required for subscription enforcement
 3. Phase 8 — Subscription Plans & Enforcement
 

@@ -2343,3 +2343,45 @@ Verify which items flagged as "remaining" by the last agent were actually done i
 - CI is green on last build — do not break it
 
 ---
+
+---
+
+## [2026-05-29] — Agent: Replit Agent (6.10 Quota Full Screen + BUG-P4 Fix)
+
+### Task
+Build 6.10 "Quota full" screen and fix BUG-P4 stale title count on Zero-Rating admin page.
+
+### Done
+
+#### 6.10 — QuotaFullScreen (Flutter)
+- Created `raddflix_flutter/lib/screens/quota_full_screen.dart` — full dark screen matching app style
+- Logo, data_usage icon in red circle, "Daily Limit Reached" heading, explanation text
+- "Upgrade Plan" button → navigates to subscription screen (red gradient)
+- "Get 100 MB Free via SIMOSA" button → launches simosaPlayStoreUrl externally
+- "Go Back" text button → pops stack
+- Added `AppRoutes.quotaFull = '/quota-full'` to `constants.dart`
+- Registered route in `app.dart` (`AppRoutes.quotaFull → QuotaFullScreen()`)
+- Updated `_checkQuota()` in `player_screen.dart` — replaced SnackBar+pop with `pushReplacementNamed(AppRoutes.quotaFull)`
+
+#### BUG-P4 — Zero-Rating page stale count (Server)
+- Fixed `zero_rating.py` HTML template — "Titles in Delta" tile → "Published Titles" tile
+- Now shows `published_titles` (live DB query: `SELECT COUNT(*) FROM titles WHERE is_published=1`) as primary count
+- If delta.json is stale (`delta_titles != published_titles`), shows "Delta: X ⚠ stale" in small orange text below
+- Oracle SSH still unreachable — change committed to GitHub; needs `git pull && sudo supervisorctl restart jazzmax_radd` on the Oracle server to go live
+
+### Files Changed
+- `raddflix_flutter/lib/screens/quota_full_screen.dart` — NEW: quota full screen
+- `raddflix_flutter/lib/core/constants.dart` — added `AppRoutes.quotaFull`
+- `raddflix_flutter/lib/app.dart` — import + route registration
+- `raddflix_flutter/lib/screens/player_screen.dart` — `_checkQuota()` navigates to QuotaFullScreen
+- `radd-hub/hub/routes/zero_rating.py` — BUG-P4: live DB count tile
+
+### Commit
+`29a8ff0fc1edb97f10df8824876bb795ff62e967`
+
+### Notes for Next Agent
+- Oracle SSH is still unreachable from Replit. zero_rating.py fix is in GitHub but NOT yet live on the server. Someone must run `git pull && sudo supervisorctl restart jazzmax_radd` on Oracle (92.4.95.252) to deploy it.
+- Remaining open items: 6.9 (offline quota enforcement), 5.7 (OTP device switch — intentionally deferred MVP)
+- CI build will trigger on this commit — verify it passes before next session
+
+---
