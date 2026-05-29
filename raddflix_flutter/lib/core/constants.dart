@@ -15,7 +15,7 @@ class AppConstants {
   static const Duration catalogSyncInterval = Duration(hours: 6);
   static const String catalogDbName = 'raddflix_catalog.db';
   static const int catalogDbVersion = 10;
-  static const int streamCacheTtlSeconds = 21600; // 6 hours
+  static const int streamCacheTtlSeconds = 5400; // 90 min (CDN tokens expire ~1-2h)
 
   // ── JazzDrive (zero-rated CDN) ─────────────────────────────────────────────
   static const String jazzDriveCloudBase = 'https://cloud.jazzdrive.com.pk';
@@ -26,7 +26,7 @@ class AppConstants {
   static const String jazzDriveDbUpdateUrl = 'http://92.4.95.252/api/catalog/db_update';
 
   /// Stream link cache TTL. Same link reused for both watch + download within TTL.
-  static const Duration streamLinkTtl = Duration(hours: 6);
+  static const Duration streamLinkTtl = Duration(minutes: 90); // CDN tokens expire ~1-2h
 
   // ── Support ──────────────────────────────────────────────────────────────
   /// WhatsApp support number (international format, no +, no spaces).
@@ -264,6 +264,7 @@ class ApiPaths {
   static const String historyBase       = '/api/history';
   static String saveHistory(String fileId) => '/api/history/$fileId';
   static String playUrl(String fileId)    => '/watch/api/play/$fileId';
+  static String fileShareUrl(String fileId) => '/api/catalog/share_url?file_id=$fileId';
 
   static const String adminQueue         = '/api/queue/status';
   static const String publicMethods      = '/api/payment-methods';
