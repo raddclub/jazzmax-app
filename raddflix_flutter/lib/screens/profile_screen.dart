@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +9,8 @@ import '../services/vault_service.dart';
 import '../core/security/device_id.dart';
 import '../core/theme/theme_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/subscription_provider.dart';
+import '../core/api/subscription_api.dart';
 import '../widgets/loading_overlay.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -19,6 +23,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   bool _loggingOut = false;
   String? _deviceName;
   bool _hasInternet = true;
+  String _appVersion = 'v1.0.0';
+  int? _daysLeft;
+  bool _subExpiring = false;
   late final _connectivitySub = Connectivity().onConnectivityChanged.listen(_onConnectivityChange);
 
   @override
@@ -29,6 +36,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     });
     _checkConnectivity();
     _connectivitySub; // activate listener
+    _loadExtras();
   }
 
   Future<void> _checkConnectivity() async {
@@ -38,6 +46,28 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   void _onConnectivityChange(List<ConnectivityResult> results) {
     if (mounted) setState(() => _hasInternet = results.isNotEmpty && results.first != ConnectivityResult.none);
+  }
+
+  Future<void> _loadExtras() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (mounted) setState(() => _appVersion = 'v\${info.version}');
+    } catch (_) {}
+    try {
+      final status = await SubscriptionApi.getStatus();
+      if (!mounted) return;
+      final expiresAt = status.expiresAt;
+      if (expiresAt != null && status.isActive) {
+        final dt = DateTime.tryParse(expiresAt);
+        if (dt != null) {
+          final diff = dt.difference(DateTime.now()).inDays;
+          if (mounted) setState(() {
+            _daysLeft = diff > 0 ? diff : 0;
+            _subExpiring = diff <= 7;
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -154,6 +184,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         if (user!.subscription!.expiresAt != null)
                           Text('Expires ${_fmt(user.subscription!.expiresAt!)}',
                               style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        if (_daysLeft != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            _subExpiring
+                                ? '⚠ ${_daysLeft}d remaining — renew soon'
+                                : '${_daysLeft}d remaining',
+                            style: TextStyle(
+                              color: _subExpiring
+                                  ? const Color(0xFFFFB300)
+                                  : const Color(0xFF00C853),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ])),
                       TextButton(
                         onPressed: () => Navigator.of(context).pushNamed(AppRoutes.subscription),
@@ -261,7 +306,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ]),
                   const SizedBox(height: 32),
-                  Text('RaddFlix v1.0.0 · Pakistan ka entertainment, data-free',
+                  Text('$_appVersion · Pakistan ka entertainment, data-free',
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
                   const SizedBox(height: 40),
