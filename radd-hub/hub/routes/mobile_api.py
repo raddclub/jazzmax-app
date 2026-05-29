@@ -470,6 +470,14 @@ def get_quota(_user_id, _phone):
     quota    = db.check_quota(user_jid)
     today    = db.get_usage_today(user_jid)
     month    = db.get_usage_month(user_jid)
+    # 6.9 — add subscription expiry to quota for offline enforcement in Flutter
+    with db.conn() as _c:
+        _sub = _c.execute(
+            "SELECT plan, expires_at FROM app_subscriptions "            "WHERE user_id=? AND is_active=1 ORDER BY expires_at DESC LIMIT 1",
+            (_user_id,)
+        ).fetchone()
+    quota["sub_expires_at"] = _sub["expires_at"] if _sub else None
+    quota["sub_plan"]       = _sub["plan"]       if _sub else "free"
     return jsonify({
         "ok":    True,
         "quota": quota,
