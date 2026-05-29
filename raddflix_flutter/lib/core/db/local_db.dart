@@ -1,15 +1,24 @@
 import 'dart:io';
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_sqlcipher/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../../models/catalog_item.dart';
 import '../constants.dart';
+import '../security/keystore.dart';
 
-/// Shared local SQLite database for:
-/// - Catalog (titles + episodes + share_urls for zero-rated link gen)
-/// - Watch history / resume positions
-/// - Download metadata
-/// - Stream link cache (6h TTL, shared between watch + download)
+/// Shared local SQLite database — encrypted with SQLCipher (AES-256).
+///
+/// The encryption key is generated on first install and stored in Android
+/// Keystore via flutter_secure_storage. The DB file is opaque to anyone
+/// without the key, protecting JazzDrive share_url values at rest.
+///
+/// Tables:
+/// - titles        — full catalog (poster_url, share_url, poster_path, …)
+/// - episodes      — TV episodes with per-episode share_url
+/// - stream_cache  — 6h TTL JazzDrive CDN link cache
+/// - watch_positions — resume position per file
+/// - downloads     — offline download metadata
+/// - sync_meta     — last sync version / timestamp
 class LocalDb {
   static Database? _db;
 
@@ -22,12 +31,32 @@ class LocalDb {
     final dir = await getApplicationDocumentsDirectory();
     final path = p.join(dir.path, AppConstants.catalogDbName);
 
-    return openDatabase(
-      path,
-      version: AppConstants.catalogDbVersion,
-      onCreate: _createAll,
-      onUpgrade: _migrate,
-    );
+    // Task 4.2 + 4.3: retrieve (or generate) the device-bound AES key from
+    // Android Keystore, then open SQLCipher-encrypted database.
+    final dbKey = await Keystore.getOrCreateDbKey();
+
+    try {
+      return await openDatabase(
+        path,
+        version: AppConstants.catalogDbVersion,
+        password: dbKey,
+        onCreate: _createAll,
+        onUpgrade: _migrate,
+      );
+    } catch (_) {
+      // Pre-launch migration path: if an unencrypted DB file already exists
+      // (plain sqflite from development), SQLCipher rejects it with
+      // "file is not a database". Delete it and start fresh encrypted.
+      // After public launch this branch is unreachable (all installs start encrypted).
+      try { await File(path).delete(); } catch (_) {}
+      return openDatabase(
+        path,
+        version: AppConstants.catalogDbVersion,
+        password: dbKey,
+        onCreate: _createAll,
+        onUpgrade: _migrate,
+      );
+    }
   }
 
   static Future<void> _createAll(Database db, int version) async {

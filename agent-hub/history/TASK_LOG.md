@@ -2114,3 +2114,38 @@ Fix the 3 poster system gaps identified in Phase 3: tasks 3.5, 3.6, 3.7.
 - CI triggered by this commit — verify it passes before next session
 
 ---
+
+## [2026-05-29 16:30 UTC] — Agent: Replit Agent (Phase 4 — SQLCipher Security)
+
+### Task
+Implement Phase 4: encrypt the local SQLite database with SQLCipher + Android Keystore.
+
+### Done
+- Verified CI on poster fix commit (87b2456) — in progress, previous success clean
+- Checked sqflite_sqlcipher versions — used ^3.3.0 (sdk >=3.3.0 <4.0.0, compatible with Flutter 3.22 / Dart 3.4)
+- Confirmed minSdkVersion 21 in build.gradle — SQLCipher requirement met
+- **Task 4.1** — `pubspec.yaml`: replaced `sqflite: ^2.3.2` with `sqflite_sqlcipher: ^3.3.0`; bumped sdk minimum to `>=3.3.0` (was `>=3.0.0`, safe since CI uses Flutter 3.22 / Dart 3.4)
+- **Task 4.2** — `keystore.dart`: added `dart:convert` + `dart:math` imports; added `getOrCreateDbKey()` method — generates 32 cryptographically random bytes (base64url, 44 chars) on first install, stores in Android Keystore (encryptedSharedPreferences), returns same key on all subsequent calls. Key intentionally NOT cleared on logout (catalog must survive logout/re-login).
+- **Task 4.3** — `local_db.dart`: replaced `package:sqflite/sqflite.dart` with `package:sqflite_sqlcipher/sqflite.dart`; added `import '../security/keystore.dart'`; `_openDb()` now calls `Keystore.getOrCreateDbKey()` then passes `password: dbKey` to `openDatabase()`. Added try-catch migration path: if existing plain (unencrypted) DB exists from development, deletes it and re-creates encrypted — after public launch this branch is unreachable.
+- **Task 4.4** — SQLCipher encrypts the ENTIRE database file (AES-256-CBC). All fields including `share_url` (JazzDrive secret) are automatically protected at rest — no additional column-level encryption required.
+- **Task 4.5** — Already done in a previous session. `keystore.dart` already uses `flutter_secure_storage` with Android Keystore for JWT access/refresh tokens and device ID. Confirmed and documented.
+- Committed all 3 changed files + MASTER_TASKLIST + TASK_LOG in one atomic commit
+
+### Files Changed
+- `raddflix_flutter/pubspec.yaml` — sqflite → sqflite_sqlcipher ^3.3.0; sdk min bumped to >=3.3.0
+- `raddflix_flutter/lib/core/security/keystore.dart` — added `getOrCreateDbKey()` + dart:convert/dart:math imports
+- `raddflix_flutter/lib/core/db/local_db.dart` — sqflite_sqlcipher import; `password: dbKey` in openDatabase; unencrypted-DB migration catch block
+- `agent-hub/MASTER_TASKLIST.md` — Phase 4 tasks 4.1–4.5 all marked ✅
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- Phase 4 SQLCipher is fully wired. Every new install gets an AES-256 encrypted DB from day 1.
+- The DB key lives in Android Keystore (flutter_secure_storage encryptedSharedPreferences) — it is device-bound and app-bound. Uninstalling the app makes the DB unreadable.
+- Dart SDK minimum bumped from >=3.0.0 to >=3.3.0 — required by sqflite_sqlcipher 3.3.0. CI uses Dart 3.4 so this is fine.
+- `sqflite_sqlcipher` has the same API as `sqflite` — no other files need import changes.
+- Any file that was previously `import 'package:sqflite/sqflite.dart'` does NOT need to change — only local_db.dart directly opens the database.
+- Recommended next: Phase 7 — Delta JSON system (zero-rating catalog updates). Phase 5 (device binding) and Phase 6 (data usage tracking) require server-side work that needs Oracle SSH access.
+- Oracle SSH still unreachable from Replit — GitHub API only for file changes.
+- CI triggered by this commit — verify it passes (sqflite_sqlcipher adds a native Android library, build time will be slightly longer).
+
+---

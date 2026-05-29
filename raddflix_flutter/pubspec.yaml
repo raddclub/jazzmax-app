@@ -4,7 +4,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.3.0 <4.0.0'
   flutter: '>=3.19.0'
 
 dependencies:
@@ -29,8 +29,9 @@ dependencies:
   # Video thumbnail generation for local/downloaded files
   video_thumbnail: ^0.5.3
 
-  # Local SQLite
-  sqflite: ^2.3.2
+  # Local SQLite — SQLCipher edition (encrypts entire DB file with AES-256)
+  # Replaces plain sqflite. Drop-in compatible API, adds `password` parameter.
+  sqflite_sqlcipher: ^3.3.0
   path_provider: ^2.1.2
   path: ^1.9.0
 

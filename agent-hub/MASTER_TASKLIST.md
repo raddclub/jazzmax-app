@@ -68,11 +68,11 @@
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| 4.1 | Add sqflite_sqlcipher to pubspec | ⬜ | Replaces sqflite |
-| 4.2 | Android Keystore key generation on first run | ⬜ | keystore.dart exists, wire it to DB open |
-| 4.3 | Open SQLite with SQLCipher + Keystore key | ⬜ | local_db.dart openDatabase call |
-| 4.4 | Encrypt JazzDrive share folder URLs in SQLite | ⬜ | Most critical field to protect |
-| 4.5 | FlutterSecureStorage for auth tokens (not SQLite) | ⬜ | Check if already done |
+| 4.1 | Add sqflite_sqlcipher to pubspec | ✅ | Replaces sqflite |
+| 4.2 | Android Keystore key generation on first run | ✅ | keystore.dart exists, wire it to DB open |
+| 4.3 | Open SQLite with SQLCipher + Keystore key | ✅ | local_db.dart openDatabase call |
+| 4.4 | Encrypt JazzDrive share folder URLs in SQLite | ✅ | Most critical field to protect |
+| 4.5 | FlutterSecureStorage for auth tokens (not SQLite) | ✅ | Check if already done |
 
 ---
 
