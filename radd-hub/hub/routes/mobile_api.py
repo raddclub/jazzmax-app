@@ -470,7 +470,7 @@ def tid_status(_user_id, _phone):
 
 # ── Usage API (Phase 6) ─────────────────────────────────────────────────────
 
-@bp_usage.route("", methods=["POST"])
+@bp_usage.route("", methods=["POST"], strict_slashes=False)
 @_require_auth
 def log_usage_endpoint(_user_id, _phone):
     """Accept bytes_used report from the Flutter app."""
@@ -513,7 +513,7 @@ def get_quota(_user_id, _phone):
 
 # ── Payment methods API ─────────────────────────────────────────────────────
 
-@bp_pay.route("")
+@bp_pay.route("", strict_slashes=False)
 def payment_methods():
     """Public — returns enabled payment gateways (no auth required)."""
     try:
@@ -606,7 +606,7 @@ def notif_image(notif_id):
 
 # ── Watch History API ───────────────────────────────────────────────────────
 
-@bp_hist.route("")
+@bp_hist.route("", strict_slashes=False)
 @_require_auth
 def get_history(_user_id, _phone):
     if _user_id == 0:
@@ -657,7 +657,7 @@ def save_history(file_id, _user_id, _phone):
 # BUG-A26: radd_recommend.py had no API endpoint — Flutter could never call it.
 bp_rec = Blueprint("mobile_rec", __name__)
 
-@bp_rec.route("", methods=["GET"], strict_slashes=False)
+@bp_rec.route("", methods=["GET"])
 @_require_auth
 def get_recommendations():
     """GET /api/recommend
