@@ -3036,3 +3036,52 @@ Fix Phase 13 audit bugs (BUG-A01 through A12, selected). 8 fixes across 5 files.
 - `_migrate` param MUST be `oldV` not `oldVersion`
 
 ---
+
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Session Recap + Memory Persistence)
+
+### Task
+1. Find out what the last agent did.
+2. Save `.agents/memory/` files to GitHub so agent memory persists across new Replit sessions (no longer needs to be rebuilt each time).
+
+### What the Last Agent Did
+The previous session (2026-05-30 Phase 13 Batch 1) fixed **8 bugs** in a single commit (`48680c66`):
+
+| Bug | Fix |
+|-----|-----|
+| BUG-A01 | `year` parse: `int.tryParse(json['year'].toString())` — year was stored as TEXT, hard cast returned null |
+| BUG-A02 | `_normalize_media_type()` in library.py — "tv"/"series" now maps to "show", TV shows were invisible |
+| BUG-A03 | `is_active` returns `1`/`0` int not Python `True`/`False` — subscription checks were unreliable |
+| BUG-A05 | Vault subtitle fixed to "Choose a 6-digit PIN" (was misleadingly "4–6 digit") |
+| BUG-A06 | `session_err = None` added in app.py — NameError crash in download_proxy() |
+| BUG-A09 | Notifications mark-read now filters by IDs array from request body |
+| BUG-A10 | `bind_device()` returns 403 for guest token instead of 500 crash |
+| BUG-A12 | Removed hardcoded `"03xxxxxxxxx"` payment numbers — replaced with empty string + support message |
+
+Before that, the audit session catalogued 34 bugs (BUG-A01..A34) across 363 files and created `agent-hub/CODE_MAP.md`.
+
+### Done
+- Read TASK_LOG, README, SKILLS, confirmed full history
+- Saved `.agents/memory/` (3 files: MEMORY.md, raddflix-audit-bugs.md, raddflix-db-rules.md) to `agent-hub/memory/` on GitHub via tree-commit API
+- Commit: `cabda68f41cf5aede435a4986a70103b8162e3ce`
+
+### Files Changed
+- `agent-hub/memory/MEMORY.md` — NEW: agent memory index on GitHub
+- `agent-hub/memory/raddflix-audit-bugs.md` — NEW: bug status tracker
+- `agent-hub/memory/raddflix-db-rules.md` — NEW: DB rules (oldV, sqflite pin, DB v13, etc.)
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- **Memory files are now on GitHub** at `agent-hub/memory/`. At the start of each new session, fetch them:
+  ```
+  curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/memory/MEMORY.md"
+  curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/memory/raddflix-audit-bugs.md"
+  curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/memory/raddflix-db-rules.md"
+  ```
+  Then write them to `.agents/memory/` in Replit before starting work.
+- Remaining Phase 13 bugs: BUG-A04 (Android 8 UPSERT crash — high priority), BUG-A07, BUG-A08/A19, BUG-A11, BUG-A13..A34
+- Oracle SSH still unreachable from Replit — GitHub API only
+- `_migrate` param = `oldV` (not `oldVersion`). DB is at v13.
+- sqflite_sqlcipher pinned at `3.1.0+1` — do not upgrade
