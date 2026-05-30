@@ -304,6 +304,158 @@ def logout():
     return jsonify({"ok": True})
 
 
+
+
+# ── OTP Device Switch ────────────────────────────────────────────────────────
+
+@bp_auth.route("/device-switch/request", methods=["POST"])
+def device_switch_request():
+    """POST /api/auth/device-switch/request
+    Body: {"phone": "03001234567"}
+    Generates a 6-digit OTP, stores the hash+expiry in settings, and sends
+    the code via WhatsApp.  Responds identically whether or not the phone is
+    registered (avoids user-enumeration).
+    """
+    data  = request.get_json(silent=True) or {}
+    phone = _normalize_phone((data.get("phone") or "").strip())
+    if not phone:
+        return jsonify({"error": "phone required"}), 400
+
+    with db.conn() as c:
+        user = c.execute("SELECT id FROM app_users WHERE phone=?", (phone,)).fetchone()
+
+    if user:
+        import secrets as _sec
+        otp       = str(_sec.randbelow(1_000_000)).zfill(6)
+        otp_hash  = _hash_password(otp)
+        expires   = int(time.time()) + 600   # 10-minute validity
+        with db.conn() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO settings(k, v) VALUES(?, ?)",
+                (f"dsw_otp_{phone}", f"{otp_hash}:{expires}")
+            )
+        _send_whatsapp_otp(phone, (
+            f"RaddFlix: Your device switch code is *{otp}*. "
+            "Valid for 10 minutes. Never share this code. "
+            "If you did not request this, contact support."
+        ))
+        log.info("device_switch_request: OTP generated for phone %s…", phone[:5])
+
+    return jsonify({"ok": True, "message": "If this phone is registered, an OTP will be sent."})
+
+
+@bp_auth.route("/device-switch/verify", methods=["POST"])
+def device_switch_verify():
+    """POST /api/auth/device-switch/verify
+    Body: {"phone":"03001234567","otp_code":"123456","device_id":"...","device_name":"..."}
+    Verifies the OTP, unbinds the old device, binds the new one, returns fresh tokens.
+    """
+    data        = request.get_json(silent=True) or {}
+    phone       = _normalize_phone((data.get("phone")       or "").strip())
+    otp_code    = str(data.get("otp_code") or "").strip()
+    device_id   = (data.get("device_id")   or "").strip()
+    device_name = (data.get("device_name") or "Android Device").strip()
+
+    if not phone or not otp_code or not device_id:
+        return jsonify({"error": "phone, otp_code, and device_id required"}), 400
+
+    with db.conn() as c:
+        row = c.execute(
+            "SELECT v FROM settings WHERE k=?", (f"dsw_otp_{phone}",)
+        ).fetchone()
+
+    if not row or not row["v"]:
+        return jsonify({"error": "No OTP found for this number. Request a new one."}), 400
+
+    parts = (row["v"] or "").split(":", 1)
+    if len(parts) != 2:
+        return jsonify({"error": "Corrupted OTP record. Request a new one."}), 400
+
+    stored_hash, expires_str = parts
+    if int(time.time()) > int(expires_str):
+        return jsonify({"error": "OTP has expired. Please request a new one."}), 400
+
+    if not _hmac.compare_digest(stored_hash, _hash_password(otp_code)):
+        return jsonify({"error": "Incorrect OTP. Check the code and try again."}), 401
+
+    # OTP valid — reset device and issue fresh tokens
+    now = int(time.time())
+    with db.conn() as c:
+        user = c.execute("SELECT * FROM app_users WHERE phone=?", (phone,)).fetchone()
+        if not user or not user["is_active"]:
+            return jsonify({"error": "Account not found or suspended."}), 404
+        user = dict(user)
+        # Bind new device
+        c.execute(
+            "UPDATE app_users SET device_id=?, device_name=?, device_bound_at=?, "
+            "last_login_at=? WHERE id=?",
+            (device_id, device_name, now, now, user["id"])
+        )
+        # Revoke all existing refresh tokens (old device loses access immediately)
+        c.execute(
+            "UPDATE app_refresh_tokens SET revoked=1 WHERE user_id=?", (user["id"],)
+        )
+        # Consume the OTP (single-use)
+        c.execute("DELETE FROM settings WHERE k=?", (f"dsw_otp_{phone}",))
+
+    access       = _access_token(user["id"], phone)
+    refresh      = _refresh_token_jwt(user["id"], device_id)
+    refresh_hash = _hash_token(refresh)
+
+    with db.conn() as c:
+        c.execute(
+            "INSERT INTO app_refresh_tokens(user_id, token_hash, device_id, expires_at) "
+            "VALUES(?,?,?,?)",
+            (user["id"], refresh_hash, device_id, now + 7_776_000)
+        )
+
+    log.info(
+        "device_switch_verify: user_id=%s switched to device %s…",
+        user["id"], (device_id[:8] if len(device_id) >= 8 else device_id)
+    )
+
+    return jsonify({
+        "ok":            True,
+        "access_token":  access,
+        "refresh_token": refresh,
+        "user_id":       user["id"],
+        "phone":         phone,
+        "user": {
+            "id":    user["id"],
+            "phone": phone,
+            "plan":  _get_plan(user["id"]),
+        },
+    })
+
+
+def _send_whatsapp_otp(phone: str, message: str) -> None:
+    """Best-effort WhatsApp OTP delivery via the local wa-bot (port 3000).
+    Runs in a daemon thread so it never blocks the HTTP response.
+    Silently logs failure — the OTP is already stored in settings.
+    """
+    def _attempt() -> None:
+        try:
+            # Convert 03001234567 → 923001234567@s.whatsapp.net
+            jid = phone.lstrip("0")
+            if not jid.startswith("92"):
+                jid = "92" + jid
+            jid = jid + "@s.whatsapp.net"
+            import requests as _req
+            resp = _req.post(
+                "http://127.0.0.1:3000/api/send-message",
+                json={"jid": jid, "text": message},
+                timeout=8,
+            )
+            if resp.status_code == 200:
+                log.info("OTP WhatsApp: sent to %s", phone)
+            else:
+                log.warning("OTP WhatsApp: HTTP %s for %s", resp.status_code, phone)
+        except Exception as _e:
+            log.warning("OTP WhatsApp: could not reach wa-bot for %s — %s", phone, _e)
+
+    import threading as _thr
+    _thr.Thread(target=_attempt, daemon=True, name="otp-wa-send").start()
+
 @bp_auth.route("/me")
 @_require_auth
 def me(_user_id, _phone):
