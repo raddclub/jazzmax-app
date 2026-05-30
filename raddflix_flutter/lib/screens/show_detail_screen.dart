@@ -114,7 +114,8 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
 
   void _playMovie() {
     final fileId = widget.item.fileId;
-    if (fileId == null) {
+    final shareUrl = widget.item.shareUrl;
+    if (fileId == null && (shareUrl == null || shareUrl.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Video not available yet. Please try again later.'),
@@ -128,9 +129,10 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
       context,
       AppRoutes.player,
       arguments: {
-        'file_id': fileId,
+        'file_id': fileId ?? '',
         'title': widget.item.title,
         'local_path': null,
+        'stream_url': shareUrl,
         'episodes': <Map<String, dynamic>>[],
         'episode_index': 0,
         'content_type': 'movie',
@@ -346,7 +348,7 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                                   posterUrl: widget.item.posterUrl,
                                 );
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Downloading \${widget.item.title}…'),
+                                  SnackBar(content: Text('Downloading ${widget.item.title}…'),
                                     duration: const Duration(seconds: 2)),
                                 );
                               },
@@ -488,12 +490,12 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                               onDownload: fileId.isEmpty ? null : () {
                                 ref.read(downloadsProvider.notifier).startDownload(
                                   fileId: fileId,
-                                  titleText: '\${widget.item.title} \$label',
+                                  titleText: '${widget.item.title} $label',
                                   streamUrl: epShareUrl,
                                   posterUrl: widget.item.posterUrl,
                                 );
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Downloading \$label…'),
+                                  SnackBar(content: Text('Downloading $label…'),
                                     duration: const Duration(seconds: 2)),
                                 );
                               },
