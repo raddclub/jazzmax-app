@@ -3554,3 +3554,55 @@ This is a SyntaxError in Python 3.12. Fixed with Python str.replace() directly o
 jazzmax_radd    RUNNING  pid 414239  ✅
 jazzmax_watch   RUNNING  pid 336990  ✅
 ```
+---
+
+## [2026-05-30] — Session: Full MD audit + all pending tasks completed
+
+**Agent:** Replit (50% admin)
+
+### Tasks Completed
+
+#### 1. Restored _legacy/ Python files to GitHub (commit `1a65f8c8`)
+All 8 files pushed back to `radd-hub/hub/_legacy/`. Service cannot start without them.
+
+#### 2. BUG-A13 — Pakistani phone prefix validation (commit `002f14a9`)
+- File: `raddflix_flutter/lib/screens/register_screen.dart`
+- Strips spaces/dashes, enforces exactly 11 digits, requires `03` prefix
+- Error: "Must be a Pakistani mobile number (03XX-XXXXXXX)"
+
+#### 3. BUG-A29 — Mid-stream quota check (commit `002f14a9`)
+- File: `raddflix_flutter/lib/screens/player_screen.dart`
+- Added `Timer? _quotaTimer` + `Timer.periodic(5 minutes)` calling `_checkQuota()`
+- Users who hit quota mid-stream see QuotaFullScreen within 5 min
+
+#### 4. BUG-A31 — SSL/HTTPS on Oracle server
+- Self-signed cert (10yr): `/etc/ssl/certs/raddflix.crt`
+- Fingerprint SHA-256: `24:B9:0F:09:19:1F:2D:3B:B2:0C:8E:C0:A6:87:D6:D0:A6:E3:CF:28:68:01:BB:25:4B:77:50:68:12:AE:D1:9C`
+- nginx config: `/etc/nginx/sites-available/jazzmax-ssl.conf`, port 443 active
+- Admin panel + API now reachable via `https://92.4.95.252`
+- HTTP (port 80) kept working — Flutter app unchanged until cert pinned or domain added
+
+#### 5. Created all documentation files
+- GitHub: `agent-hub/AGENT_NOTES.md`
+- Oracle: `/opt/jazzmax/AGENT_NOTES.md`
+- Replit: `.agents/memory/` (raddflix-admin-role.md, raddflix-legacy-files.md, raddflix-ssh-key.md)
+
+#### 6. Updated MASTER_TASKLIST.md — Phase 13 COMPLETE
+All 25 already-fixed bugs marked done. Phase 14 tasks outlined.
+
+### Phase 13 Final Count
+- Fixed: 26 bugs
+- False positives: 5 (A07, A17, A18, A24, A25)
+- Deferred design: 1 (A33 — MD3)
+- Partial infra: 1 (A31 — self-signed SSL, needs domain for full cert)
+
+### Oracle Git Conflict Note
+Server has unmerged files from a stash conflict. Services are RUNNING fine.
+Needs manual resolution directly on the Oracle server via SSH.
+
+### Service Status at Close
+```
+jazzmax_radd    RUNNING  pid 414239
+jazzmax_watch   RUNNING  pid 336990
+nginx           HTTP:80 + HTTPS:443  RUNNING
+```

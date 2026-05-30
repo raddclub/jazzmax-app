@@ -41,11 +41,11 @@ description: 34 bugs found in 2026-05-30 full codebase audit, tracked as BUG-A01
 - BUG-A26: radd_recommend.py — ✅ FIXED commit dbbd1af9: GET /api/recommend (bp_rec) added to mobile_api.py + registered in app.py
 - BUG-A27: AuthApi.bindDevice() — ✅ FIXED commit dbbd1af9: dead method removed from auth_api.dart
 - BUG-A28: Download quota not returned by server, not enforced → ✅ FIXED commit d6094e0b: _checkDownloadQuota() in download_service.dart calls /api/usage/quota via ApiClient before each download; DownloadQuotaException surfaced to UI
-- BUG-A29: Mid-stream cutoff doesn't exist — ⬜ TODO (architecture decision)
+- BUG-A29: ✅ FIXED commit 002f14a9 — _quotaTimer periodic(5min) reuses _checkQuota() → QuotaFullScreen
 
 ## Infrastructure
 - BUG-A30: Hardcoded IP 92.4.95.252 in constants.dart → ✅ FIXED commit [BATCH4]: jazzDriveDeltaUrl + jazzDriveDbUpdateUrl now static String getters derived from mutable apiBaseUrl
-- BUG-A31: No SSL on Oracle server — ⬜ INFRA (cannot fix via code; requires Let's Encrypt on Oracle)
+- BUG-A31: ✅ PARTIAL — self-signed cert + nginx HTTPS port 443. Swap for Let's Encrypt when domain available.
 - BUG-A33: Material Design 2 only — no MD3, no light theme — ⬜ TODO (theme/design scope)
 - BUG-A34: _watch_prototype/ is dead legacy code still in repo → ✅ FIXED commit [BATCH4]: all 17 files deleted from repo
 
