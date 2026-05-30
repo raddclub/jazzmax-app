@@ -1277,7 +1277,7 @@ def upload_to_jazzdrive(
                 "title_id":         title_id,
                 "source":           "upload",
                 "account_id":       aid,
-                "filename":         file_path.name,
+                "filename":         plan.filename,
                 "local_path":       str(file_path),
                 "size_bytes":       file_path.stat().st_size,
                 "remote_id":        remote_id,
@@ -1544,7 +1544,8 @@ def _upload_pending() -> None:
         
         folder_id = current_parent
 
-        resp = _upload_file(sess, vk, jsid, file_path, parent_id=folder_id, account_id=acct["id"])
+        resp = _upload_file(sess, vk, jsid, file_path, parent_id=folder_id, account_id=acct["id"],
+                              override_name=plan.filename)
         remote_id = resp.get("id")
 
         if remote_id is None:

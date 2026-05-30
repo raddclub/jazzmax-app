@@ -4238,3 +4238,84 @@ Start via: POST /bots/api/whatsapp/start (admin auth required)
 Columns: id, provider, label, value_enc, is_active, exhausted_until, failure_count,
          total_uses, last_used_at, last_status, created_at, updated_at
 Currently 0 rows. Add via admin UI or direct DB insert.
+<<<<<<< HEAD
+
+---
+
+## [2026-05-31] — Agent: Replit Agent (Bug Audit + Fix Session)
+
+### Task
+Deep audit of Stream Downloader, Flix Uploader, Scan Indexer pipeline. Find and fix all bugs found after the previous agent's work. Verify every API endpoint, DB structure, duplicate-prevention logic, and filename cleaning. Write full report.
+
+### Pre-Session State
+- Oracle at commit  / ,  RUNNING pid 446622
+- DB: 7 titles, 20 files (18 usable), 5 queue jobs (all done), 1 account (flix)
+- JazzDrive screenshot showed mixed clean/dirty episode filenames on JazzDrive
+- Previous agent uploaded Off Campus S01 (8 eps) + Pathaan + Salaar + others
+
+### Bugs Found and Fixed
+
+| ID | File | Description | Fix |
+|---|---|---|---|
+| BUG-01 |  L1547 |  (watcher auto-upload path) did NOT pass  to  → dirty scene-release names uploaded to JazzDrive | Added  |
+| BUG-02 |  L1280 |  stored raw  (dirty) as  in DB instead of  (clean) | Changed to  |
+| BUG-03 |  |  had NO duplicate check — same movie could be queued via direct URL even if already in library/queue | Added  call |
+| BUG-04 |  |  had NO duplicate check — batch-queuing same movie multiple times was silently allowed | Added  per movie |
+| BUG-05 |  L1584 |  only checked  — paused jobs could be re-queued for the same content | Added  to status IN clause |
+| BUG-06 | DB data | File id=1 had corrupted filename  — clearly garbage/encode error | Deleted from files table |
+| BUG-07 | DB data | File id=4  had no share_url — orphaned placeholder from zip-extract | Deleted from files table |
+| BUG-08 | DB data | Title id=6 was duplicate  (season in title name) vs correct title id=7 | Migrated 1 file reference to id=7, deleted title id=6 |
+| BUG-09 | DB data | Files 2,3,6-12 had dirty scene-release filenames in DB (e.g. ) — prior uploads used watcher path (BUG-01/02) | Retroactively cleaned all 9 entries using . Also updated season+episode columns for TV eps. |
+
+### Root Cause of Dirty JazzDrive Filenames (Screenshot)
+Two upload code paths exist:
+1.  — manual/triggered path — correctly passed  ✅  
+2.  — watcher auto-upload path — did NOT pass override_name ❌  
+
+The previous agent used both paths. Episodes uploaded via path #2 ended up on JazzDrive with dirty names. BUG-01 and BUG-02 fix both paths to always use clean names going forward.
+
+### API Verification (all tests passed)
+
+| Endpoint | Result |
+|---|---|
+| GET /health | 200 ✅ |
+| GET /api/ping | 200 ok=true ✅ |
+| GET /api/catalog/version | 200 count=6 ✅ |
+| GET /api/catalog/sync | 200 6 titles returned ✅ |
+| GET /api/catalog/delta | 200 6 titles returned ✅ |
+| GET /api/search?q=pathaan | 200 1 result ✅ |
+| GET /api/auth/me | 401 ✅ |
+| GET /api/usage/quota | 401 ✅ |
+| POST /api/app/check | 200 ok=true ✅ |
+| GET /stream/api/queue (no auth) | 302 (redirect to login) ✅ |
+| GET /upload/api/jobs (no auth) | 302 (redirect to login) ✅ |
+
+### DB Final State
+- Titles: 6 (Pathaan, Off Campus, Salaar, Fast&Furious, Sarvam Maya, Reborn)
+- Files: 18 (all clean filenames — dirty names retroactively fixed)
+- Queue: 5 jobs (all 'done')
+- Accounts: 1 (id=2, 03029688227, role='flix')
+
+### Files Changed
+-  — BUG-01: added override_name; BUG-02: store plan.filename in DB
+-  — BUG-05: add 'paused' to check_duplicate queue status check
+-  — BUG-03: duplicate check in queue_direct; BUG-04: duplicate check in queue_batch
+
+### Tests NOT Possible Without Manual Access
+- **Actual JazzDrive scan**: Requires a logged-in scan account (currently only flix account exists). To create one: go to Scan tab → Add Account → enter a Jazz MSISDN → Send OTP → Verify. Then trigger scan.
+- **Live download test**: New download job (e.g. Pathan 2023) requires working scraper sites and download links from outside this environment.
+- **Rename already-uploaded JazzDrive files**: Files already on JazzDrive with dirty names (E04/E07/E08) cannot be renamed via the JazzDrive API — the name is fixed at upload time. DB filenames have been cleaned; JazzDrive side remains dirty for already-uploaded files.
+- **WhatsApp OTP delivery**: wa-bot process is not running. OTP is stored in DB but not delivered.
+- **Flutter APK test**: Requires Android device.
+
+### Notes for Next Agent
+- Oracle at HEAD after this commit.  RUNNING pid 449249.
+- BUG-01/02 are fixed: all future uploads (via watcher or manual) now store and upload clean filenames.
+- No scan account exists — only flix account (03029688227). To scan JazzDrive, add a scan account via /scan page.
+- Catalog has 6 titles with real uploaded content (18 files) and valid JazzDrive share URLs.
+- Duplicate Pathaan entries (files 2,3,20) and duplicate Salaar entries (files 13,14) are intentional — different quality versions. They all point to the same title_id so the app deduplicates at title level.
+-  now correctly blocks re-queuing for 'queued', 'processing', AND 'paused' jobs.
+- Direct-URL and batch-queue routes now both check for library/queue duplicates.
+
+=======
+>>>>>>> 55d183a58bd7d32577f01003c55030e5e57cc7cb
