@@ -95,15 +95,9 @@ class AuthApi {
   ///   ApiPaths.deviceSwitchOtpRequest using your OTP provider.
   ///   Expected server response: { "ok": true }
   static Future<void> requestDeviceSwitchOtp({required String phone}) async {
-    // TODO(OTP): implement when OTP provider is available
-    // Example:
-    //   await _client.post(
-    //     ApiPaths.deviceSwitchOtpRequest,
-    //     data: {'phone': phone},
-    //   );
-    throw UnimplementedError(
-      'OTP device switch is not yet configured. '
-      'Set AppConstants.otpDeviceSwitchEnabled = true and implement this method.',
+    await _client.post(
+      ApiPaths.deviceSwitchOtpRequest,
+      data: {'phone': phone},
     );
   }
 
@@ -118,17 +112,18 @@ class AuthApi {
     required String phone,
     required String otpCode,
   }) async {
-    // TODO(OTP): implement when OTP provider is available
-    // Example:
-    //   final resp = await _client.post(
-    //     ApiPaths.deviceSwitchOtpVerify,
-    //     data: {'phone': phone, 'otp_code': otpCode},
-    //   );
-    //   return LoginResult.fromJson(resp.data as Map<String, dynamic>);
-    throw UnimplementedError(
-      'OTP device switch is not yet configured. '
-      'Set AppConstants.otpDeviceSwitchEnabled = true and implement this method.',
+    final deviceId   = await DeviceIdentifier.getDeviceId();
+    final deviceName = 'Android Device';
+    final resp = await _client.post(
+      ApiPaths.deviceSwitchOtpVerify,
+      data: {
+        'phone':       phone,
+        'otp_code':    otpCode,
+        'device_id':   deviceId,
+        'device_name': deviceName,
+      },
     );
+    return LoginResult.fromJson(resp.data as Map<String, dynamic>);
   }
 }
 
