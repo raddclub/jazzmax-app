@@ -6,3 +6,5 @@
 - [GitHub Commit Pattern](raddflix-db-rules.md) — blob→tree→commit→PATCH ref; large files use Python urllib not curl -d for base64
 - [CODE_MAP location](raddflix-db-rules.md) — agent-hub/CODE_MAP.md maps every file to purpose/functions/known bugs
 - [Memory restore commands](raddflix-db-rules.md) — fetch agent-hub/memory/*.md and write to .agents/memory/ at session start
+
+- [CI Status](raddflix-db-rules.md) — CI GREEN as of commit 200ff61; all compile errors fixed, APK builds successfully

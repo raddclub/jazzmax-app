@@ -3782,3 +3782,96 @@ raddflix_watch   REMOVED   port 6000 dead (connection refused)
 - Remaining "jazzmax" strings are physical dir names on disk (acceptable — do not rename).
 - Top priority tasks: BUG-A02 (media_type normalization), BUG-A07 (app/check package ID), BUG-A19 (HistoryApi Flutter side).
 - DB is empty — populate via admin panel then test Flutter sync.
+
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (CI Fix + Server Verification + Nginx Fix)
+
+### Task
+Complete all remaining tasks and verify everything — no errors anywhere.
+
+### What Was Found
+
+#### CI Broken (3 compile errors on commit f53c6c2)
+All three errors introduced by previous batch commits:
+
+| File | Error | Root Cause |
+|------|-------|------------|
+| `search_screen.dart:163` | `$` special meaning / unmatched brackets | `RegExp(r'^["\']+|["\']+$')` — `\'` inside single-quoted raw string terminates it early |
+| `download_service.dart:8` | No such file or directory `lib/core/download/api_client.dart` | Wrong import path: `import 'api_client.dart'` should be `import '../api/api_client.dart'` |
+| `profile_screen.dart:102` | Required named parameter `contentId` must be provided | `SceneBookmarkStore.deleteAll()` requires `{required String contentId}` but logout calls it without one |
+
+#### Nginx Bug: /api/recommend 301 redirect
+`location /api/recommend/` (trailing slash) in nginx caused `GET /api/recommend` → 301 Moved.
+Flask `strict_slashes=False` fix was correct but nginx itself was doing the redirect before Flask got the request.
+
+#### Nginx Bug: catch-all /api/ pointing to dead port 6000
+The catch-all `location /api/` block was proxying to `port 6000` (`raddflix_watch` — decommissioned).
+Any API endpoint not explicitly listed in nginx was silently returning 502 Bad Gateway.
+
+### Done
+
+#### 1. Flutter compile fixes (commit 22fdfa1) — CI now GREEN
+- `search_screen.dart`: replaced broken `RegExp(r'^["\']+|["\']+$')` with chained `.replaceAll('"', '').replaceAll("'", '')` calls
+- `download_service.dart`: fixed import from `'api_client.dart'` → `'../api/api_client.dart'`
+- `scene_bookmark_store.dart`: added `deleteAllContent()` static method (no args — deletes all rows)
+- `profile_screen.dart`: changed `SceneBookmarkStore.deleteAll()` → `SceneBookmarkStore.deleteAllContent()` on logout
+
+#### 2. Flask strict_slashes fix (commit 200ff61) — CI GREEN
+- `mobile_api.py`: added `strict_slashes=False` to `@bp_rec.route("", ...)` for `/api/recommend`
+- `search_api.py`: added `strict_slashes=False` to `@bp.route("", ...)` for `/api/search`
+
+#### 3. Nginx config fixes (applied to Oracle + committed as agent-hub/nginx/)
+- Added `location = /api/recommend` exact match before `/api/recommend/` block
+- Changed catch-all `location /api/` from `port 6000` (dead) → `port 5000` (radd-hub)
+- Applied to both HTTP (raddflix.conf) and SSL (raddflix-ssl.conf)
+- Nginx tested + reloaded, all endpoints verified
+
+#### 4. Oracle server updated to latest main (all commits pulled, service restarted)
+
+### CI Status
+- `Build RaddFlix APK`: ✅ SUCCESS (22fdfa1, 200ff61)
+- `RaddFlix CI`: ✅ SUCCESS (22fdfa1, 200ff61)
+
+### Files Changed
+- `raddflix_flutter/lib/screens/search_screen.dart` — BUG fix: broken raw string regex
+- `raddflix_flutter/lib/core/download/download_service.dart` — BUG fix: wrong import path
+- `raddflix_flutter/lib/core/player/scene_bookmark_store.dart` — added deleteAllContent()
+- `raddflix_flutter/lib/screens/profile_screen.dart` — call deleteAllContent() on logout
+- `radd-hub/hub/routes/mobile_api.py` — strict_slashes=False on recommend route
+- `radd-hub/hub/routes/search_api.py` — strict_slashes=False on search route
+- `agent-hub/nginx/raddflix.conf` — NEW: HTTP nginx config (fixed, for reference)
+- `agent-hub/nginx/raddflix-ssl.conf` — NEW: SSL nginx config (fixed, for reference)
+
+### Endpoint Verification (all via nginx port 80)
+| Endpoint | Result |
+|----------|--------|
+| GET /health | 200 "RaddFlix Oracle OK" |
+| GET /api/ping | 200 {"ok":true} |
+| GET /api/catalog/version | 200 {"count":0,"version":0} |
+| GET /api/catalog/sync | 200 {"count":0,...} |
+| GET /api/search?q=test | 200 {"count":0,...} |
+| GET /api/recommend | 401 (auth required, no redirect) |
+| GET /api/poster/keys | 200 |
+| POST /api/auth/login | 400 (missing fields) |
+| POST /api/app/check | 200 {"ok":true,...} |
+| HTTPS /health | 200 "RaddFlix Oracle OK" |
+
+### Commits This Session
+- `22fdfa1` — fix(flutter): fix 3 compile errors breaking CI
+- `200ff61` — fix(server): add strict_slashes=False to recommend + search routes
+- `15f399d` — fix(nginx): fix /api/recommend redirect + catch-all port 6000→5000
+
+### Notes for Next Agent
+- **CI is GREEN** on both APK build and CI tests as of commit 200ff61
+- **All Oracle endpoints verified working** — no 301 redirects, no dead ports
+- Catalog is empty (count:0, version:0) — content needs to be added via admin panel at http://92.4.95.252/admin
+- Oracle is at latest main. `raddflix_radd` RUNNING on port 5000. nginx on 80+443.
+- Remaining blocked tasks (needs owner action):
+  - `supportWhatsApp` number — update `AppConstants.supportWhatsApp` in constants.dart with real number before production release
+  - Let's Encrypt SSL — blocked until a domain name is configured; self-signed cert in place
+  - Catalog content — admin needs to add titles via admin panel for the app to show anything
+- **nginx configs are now version-controlled** at `agent-hub/nginx/raddflix.conf` and `agent-hub/nginx/raddflix-ssl.conf`
+
+---
