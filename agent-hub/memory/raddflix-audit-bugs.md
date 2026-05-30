@@ -40,7 +40,7 @@ description: 34 bugs found in 2026-05-30 full codebase audit, tracked as BUG-A01
 - BUG-A25: SmartIntroStore — 🚫 FALSE POSITIVE: already imported + used in player_screen.dart
 - BUG-A26: radd_recommend.py — ✅ FIXED commit dbbd1af9: GET /api/recommend (bp_rec) added to mobile_api.py + registered in app.py
 - BUG-A27: AuthApi.bindDevice() — ✅ FIXED commit dbbd1af9: dead method removed from auth_api.dart
-- BUG-A28: Download quota not returned by server, not enforced — ⬜ TODO
+- BUG-A28: Download quota not returned by server, not enforced → ✅ FIXED commit d6094e0b: _checkDownloadQuota() in download_service.dart calls /api/usage/quota via ApiClient before each download; DownloadQuotaException surfaced to UI
 - BUG-A29: Mid-stream cutoff doesn't exist — ⬜ TODO (architecture decision)
 
 ## Infrastructure
@@ -50,7 +50,7 @@ description: 34 bugs found in 2026-05-30 full codebase audit, tracked as BUG-A01
 - BUG-A34: _watch_prototype/ is dead legacy code still in repo → ✅ FIXED commit [BATCH4]: all 17 files deleted from repo
 
 **Why:** Full code-logic audit 2026-05-30, 363 files, 7 parallel subagents.
-**How to apply:** Remaining: A20–A29, A31, A33. See table above for status of all bugs.
+**How to apply:** All code-level bugs fixed. Remaining: A29 (mid-stream cutoff — architectural), A31 (SSL — Oracle infra), A33 (MD3 — design scope). See table above.
 
 ## IMPORTANT — BUG-A32 deploy note
 After commit 2833a37 is deployed to Oracle, the server will generate a new JWT secret and

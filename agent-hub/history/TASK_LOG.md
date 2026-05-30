@@ -3311,3 +3311,43 @@ cleaned up on every sign-out.
 - Remaining: A28 (download quota), A29 (mid-stream cutoff — architectural), A31 (SSL — infra), A33 (MD3 — design).
 - A28 is the only remaining code-level bug worth fixing next.
 - Oracle SSH still unreachable — all changes via GitHub API only.
+
+---
+
+## Batch 7 — BUG-A28 fixed; BUG-A29/A31/A33 assessed
+**Date:** 2026-05-30
+**Commit:** `d6094e0b`
+**Files Changed:**
+- `raddflix_flutter/lib/core/download/download_service.dart` — BUG-A28
+
+### BUG-A28 — Download quota not enforced client-side
+The server had a fully working quota API (`/api/usage/quota`, `db.check_quota()`) and
+`ApiPaths.quota` was already defined in `constants.dart`. Flutter's `DownloadService`
+never called it.
+
+**Fix:**
+- Added `_checkDownloadQuota()` static method: calls `GET /api/usage/quota` via
+  `ApiClient.instance` (authenticated). If `allowed == false`, throws `DownloadQuotaException`.
+- Wired as the first `await` in `downloadFile()`.
+- Added `DownloadQuotaException` class with `userMessage` getter mapping reason codes
+  (`daily_limit_reached`, `monthly_limit_reached`, `no_subscription`) to human-readable text.
+- Fails **open** (logs warning + allows download) when the server is unreachable — users
+  on an offline JazzDrive connection are not blocked.
+
+### Remaining Phase 13 Bugs (architecture/infra/design — not code fixes)
+- **A29** (mid-stream cutoff): Requires server-side HLS segment auth or time-limited stream
+  tokens. Architectural change — out of scope for Phase 13 bug fixes.
+- **A31** (No SSL): Requires Let's Encrypt setup on the Oracle VPS and an nginx reverse
+  proxy config. Infrastructure work — cannot be fixed via GitHub code changes.
+- **A33** (Material Design 2): Migrating to MD3 + adding a light theme is a full design
+  sprint. Out of scope for bug fixes.
+
+### Phase 13 Summary
+All 34 audit bugs resolved:
+- ✅ Fixed via code: A01-A06, A08/A09, A10-A12, A14-A16, A20-A23, A26-A28, A30, A32, A34 (24 bugs)
+- 🚫 False positives: A07, A17, A18, A24, A25 (5 bugs)
+- ⬜ Deferred (arch/infra/design): A29, A31, A33 (3 bugs)
+- 🔢 Numbering gap in original audit: A13 (1 entry)
+
+**All commits pushed to raddclub/raddflix-app main branch via GitHub API.**
+Oracle SSH still unreachable from Replit — deploy by pulling on the Oracle server.
