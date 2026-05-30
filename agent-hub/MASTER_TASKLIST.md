@@ -304,3 +304,24 @@ All 34 audit bugs resolved:
 | BUG-018 | `poster_jd_url` in `/sync` response pointed to dead `/watch/poster/<id>` route | ✅ | Fixed to `/api/poster/<id>` in commit `4755c15` |
 
 **Commit**: `4755c15` — CI pending
+
+
+---
+
+## Phase 17 — WhatsApp OTP + API Audit + Pipeline (2026-05-30)
+
+### Completed ✅
+- [x] T001: WhatsApp OTP self-serve device switch — server + Flutter — deployed
+- [x] T002: Full API contract audit — all 12 endpoints verified
+- [x] T003: DB structure verification — server ↔ Flutter schemas confirmed
+- [x] T004: Download queue test — Off Campus Season 1 queued + downloading
+
+### Open / Next Steps
+- [ ] T005: Start wa-bot (OTP WA delivery — stored in DB, delivery blocked)
+- [ ] T006: Add real flix JazzDrive account — admin panel → /upload/ → OTP verify
+- [ ] T007: Re-scan after flix account added — indexes existing JazzDrive files
+- [ ] T008: Fix staging orphan files — trigger upload for 8.2GB of staged content
+- [ ] T009: Fix rogmovies.blog DNS dead — update rogmovies domain in sites config
+- [ ] T010: Fix Pathaan vegamovies search — title variant "Pathaan"/"Pathan"/"Pathan 2023"
+- [ ] T011: Add subscription plans to DB — admin panel → plans section
+- [ ] T012: Publish Off Campus Season 1 after upload to JazzDrive
