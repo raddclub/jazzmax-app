@@ -708,6 +708,44 @@
 **Key Endpoints:** `/api/jazzdrive/otp`, `/api/meta/autofix`, `/api/queue/status`, `/api/status`
 **Known Issues:** Large file with many responsibilities — works but needs cleanup.
 
+
+**Changes 2026-05-30:** Scraper search renamed `/search` → `/scraper/search` (unblocks Flutter). Old JSON-file catalog routes removed (replaced by catalog_api.py).
+---
+
+### `hub/routes/catalog_api.py` ← NEW 2026-05-30
+**Purpose:** Flutter app catalog sync API. Migrated from `_watch_prototype`. Live SQLite data.
+**Blueprint:** `bp` at url_prefix `/api/catalog`
+**Key Endpoints:**
+- `GET /api/catalog/version` — `{version, count}` — Flutter checks before sync
+- `GET /api/catalog/db_update/version` — lightweight version check
+- `GET /api/catalog/sync?since=<ts>` — full or delta sync; returns titles + episodes
+- `GET /api/catalog/posters` — list of all poster URLs for pre-caching
+- `GET /api/catalog/db_update` — full catalog as downloadable db_update.json
+**Known Issues:** None. Replaces old JSON-file catalog routes that were in api.py.
+
+---
+
+### `hub/routes/search_api.py` ← NEW 2026-05-30
+**Purpose:** Flutter app title search. Migrated from `_watch_prototype`. No auth required.
+**Blueprint:** `bp` at url_prefix `/api/search`
+**Key Endpoints:**
+- `GET /api/search?q=<term>&type=all|movie|tv&limit=30` — search by title, plot, genre, language
+**Known Issues:** None. The old `api.py /api/search` (scraper search) was renamed to `/api/scraper/search` to unblock this.
+
+---
+
+### `hub/routes/poster_proxy.py` ← NEW 2026-05-30
+**Purpose:** Server-side poster lookup with TMDB/OMDB/IMDbAPI key rotation + 30-day SQLite cache.
+**Blueprint:** `poster_proxy_bp` (no prefix — routes defined with full `/api/poster/` paths)
+**Key Endpoints:**
+- `GET /api/poster/search?title=&year=&media_type=` — single poster lookup
+- `POST /api/poster/batch` — batch poster lookup (up to 50 titles)
+- `GET /api/poster/keys` — show active key counts (masked)
+- `POST /api/poster/add_key` — add TMDB/OMDB key
+**Data:** Uses `radd_hub.db` keys table + `poster_cache.db` (auto-created in data dir).
+**Known Issues:** Keys stored as plaintext in DB (no Fernet). Keys starting with `gAAAAA` are skipped (old encrypted format).
+
+
 ---
 
 ### `hub/routes/analytics.py`
@@ -842,7 +880,7 @@
 ---
 
 ### `_watch_prototype/`
-**Purpose:** Original prototype API — fully superseded by `mobile_api.py`.
+**Purpose:** Original prototype API — **DECOMMISSIONED 2026-05-30**. Catalog/search/poster migrated to radd-hub. Supervisor service removed.
 **Status:** Dead code. Safe to delete after confirming nothing imports from it.
 **Known Issues:**
 - `_watch_prototype/routes/app_version.py` returns `pk.jazzmax.app` — this is origin of BUG-A07 (copy-paste into mobile_api.py)
