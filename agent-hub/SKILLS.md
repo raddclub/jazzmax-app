@@ -269,3 +269,72 @@ If something looks wrong, fix it before logging it as done.
   with progress 0.03–0.95. Shows "Resume S01E03 · 42%" button above episode list. Handles
   multi-season shows by switching to the correct season tab before playing. Commit d9e6bfce.
 
+
+  ---
+
+  ## Addendum — Full Codebase Audit Results (2026-05-30)
+
+  ### CODE_MAP.md is Now Required Reading
+  Before touching ANY source file, read `agent-hub/CODE_MAP.md`.
+  It maps every file → purpose, key functions, known bugs. Saves time and tokens.
+
+  ```bash
+  curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/CODE_MAP.md"
+  ```
+
+  ### 34 Bugs Catalogued — Phase 13 in MASTER_TASKLIST.md
+  Full codebase audit on 2026-05-30 found 34 bugs. They are tracked in MASTER_TASKLIST Phase 13
+  with IDs BUG-A01 through BUG-A34. Details in REINCARNATION.md under "KNOWN BROKEN THINGS".
+
+  ### Top 5 Bugs Every Agent Must Know
+
+  | ID | File | The Bug | Why It Matters |
+  |----|------|---------|---------------|
+  | BUG-A02 | `hub/routes/library.py` | `media_type` returns `"tv"/"series"` not `"show"` | TV shows invisible to users |
+  | BUG-A01 | `hub/db.py` | `year` column is TEXT not INTEGER | Year never shows on any card |
+  | BUG-A07 | `hub/routes/mobile_api.py` | `/api/app/check` returns `pk.jazzmax.app` | Force update check always fails |
+  | BUG-A05 | `lib/screens/vault_lock_screen.dart` | PIN length: setup allows 4, lock expects 6 | Vault unusable after 4-digit setup |
+  | BUG-A06 | `radd-hub/hub/app.py` | `session_err` undefined in `download_proxy()` | NameError crash on download proxy |
+
+  ### UI Style Gap
+  The app uses Material Design 2. `useMaterial3: true` is NOT set in `lib/app.dart`.
+  Only a dark theme exists — `AppTheme.light` does not exist despite a toggle in profile_screen.
+  When Material 3 upgrade is done: add to `lib/app.dart` MaterialApp, create `AppTheme.light`,
+  use `ColorScheme.fromSeed(seedColor: RaddColors.primary)`.
+
+  ### History Sync Gap (BUG-A19)
+  Server has full watch history API (`/api/history`, `/api/history/<file_id>`).
+  Flutter has NO HistoryApi class. When creating it:
+  - Server uses SECONDS for positions
+  - Flutter SQLite uses MILLISECONDS
+  - Divide by 1000 when sending to server, multiply by 1000 when reading back
+
+  ### `_migrate` Parameter Name (repeat — critical)
+  Always `oldV`. Never `oldVersion`. Broke CI twice (commits 54660441 and f571b352).
+  The function signature MUST be: `Future<void> _migrate(Database db, int oldV, int newV)`
+
+  ### media_type Values (BUG-A02)
+  When fixing library.py, normalize before writing to delta JSON:
+  ```python
+  # In library.py delta generation:
+  mt = row['media_type'] or ''
+  if mt.lower() in ('tv', 'series', 'tvshow', 'tv show'):
+      mt = 'show'
+  elif mt.lower() in ('movie', 'film'):
+      mt = 'movie'
+  ```
+  Flutter `catalog_provider.dart` filters shows with: `item.mediaType == 'show'`
+
+  ### ON CONFLICT Compatibility (BUG-A04)
+  `ON CONFLICT(id) DO UPDATE SET...` requires SQLite 3.24+. Android 8 ships 3.19.
+  Safe alternative: use `INSERT OR REPLACE` or check Flutter's minimum SDK.
+  Current `android/app/build.gradle` minSdk should be checked — if minSdk >= 26 (Android 8),
+  this may be acceptable. If minSdk < 26, must use `INSERT OR REPLACE`.
+
+  ### Dead Code To Remove When Convenient
+  - `AuthApi.bindDevice()` — orphaned function, binding done inside `login()` (BUG-A27)
+  - `_watch_prototype/` directory — fully superseded by mobile_api.py (BUG-A34)
+  - `PlayerPrefs.reset()` — needs UI button (BUG-A21)
+  - `LocalDb.clearPosition()` — needs UI trigger (BUG-A22)
+  - `SceneBookmarkStore.deleteAll()` — needs UI trigger (BUG-A23)
+

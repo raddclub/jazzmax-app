@@ -2941,3 +2941,62 @@ Implement FTS5 full-text search to replace slow LIKE queries. Update all agent-h
 - Recommended next: flip OTP flag (5.7), player poster saving, offline banner.
 
 ---
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Full Deep Audit + Documentation Overhaul)
+
+### Task
+Full deep audit of entire codebase — all 363 files. Update all documentation to reflect findings.
+No coding — audit only. Create CODE_MAP.md for quick future reference.
+
+### Audit Method
+7 parallel subagents, each owning a codebase section:
+- Agent 1: All 21 Flutter screens
+- Agent 2: Core, models, providers, widgets
+- Agent 3: Player widgets, services, app.dart, pubspec
+- Agent 4: All backend route files (mobile_api.py cross-check)
+- Agent 5: All backend core files (db.py, app.py, jazzdrive.py, etc.)
+- Agent 6: All HTML templates + all agent-hub docs
+- Agent 7: WA/Telegram bots, _watch_prototype, CI files
+
+### Findings Summary
+34 bugs catalogued (BUG-A01 through BUG-A34). Full list in REINCARNATION.md.
+
+**Critical bugs found:**
+- BUG-A01: `year` column stored as TEXT → year never shown on any card
+- BUG-A02: `media_type` returns "tv"/"series" not "show" → TV shows invisible
+- BUG-A03: `is_active` returned as bool not int → subscription status unreliable
+- BUG-A04: `ON CONFLICT DO UPDATE` syntax crashes Android 8 (SQLite < 3.24)
+- BUG-A05: Vault PIN length mismatch (setup=4, lock expects=6)
+- BUG-A06: `session_err` undefined in app.py download_proxy → NameError crash
+- BUG-A07: `/api/app/check` returns old package ID `pk.jazzmax.app`
+- BUG-A08 (BUG-A19): No HistoryApi class — watch history never synced to server
+- BUG-A09: Notifications read ignores IDs — marks all read
+- BUG-A10: POST /api/auth/device crashes HTTP 500 with guest token
+- BUG-A11: History server=seconds vs Flutter=milliseconds mismatch
+- BUG-A17: jazzdrive.py stub functions (jazzdrive_login, list_folders, etc.)
+- BUG-A32: FLASK_SECRET_KEY regenerated on restart → all JWTs invalidated
+
+**UI audit:**
+- App is Material Design 2 — `useMaterial3` not set
+- Only dark theme — AppTheme.light doesn't exist despite profile toggle
+- Hardcoded IP in remote_config.dart
+
+### Files Changed (Documentation Only)
+- `agent-hub/REINCARNATION.md` — Full rewrite: added all 34 bugs, updated phase summary, full review checklist, architecture reference, recommended next tasks
+- `agent-hub/SKILLS.md` — New addendum: CODE_MAP required reading, top 5 bugs, media_type fix pattern, history sync gap, dead code list
+- `agent-hub/MASTER_TASKLIST.md` — Added Phase 13 with all 34 bugs in priority tables
+- `agent-hub/CODE_MAP.md` — **NEW FILE** — 914-line reference mapping every file to purpose, key functions, and known bugs. Future agents must read this before touching any file.
+- `agent-hub/history/TASK_LOG.md` — This entry
+
+### Notes for Next Agent
+- **Read CODE_MAP.md first** — it tells you everything about every file
+- Phase 13 bugs are in MASTER_TASKLIST.md in priority order
+- Start with BUG-A02 (media_type) + BUG-A01 (year) — these are server-side, single-file fixes, huge user impact
+- Oracle SSH still unreachable from Replit — GitHub API only
+- CI was green at time of audit — do not break it
+- No code was written this session — audit only
+
+---
+
