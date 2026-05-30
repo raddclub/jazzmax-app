@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../api/catalog_api.dart';
 import '../constants.dart';
 import '../debug/debug_logger.dart';
+import '../services/usage_service.dart';
 import 'local_db.dart';
 import '../../models/catalog_item.dart';
 
@@ -49,6 +50,11 @@ class SyncService {
   // ── Oracle server sync ────────────────────────────────────────────────────
 
   static Future<SyncResult> _syncFromOracle() async {
+    // 6.9 — fire quota refresh in background whenever Oracle is reachable.
+    // Ensures sub_expires_at is cached even if the user has never flushed
+    // usage bytes (e.g. downloaded content but never streamed anything).
+    UsageService.fetchQuota().ignore();
+
     final lastSyncTs = await LocalDb.getLastSyncTimestamp();
     final serverVersion = await CatalogApi.getVersion();
     final localVersion = await LocalDb.getLastSyncVersion();

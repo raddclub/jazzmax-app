@@ -106,7 +106,7 @@
 | 6.6 | Server: monthly data counter per account | ✅ | db.get_usage_month() uses user_usage table |
 | 6.7 | App: cache last known quota from server | ✅ | quota_cache table + LocalDb.cacheQuota() / getCachedQuota() |
 | 6.8 | App: local quota enforcement (block when = 0) | ✅ | _checkQuota() in player_screen.dart — pops player + SnackBar when quota[allowed]==false |
-| 6.9 | App: auto-downgrade to free tier when plan expires offline | 🔄 | Expires_at in subscription status; local enforcement TBD |
+| 6.9 | App: auto-downgrade to free tier when plan expires offline | ✅ | `_checkQuota()` blocks offline playback when `sub_expires_at < now`; `fetchQuota()` fired on every Oracle sync to keep cache fresh |
 | 6.10 | App: "Quota full — sync to unlock" screen | ✅ | QuotaFullScreen — dark screen, Upgrade Plan + SIMOSA 100MB buttons, commit 29a8ff0 |
 
 ---

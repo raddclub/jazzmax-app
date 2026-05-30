@@ -2688,3 +2688,71 @@ for free was burning AI quota instead.
 - Oracle SSH still unreachable from Replit — GitHub API only for all file changes
 
 ---
+
+---
+
+## [2026-05-30 14:30 UTC] — Agent: Replit Agent (Phase 6.9 — Offline Plan Expiry)
+
+### Task
+Implement Phase 6.9: auto-downgrade to free tier locally when subscription expires offline.
+User asked to check if it was already done, then complete any gaps.
+
+### Audit Findings (what was already done)
+
+All core pieces were already built by a previous session:
+- `_checkQuota()` in `player_screen.dart` — reads `sub_expires_at` from local quota cache,
+  compares against `DateTime.now()`, redirects to `AppRoutes.planExpired` when expired
+  and `widget.localPath != null` (offline downloaded file). ✅
+- `PlanExpiredScreen` — full UI: lock icon, "Plan Expired" heading, explanation text,
+  "Renew Plan" gradient button → subscription screen, "Go Back" text button. ✅
+- `AppRoutes.planExpired` registered in `app.dart`. ✅
+- Server `/api/usage` and `/api/quota` both return `sub_expires_at` (Unix timestamp). ✅
+- `flushPending()` in `usage_service.dart` saves server quota (including `sub_expires_at`)
+  to `LocalDb.cacheQuota()` after every watch session. ✅
+- `fetchQuota()` defined in `usage_service.dart` — also saves `sub_expires_at`. ✅
+
+### The Real Gap Found
+
+`fetchQuota()` was **never called anywhere**. It was defined but unreachable.
+
+This meant: a user who downloads content but never streams anything (no usage bytes to flush)
+would have an empty quota cache → `getCachedQuota()` returns `{'allowed': true}` (default) →
+`sub_expires_at` is null → expiry check skips silently → they can play expired content offline.
+
+### Fix Applied
+
+Added `UsageService.fetchQuota().ignore()` at the top of `SyncService._syncFromOracle()`
+in `sync_service.dart`. This fires a background quota refresh whenever the app has Oracle
+connectivity (i.e., any time `SyncService.sync()` reaches the Oracle server). Non-blocking
+(`.ignore()`) — does not slow down sync.
+
+Added `import '../services/usage_service.dart';` to the imports.
+
+### How the Full Flow Works Now
+
+1. App opens → `SyncService.sync()` → Oracle reachable → `fetchQuota().ignore()` fires
+2. Server returns `{ quota: { allowed: true, sub_expires_at: 1234567890, sub_plan: "basic" } }`
+3. `LocalDb.cacheQuota()` saves it to SQLite (encrypted, SQLCipher)
+4. User goes offline, opens a downloaded file
+5. `_checkQuota()` reads cache → `sub_expires_at < now` → `PlanExpiredScreen`
+6. If user hasn't subscribed / free tier → `sub_expires_at` is null → check skips → free
+   content plays correctly
+
+### Files Changed
+- `raddflix_flutter/lib/core/db/sync_service.dart` — added `usage_service.dart` import +
+  `UsageService.fetchQuota().ignore()` at top of `_syncFromOracle()`
+- `agent-hub/MASTER_TASKLIST.md` — task 6.9 marked ✅
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Commit
+See pushed SHA below.
+
+### Notes for Next Agent
+- Phase 6.9 is now complete end-to-end. No remaining gaps.
+- The expiry check only blocks OFFLINE (downloaded) files, not streaming — correct, because
+  streaming requires network anyway, where server-side enforcement handles it.
+- Free users (sub_expires_at = null) are never blocked — correct behaviour.
+- Oracle SSH still unreachable from Replit — GitHub API only for file changes.
+- CI triggered on this commit — verify green before next session.
+
+---
