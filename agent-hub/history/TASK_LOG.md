@@ -4364,3 +4364,60 @@ The previous agent used both paths. Episodes uploaded via path #2 ended up on Ja
   ### Service Status at Close
   raddflix_radd RUNNING pid 451236 ✅
   
+  ## Session: 2026-05-30 (Part 3 — IMDb-first metadata + JazzDrive renames)
+
+  ### Changes in this session
+
+  #### BUG-11: imdbapi.dev API endpoint changed (was /api/v1/titles/search, now api.imdbapi.dev/search/titles)
+  - Old host `imdbapi.dev/api/v1/...` returns HTTP 404 — API migrated to v2.7+
+  - New host: `api.imdbapi.dev`
+  - Search: `GET /search/titles?query=...&limit=5`  
+  - Detail: `GET /titles/{imdb_id}` — returns plot, genres, stars, directors, originCountries, spokenLanguages, runtimeSeconds, rating
+  - Fixed `fetch_imdbapi()` in `metadata.py` to use new endpoints with search+detail two-step
+  - File: `radd-hub/hub/metadata.py`
+
+  #### BUG-12: TMDB is unreachable from Oracle server (connection timeout)
+  - Oracle server cannot reach `api.themoviedb.org` — all TMDB calls time out
+  - This was silently causing all enrichment to fall through to AI/YouTube
+  - Fix: moved IMDbAPI.dev to PRIMARY (step 1) in `enrich_title()`, TMDB demoted to step 3 (optional supplement)
+  - TMDB calls are now wrapped as non-fatal; logged at DEBUG not WARNING
+  - File: `radd-hub/hub/metadata.py`
+
+  #### enrich_title() priority reordered — IMDb first
+  New chain: **IMDbAPI.dev → OMDB → TMDB → AI → YouTube → Google KG**  
+  Previously: TMDB → OMDB → IMDbAPI.dev → AI → YouTube → Google KG  
+  Rationale: IMDb is free, no API key, covers full catalogue, always reachable
+
+  #### Post-upload JazzDrive rename — defense in depth (committed fbcab1e1b6)
+  - Both `upload_to_jazzdrive` and `upload_pending` now call `jazzdrive.rename_video()` 
+    immediately after upload + folder assignment
+  - Ensures JazzDrive filename matches clean name even if async upload ignores multipart name
+  - File: `radd-hub/hub/uploader.py`
+
+  #### JazzDrive file renames applied (live)
+  Renamed 5 files on JazzDrive that had dirty/wrong names:
+  | fid | remote_id | Old name on JD | New name |
+  |-----|-----------|---------------|----------|
+  | 8   | 242464982 | (dirty)       | Off Campus S01E04.mkv |
+  | 6   | 242464968 | (dirty)       | Off Campus S01E07.mkv |
+  | 7   | 242464981 | (dirty)       | Off Campus S01E08.mkv |
+  | 18  | 242464979 | ...S03E02.mkv | Reborn...S01E02.mkv |
+  | 19  | 242464977 | ...S03E01.mkv | Reborn...S01E01.mkv |
+  All returned HTTP 200.
+
+  #### DB metadata enrichment (all titles)
+  - `Pathaan`: imdb_id=tt12844910, rating=5.8, plot, cast, genres, language=Hindi, country=IN
+  - `Salaar`: imdb_id=tt13927994, rating=6.7, plot, cast, genres, language=Telugu, country=IN
+  - `Fast And Furious Spy Racers`: imdb_id=tt8322592, rating=5.9, plot, cast, genres, language=English
+  - `Reborn`: year=2023, season_count=1, episode_count=12, language=Japanese, country=JP; S03E01/E02 files corrected to S01E01/E02 in DB and on JazzDrive
+  - `Off Campus`: season_count=1, episode_count=8, language=Tamil, country=India
+  - `Sarvam Maya`: rating=7.7, plot, poster enriched via TMDB (earlier session)
+
+  ### GitHub commits this session
+  - `fbcab1e1b6` — uploader.py post-upload JazzDrive rename  
+  - (this commit) — metadata.py IMDb-first enrichment chain  
+
+  ### Service status
+  - raddflix_radd: RUNNING — service restarted successfully after each change
+  - /api/ping: {"ok":true}
+  

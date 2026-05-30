@@ -1,12 +1,17 @@
 """Title metadata enrichment for Radd Hub.
 
 Sources tried in order:
-  1. TMDB       — best quality, covers international movies + TV
-  2. OMDB       — IMDB-backed fallback, good for older content
-  3. IMDbAPI.dev — free IMDB search, no key, great for Pakistani/Punjabi/South Asian
+  1. IMDbAPI.dev — PRIMARY: free, no key, real IMDb data (api.imdbapi.dev v2.7+)
+  2. OMDB       — IMDb-backed supplemental (requires 'omdb' vault key)
+  3. TMDB       — supplemental, best poster quality (requires 'tmdb' vault key;
+                   may timeout on restricted networks)
   4. AI (Groq / Gemini / OpenAI / OpenRouter) — regional content fallback
+                   (Pakistani/Indian/South Asian absent from IMDb/TMDB)
   5. YouTube    — poster-only last resort (trailer thumbnail)
   6. Google KG  — Google Knowledge Graph (requires 'google' vault API key)
+
+IMDbAPI.dev is always attempted first because it is free, requires no API key,
+and covers IMDb's full catalogue including Bollywood, Lollywood, and anime.
 
 Public API
 ----------
@@ -243,81 +248,178 @@ def _parse_tmdb(data: dict, kind: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# IMDbAPI.dev Fallback (free, no key, great for Pakistani/Punjabi dramas)
+# IMDbAPI (api.imdbapi.dev) — PRIMARY metadata source, free, no key
+# API v2.7+:  GET /search/titles?query=...  +  GET /titles/{imdb_id}
 # ---------------------------------------------------------------------------
 
 def fetch_imdbapi(title: str, year: Optional[str] = None, media_type: str = "movie") -> dict:
-    """Search IMDbAPI.dev — free API, no key needed.
-    Excellent for Pakistani/Punjabi/South Asian content absent from TMDB+OMDB.
+    """Search api.imdbapi.dev for a title and return a rich metadata dict.
+
+    Uses two requests:
+      1. /search/titles?query=... — find best IMDb match (id, type, year, poster)
+      2. /titles/{id}            — fetch full detail (plot, genres, cast, runtime, …)
+
+    Free, no API key needed. Rate-limited — caller should not hammer in a tight loop.
     """
     if not title:
         return {}
-    
+
+    _BASE = "https://api.imdbapi.dev"
+
     try:
         import requests as _req
-        kinds = ["movie"] if media_type in ("movie",) else ["tvSeries", "movie"]
-        if media_type in ("drama", "series", "tv", "show", "anime"):
-            kinds = ["tvSeries", "tvMiniSeries", "movie"]
-        
-        for kind in kinds:
-            params = {"q": title, "type": kind}
-            if year:
-                params["year"] = str(year)[:4]
-            
-            r = _req.get(
-                "https://imdbapi.dev/api/v1/titles/search",
-                params=params,
-                timeout=10,
-                headers={"User-Agent": "RaddFlix/1.5"}
-            )
-            if r.status_code != 200:
+        import time as _t
+
+        # ── 1. Search ──────────────────────────────────────────────────────
+        params = {"query": title, "limit": 5}
+        for attempt in range(2):
+            r = _req.get(f"{_BASE}/search/titles", params=params,
+                         timeout=12, headers={"User-Agent": "RaddFlix/2.0"})
+            if r.status_code == 429:
+                _t.sleep(1.5)
                 continue
-            
-            results = r.json()
-            if not isinstance(results, list):
-                results = (results or {}).get("results") or []
-            
-            if not results:
+            break
+
+        if r.status_code != 200:
+            log.debug("IMDbAPI search %r: HTTP %s", title, r.status_code)
+            return {}
+
+        items = (r.json() or {}).get("titles") or []
+        if not items:
+            return {}
+
+        # Pick best match — prefer correct year and/or type
+        is_tv   = media_type in ("tv", "show", "series", "anime", "drama")
+        year_s  = str(year)[:4] if year else ""
+        best    = None
+        for item in items:
+            itype = (item.get("type") or "").lower()
+            iyear = str(item.get("startYear") or "")
+            if media_type == "movie" and "series" in itype:
                 continue
-                
-            item = results[0]
-            poster = ""
-            img = item.get("primaryImage") or {}
-            poster = img.get("url") or item.get("poster") or item.get("image") or ""
-            
-            genres = item.get("genres") or []
-            if isinstance(genres, list):
-                genres_csv = ", ".join(g.get("text", g) if isinstance(g, dict) else str(g) for g in genres)
-            else:
-                genres_csv = str(genres)
-            
-            cast = []
-            for c in (item.get("cast") or [])[:5]:
-                name = c.get("name") or (c.get("fullName") or {}).get("text") or ""
-                if name:
-                    cast.append({"name": name})
-            
-            result = {
-                "title": item.get("primaryTitle") or item.get("title") or title,
-                "year": str(item.get("startYear") or year or "")[:4] or None,
-                "media_type": "tv" if "Series" in kind or "Mini" in kind else "movie",
-                "overview": item.get("plot") or item.get("description") or "",
-                "plot": item.get("plot") or item.get("description") or "",
-                "genres": genres,
-                "genres_csv": genres_csv,
-                "rating": item.get("averageRating") or item.get("rating"),
-                "imdb_id": item.get("id") or item.get("tconst") or "",
-                "poster": poster,
-                "cast": cast,
-                "cast_names": ", ".join(c["name"] for c in cast),
-                "_source": "imdbapi",
-            }
-            if result.get("title"):
-                log.debug("IMDbAPI.dev hit for %r: %s", title, result["title"])
-                return result
+            if is_tv and itype == "movie":
+                continue
+            if year_s and iyear == year_s:
+                best = item
+                break
+        if best is None:
+            best = items[0]
+
+        imdb_id = best.get("id") or ""
+
+        # Poster from search result (low-res, overwritten by detail if available)
+        _srch_img = best.get("primaryImage") or {}
+        poster = (_srch_img.get("url") if isinstance(_srch_img, dict) else str(_srch_img)) or ""
+
+        # Rating from search result
+        _srch_rat = best.get("rating") or {}
+        rating = _srch_rat.get("aggregateRating") if isinstance(_srch_rat, dict) else None
+
+        result: dict = {
+            "title":          best.get("primaryTitle") or title,
+            "original_title": best.get("originalTitle") or "",
+            "year":           str(best.get("startYear") or year or "")[:4] or None,
+            "media_type":     "tv" if "series" in (best.get("type") or "").lower() else "movie",
+            "imdb_id":        imdb_id,
+            "rating":         rating,
+            "poster":         poster,
+            "_source":        "imdbapi",
+        }
+
+        # ── 2. Detail fetch ────────────────────────────────────────────────
+        if imdb_id:
+            _t.sleep(0.2)
+            for attempt in range(2):
+                dr = _req.get(f"{_BASE}/titles/{imdb_id}",
+                              timeout=12, headers={"User-Agent": "RaddFlix/2.0"})
+                if dr.status_code == 429:
+                    _t.sleep(1.5)
+                    continue
+                break
+
+            if dr.status_code == 200:
+                d = dr.json() or {}
+
+                # Plot
+                if d.get("plot"):
+                    result["plot"]     = d["plot"]
+                    result["overview"] = d["plot"]
+
+                # Genres — list of strings in v2 API
+                genres_raw = d.get("genres") or []
+                if genres_raw and isinstance(genres_raw, list):
+                    genres_list = [g if isinstance(g, str) else g.get("text", "") for g in genres_raw]
+                    genres_list = [g for g in genres_list if g]
+                    result["genres"]     = json.dumps(genres_list)
+                    result["genres_csv"] = ", ".join(genres_list)
+
+                # Runtime — API gives seconds
+                rt_sec = d.get("runtimeSeconds") or 0
+                if rt_sec and int(rt_sec) > 60:
+                    result["runtime"] = int(rt_sec) // 60
+
+                # Cast — "stars" list; each has displayName
+                stars = d.get("stars") or []
+                cast = []
+                for s in stars[:10]:
+                    name = (s.get("displayName") or
+                            (s.get("fullName") or {}).get("text") or
+                            s.get("name") or "")
+                    if name:
+                        cast.append({"name": name})
+                if cast:
+                    result["cast"]       = json.dumps(cast)
+                    result["cast_names"] = ", ".join(c["name"] for c in cast[:5])
+
+                # Directors — "directors" list, same structure as stars
+                dirs = d.get("directors") or []
+                dir_names = []
+                for dv in dirs[:2]:
+                    n = (dv.get("displayName") or
+                         (dv.get("fullName") or {}).get("text") or
+                         dv.get("name") or "")
+                    if n:
+                        dir_names.append(n)
+                if dir_names:
+                    result["director"] = ", ".join(dir_names)
+
+                # Country — originCountries [{code, name}]
+                oc = d.get("originCountries") or []
+                if oc:
+                    result["country"] = oc[0].get("code") or oc[0].get("name") or "" if isinstance(oc[0], dict) else str(oc[0])
+
+                # Language — spokenLanguages [{code, name}]
+                sl = d.get("spokenLanguages") or []
+                if sl:
+                    result["language"] = sl[0].get("name") or sl[0].get("code") or "" if isinstance(sl[0], dict) else str(sl[0])
+
+                # TV seasons
+                seasons_list = d.get("seasons") or []
+                if seasons_list:
+                    result["season_count"] = len(seasons_list)
+                    total_eps = sum(int(s.get("episodeCount") or 0) for s in seasons_list if isinstance(s, dict))
+                    if total_eps:
+                        result["episode_count"] = total_eps
+
+                # Rating — {aggregateRating, voteCount}
+                d_rat = d.get("rating") or {}
+                if isinstance(d_rat, dict) and d_rat.get("aggregateRating"):
+                    result["rating"] = float(d_rat["aggregateRating"])
+                    result["imdb_votes"] = int(d_rat.get("voteCount") or 0)
+
+                # Poster — higher-res from detail
+                d_img = d.get("primaryImage") or {}
+                if isinstance(d_img, dict) and d_img.get("url"):
+                    result["poster"] = d_img["url"]
+
+        if result.get("title"):
+            log.debug("IMDbAPI hit for %r → %s (id=%s src=%s)",
+                      title, result["title"], imdb_id, "detail" if imdb_id else "search")
+            return result
+
     except Exception as e:
-        log.debug("IMDbAPI.dev fetch failed for %r: %s", title, e)
-    
+        log.debug("IMDbAPI fetch failed for %r: %s", title, e)
+
     return {}
 
 # ---------------------------------------------------------------------------
@@ -424,14 +526,16 @@ def fetch_google_kg(title: str, year=None, api_key: str = "") -> dict:
 def enrich_title(meta: dict, *,
                  tmdb_key: Optional[str] = None,
                  omdb_key: Optional[str] = None) -> dict:
-    """Enrich a title dict with TMDB → OMDB → AI → YouTube (poster only).
+    """Enrich a title dict with IMDbAPI → OMDB → TMDB → AI → YouTube.
 
     Source priority:
-      1. TMDB  — best quality (international)
-      2. OMDB  — IMDB-backed, good for older/Western titles
-      3. AI    — Groq/Gemini/OpenAI/OpenRouter — regional content
-                 (Pakistani/Indian/Hindi/South/Punjabi/Chinese not on TMDB+OMDB)
-      4. YouTube — last resort: grab trailer thumbnail as poster image
+      1. IMDbAPI.dev — PRIMARY: free, no key, real IMDb data, always runs first
+      2. OMDB  — IMDb-backed supplement (requires 'omdb' vault key)
+      3. TMDB  — best poster quality supplement (requires 'tmdb' vault key;
+                  may be unreachable on restricted networks — non-fatal)
+      4. AI    — Groq/Gemini/OpenAI/OpenRouter — regional content
+                 (Pakistani/Indian/Hindi/South Asian absent from IMDb/TMDB)
+      5. YouTube — last resort: grab trailer thumbnail as poster image
 
     Never overwrites fields that already have a non-empty value.
     Returns the merged dict with updated confidence score.
@@ -442,20 +546,21 @@ def enrich_title(meta: dict, *,
 
     enriched: dict = {}
 
-    # 1. TMDB (preferred)
-    # BUG-TMDB-SKIP: previously skipped TMDB if tmdb_id already existed, even
-    # when the title was missing plot/poster (e.g. legacy scanner saved a tmdb_id
-    # but got a truncated response). Now re-fetches when critical fields are absent.
     _has_plot   = bool(meta.get("plot") or meta.get("overview"))
     _has_poster = bool(meta.get("poster") or meta.get("poster_share_url"))
-    _needs_tmdb = not meta.get("tmdb_id") or not _has_plot or not _has_poster
-    if tmdb_key and _needs_tmdb:
-        try:
-            enriched = fetch_tmdb(title, year, kind, api_key=tmdb_key)
-        except Exception as e:
-            log.debug("tmdb enrich failed for %r: %s", title, e)
+    _needs_enrich = not meta.get("imdb_id") or not _has_plot or not _has_poster
 
-    # 2. OMDB (supplement missing fields)
+    # 1. IMDbAPI.dev (PRIMARY — free, no key, full IMDb catalogue)
+    if _needs_enrich:
+        try:
+            imdb_data = fetch_imdbapi(title, year, kind)
+            if imdb_data:
+                log.debug("IMDbAPI primary hit for %r → %s", title, imdb_data.get("title"))
+                enriched = {k: v for k, v in imdb_data.items() if not k.startswith("_")}
+        except Exception as e:
+            log.debug("IMDbAPI primary enrich failed for %r: %s", title, e)
+
+    # 2. OMDB (supplement — IMDb-backed, reachable, requires omdb vault key)
     if omdb_key:
         needs_plot   = not (enriched.get("plot") or meta.get("plot") or meta.get("overview"))
         needs_imdb   = not (enriched.get("imdb_id") or meta.get("imdb_id"))
@@ -469,21 +574,20 @@ def enrich_title(meta: dict, *,
             except Exception as e:
                 log.debug("omdb enrich failed for %r: %s", title, e)
 
-    # 3. IMDbAPI.dev — free, no key, excellent for Pakistani/Punjabi content
-    needs_poster  = not (enriched.get("poster") or meta.get("poster") or meta.get("poster_share_url"))
-    needs_plot3   = not (enriched.get("plot") or enriched.get("overview") or meta.get("plot") or meta.get("overview"))
-    if needs_plot3 or needs_poster:
+    # 3. TMDB (supplement — best poster quality; may timeout on restricted networks)
+    _needs_tmdb = (not (enriched.get("tmdb_id") or meta.get("tmdb_id"))
+                   or not (enriched.get("poster") or meta.get("poster") or meta.get("poster_share_url"))
+                   or not (enriched.get("plot") or enriched.get("overview")
+                           or meta.get("plot") or meta.get("overview")))
+    if tmdb_key and _needs_tmdb:
         try:
-            imdb_data = fetch_imdbapi(title, year, kind)
-            if imdb_data:
-                log.debug("IMDbAPI fallback hit for %r", title)
-                for k, v in imdb_data.items():
-                    if k.startswith("_"):
-                        continue
+            tmdb_data = fetch_tmdb(title, year, kind, api_key=tmdb_key)
+            if tmdb_data:
+                for k, v in tmdb_data.items():
                     if k not in enriched or not enriched[k]:
                         enriched[k] = v
         except Exception as e:
-            log.debug("IMDbAPI enrich failed for %r: %s", title, e)
+            log.debug("tmdb enrich failed (non-fatal — may be unreachable): %r: %s", title, e)
 
     # 4. AI fallback — Groq → Gemini → OpenAI → OpenRouter
     #    Best for Pakistani/Indian/South/Punjabi/Chinese content absent from TMDB+OMDB
