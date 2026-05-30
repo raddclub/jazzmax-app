@@ -3518,3 +3518,39 @@ This is a SyntaxError in Python 3.12. Fixed with Python str.replace() directly o
   the `config.MEDIA_DIR` fallback altogether.
 
 ---
+---
+
+## 2026-05-30 — Session: Restore _legacy files + Full documentation pass
+
+**Agent:** Replit (50% admin)
+
+### Work Done
+1. **Pushed all 8 `_legacy/` Python files to GitHub** (commit `1a65f8c8`)
+   - Files: `__init__.py`, `scanner.py`, `schema.py`, `enricher.py`, `jazz_share.py`, `jazz_keepalive.py`, `db_github.py`, `db_gsheets.py`
+   - These were deleted in cleanup commit `9a3ffc5` — now permanently in the repo
+   - Service cannot start without them (root cause of today's `spawn error`)
+
+2. **Created `agent-hub/AGENT_NOTES.md` on GitHub** (commit `5c1a5f1`)
+   - Agent authority rules, _legacy fix guide, common server fixes, known bugs table
+
+3. **Created `/opt/jazzmax/AGENT_NOTES.md` on Oracle server**
+   - Same guide, always available directly on the server
+
+4. **Updated `.agents/memory/MEMORY.md`** with 3 topic files:
+   - `raddflix-admin-role.md` — 50% admin authority rule
+   - `raddflix-legacy-files.md` — _legacy files reference
+   - `raddflix-ssh-key.md` — SSH key reformat procedure
+
+### Bugs Fixed This Session (full list)
+| # | Bug | Fix | Commit |
+|---|-----|-----|--------|
+| 1 | `scraper.py` hardcoded `/home/runner/workspace/...` path | Use `config.MEDIA_DIR` | `a28b9cdc` |
+| 2 | `organizer.py` f-string escaped-quote SyntaxError | Temp variable for dict literal | `9852b4a` |
+| 3 | `watch_history` table missing `watched_at` column | `ALTER TABLE` + index on prod DB | direct SQL |
+| 4 | `_legacy/` Python files missing → `ImportError` → service crash | Restored from git history `f880ea6` | `1a65f8c8` |
+
+### Service Status at Close
+```
+jazzmax_radd    RUNNING  pid 414239  ✅
+jazzmax_watch   RUNNING  pid 336990  ✅
+```
