@@ -19,8 +19,8 @@
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | 0.1 | GitHub Actions CI (build-apk.yml + ci-tests.yml) | ✅ | Running, Node.js 24, Java 17, Flutter 3.22.x |
-| 0.2 | Oracle server running (Flask admin + Watch API) | ✅ | Supervisor managed |
-| 0.3 | SSH from Replit to Oracle | 🔲 Blocked | Port 22 unreachable from Replit. Use GitHub API for all file changes. |
+| 0.2 | Oracle server running (radd-hub port 5000 — all API) | ✅ | Single process: auth/catalog/search/poster/sub all on port 5000. raddflix_radd supervisor. |
+| 0.3 | SSH from Replit to Oracle | ✅ | SSH works — key is OPENSSH not RSA; use regex PEM reformat (see AGENT_NOTES.md Rule 2). |
 
 ---
 
@@ -267,9 +267,16 @@ All 34 audit bugs resolved:
 | # | Task | Priority |
 |---|------|----------|
 | 14.1 | MD3 + light/dark/AMOLED/auto theme — ✅ already complete (false positive audit result) | N/A |
-| 14.2 | Oracle git conflict resolution (needs manual SSH from server or user action) | P3 |
+| 14.2 | Oracle git conflict resolution | ✅ | Resolved 2026-05-30 via ssh + Python subprocess. Server at 44791ec. |
 | 14.3 | When domain is available: replace self-signed cert with Let's Encrypt | P2 |
 | 14.4 | Set `AppConstants.supportWhatsApp` to real number before production release | P1 |
+
+| 14.5 | Catalog/search/poster migrated from _watch_prototype to radd-hub | ✅ | Commit 46983977. Single port 5000 for all API. raddflix_watch decommissioned. |
+| 14.6 | JazzMAX → RaddFlix rename: nginx, supervisor, systemd, health endpoint | ✅ | All server files renamed. /health returns "RaddFlix Oracle OK". |
+| 14.7 | Implement HistoryApi in Flutter (BUG-A19) — server API exists, Flutter side missing | P1 |
+| 14.8 | Fix BUG-A07: /api/app/check still returns pk.jazzmax.app package ID | P1 |
+| 14.9 | Fix BUG-A02: media_type normalization in catalog/sync output | P1 |
+| 14.10 | Let's Encrypt SSL when domain is configured | P2 |
 
 **Confirm CI is still green before any new code changes.**
 
