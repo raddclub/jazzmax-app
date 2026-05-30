@@ -18,6 +18,7 @@ from .base import (
 log = logging.getLogger("hub.scrapers.katmoviehd")
 
 DOMAINS = [
+    "https://katmoviehd.lol",
     "https://new1.katmoviehd.cymru",
     "https://katmoviehd.fit",
     "https://katmoviehd.fans",
