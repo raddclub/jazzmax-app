@@ -333,14 +333,19 @@ def start_scan(account_id: int) -> dict:
 
     legacy_id = _ensure_legacy_account(account_id)
 
-    # ── Sync TMDB keys to legacy schema so enricher can use them ──────────────
+    # ── Sync TMDB + OMDB keys to legacy schema so enricher can use them ───────
+    # BUG-APIKEY-SYNC: previously only TMDB was synced; OMDB keys were never
+    # available inside _scanner.enrich_and_save(), killing the OMDB fallback.
     try:
         from . import keys as _keys
         tmdb_keys = _keys.get_all_active_values("tmdb")
         for k in tmdb_keys:
             _legacy_schema.add_api_key("tmdb", k)
+        omdb_keys_for_legacy = _keys.get_all_active_values("omdb")
+        for k in omdb_keys_for_legacy:
+            _legacy_schema.add_api_key("omdb", k)
     except Exception as e:
-        log.warning("failed to sync tmdb keys to legacy: %s", e)
+        log.warning("failed to sync api keys to legacy: %s", e)
 
     with _scan_lock:
         active = _active_scans.get(account_id, {})
@@ -663,9 +668,15 @@ def _import_legacy_into_v3_for_account(legacy_id: int, v3_account_id: int) -> in
                     "industry":      t.get("industry"),
                 }
                 
-                # Auto-tag industry and regenerate slug/confidence
+                # Auto-tag industry, regenerate slug/confidence, fill missing
+                # metadata (plot/poster/genres) using vault keys.
+                # BUG-IMPORT-KEYS: previously called with no keys so TMDB/OMDB
+                # were always skipped; every import relied on free fallbacks only.
                 from .metadata import enrich_title
-                meta = enrich_title(meta)  # no keys needed for logic-only tagging
+                from . import keys as _import_keys
+                _t_key = _import_keys.get_active_value("tmdb") or None
+                _o_key = _import_keys.get_active_value("omdb") or None
+                meta = enrich_title(meta, tmdb_key=_t_key, omdb_key=_o_key)
                 
                 new_id = db.upsert_title(meta)
                 if new_id:
@@ -843,14 +854,17 @@ def _enrich_low_confidence_titles(account_id: int, progress_cb=None) -> int:
             progress_cb({"type": "warn", "message": "No API keys configured — skipping parallel enrichment"})
         return 0
 
-    # Find titles linked to this account's files with confidence < 30
+    # Find titles linked to this account's files with confidence < 60.
+    # BUG-THRESHOLD: was < 30, but title+year+media_type = 30 pts already, so
+    # titles from legacy scanner that are missing plot/poster/genres (confidence
+    # 30-59) were silently skipped. Threshold raised to 60 so they get filled in.
     with db.conn() as c:
         rows = c.execute(
             "SELECT DISTINCT t.id, t.title, t.year, t.media_type, t.confidence "
             "FROM titles t JOIN files f ON t.id=f.title_id "
-            "WHERE f.account_id=? AND (t.confidence IS NULL OR t.confidence < 30) "
+            "WHERE f.account_id=? AND (t.confidence IS NULL OR t.confidence < 60) "
             "AND t.title IS NOT NULL AND t.title != '' "
-            "LIMIT 100",  # Increase limit for parallel processing
+            "LIMIT 200",
             (account_id,)
         ).fetchall()
 
@@ -863,19 +877,18 @@ def _enrich_low_confidence_titles(account_id: int, progress_cb=None) -> int:
     # Use as many threads as we have keys (min 2, max 10)
     num_threads = min(max(len(tmdb_keys), len(omdb_keys), 2), 10)
     
-    updated_count = 0
-    
-    def worker(title_meta):
-        # Pick a key based on thread ID or rotating
-        # For simplicity, we'll let the worker handle its own key selection
-        # or just pass the full lists and let metadata.py handle rotation if needed.
-        # But here we'll just distribute them.
-        t_key = tmdb_keys[updated_count % len(tmdb_keys)] if tmdb_keys else None
-        o_key = omdb_keys[updated_count % len(omdb_keys)] if omdb_keys else None
-        
+    # BUG-ROTATION: updated_count was 0 inside every worker closure (captured
+    # by reference but never updated before workers read it), so all threads
+    # always used tmdb_keys[0] — no rotation. Fixed: pass (idx, title_meta)
+    # tuples so each worker derives its key slot from the task index.
+    def worker(idx_and_meta):
+        idx, title_meta = idx_and_meta
+        t_key = tmdb_keys[idx % len(tmdb_keys)] if tmdb_keys else None
+        o_key = omdb_keys[idx % len(omdb_keys)] if omdb_keys else None
+
         if progress_cb:
             progress_cb({"type": "enrich", "message": f"Parallel Enriching: {title_meta['title']}"})
-        
+
         try:
             from . import assets
             enriched = _enrich(title_meta, tmdb_key=t_key, omdb_key=o_key)
@@ -889,7 +902,7 @@ def _enrich_low_confidence_titles(account_id: int, progress_cb=None) -> int:
             return False
 
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        results = list(executor.map(worker, titles))
+        results = list(executor.map(worker, enumerate(titles)))
         updated_count = sum(1 for r in results if r)
 
     if progress_cb and updated_count:

@@ -443,7 +443,13 @@ def enrich_title(meta: dict, *,
     enriched: dict = {}
 
     # 1. TMDB (preferred)
-    if tmdb_key and not meta.get("tmdb_id"):
+    # BUG-TMDB-SKIP: previously skipped TMDB if tmdb_id already existed, even
+    # when the title was missing plot/poster (e.g. legacy scanner saved a tmdb_id
+    # but got a truncated response). Now re-fetches when critical fields are absent.
+    _has_plot   = bool(meta.get("plot") or meta.get("overview"))
+    _has_poster = bool(meta.get("poster") or meta.get("poster_share_url"))
+    _needs_tmdb = not meta.get("tmdb_id") or not _has_plot or not _has_poster
+    if tmdb_key and _needs_tmdb:
         try:
             enriched = fetch_tmdb(title, year, kind, api_key=tmdb_key)
         except Exception as e:

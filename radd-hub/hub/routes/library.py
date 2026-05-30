@@ -571,7 +571,8 @@ def api_enrich_omdb(title_id):
         if t["year"]:
             params["y"] = str(t["year"])[:4]
     try:
-        r = _req.get("http://www.omdbapi.com/", params=params, timeout=10)
+        # BUG-HTTP: was http://; OMDB requires HTTPS for paid keys (avoids redirect+slowness)
+        r = _req.get("https://www.omdbapi.com/", params=params, timeout=10)
         omdb = r.json()
     except Exception as e:
         return jsonify({"error": str(e)}), 503
@@ -766,7 +767,7 @@ def api_bulk_enrich_omdb():
             params["t"] = t["title"]
             if t["year"]: params["y"] = str(t["year"])[:4]
         try:
-            r = _req.get("http://www.omdbapi.com/", params=params, timeout=8)
+            r = _req.get("https://www.omdbapi.com/", params=params, timeout=8)
             omdb = r.json()
             def _f(v): return None if not v or v == "N/A" else v
             if omdb.get("Response") == "True":
