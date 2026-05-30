@@ -2530,3 +2530,128 @@ Commit: `0fc1fdab1ba7135b425a5f6e50c987e533b89bc0`
 CI triggered on both commits (Build RaddFlix APK + RaddFlix CI workflows).
 Oracle deploy required after CI passes: `systemctl restart radd-hub` on 92.4.95.252.
 
+
+---
+
+## Session 2026-05-30 — Deep API Key + Metadata Pipeline Audit (Tasks 8.1–8.7)
+
+### Audit Scope
+Full deep read of: scanner.py, metadata.py, metadata_lookup.py, routes/library.py,
+routes/scan.py, routes/settings.py, config.py, keys.py, db.py.
+No assumptions made — every bug confirmed from actual source lines.
+
+---
+
+### Task 8.1: scanner.py — OMDB keys never synced to legacy scanner DONE
+
+**Root cause:** `start_scan()` synced TMDB keys to the legacy schema but OMDB keys
+were never synced. During `_scanner.enrich_and_save()` (the main JD crawl + enrich
+step), the legacy scanner had no OMDB fallback, so Pakistani/regional content that
+TMDB didn't know got zero metadata.
+
+**Fix:** Added OMDB key sync alongside TMDB in `start_scan()`:
+```python
+omdb_keys_for_legacy = _keys.get_all_active_values("omdb")
+for k in omdb_keys_for_legacy:
+    _legacy_schema.add_api_key("omdb", k)
+```
+File: `radd-hub/hub/scanner.py`
+
+---
+
+### Task 8.2: scanner.py — `enrich_title()` called WITHOUT keys during import DONE
+
+**Root cause:** `_import_legacy_into_v3_for_account()` contained:
+```python
+meta = enrich_title(meta)  # no keys needed for logic-only tagging
+```
+The comment was wrong — `enrich_title()` accepts `tmdb_key` and `omdb_key` kwargs.
+Without them it skips TMDB and OMDB entirely, running only free fallbacks
+(IMDbAPI → AI → YouTube). Every title imported from a scan missed TMDB/OMDB enrichment.
+
+**Fix:** Now fetches and passes vault keys:
+```python
+_t_key = _import_keys.get_active_value("tmdb") or None
+_o_key = _import_keys.get_active_value("omdb") or None
+meta = enrich_title(meta, tmdb_key=_t_key, omdb_key=_o_key)
+```
+File: `radd-hub/hub/scanner.py`
+
+---
+
+### Task 8.3: scanner.py — Post-scan enrichment threshold too low (< 30) DONE
+
+**Root cause:** `_enrich_low_confidence_titles()` filtered:
+```sql
+WHERE confidence IS NULL OR confidence < 30
+```
+After the legacy scanner writes title + year + media_type, confidence = 30 (15+10+5).
+So those titles were already above threshold — titles missing plot/poster/genres
+(confidence 30–59) were silently skipped forever.
+
+**Fix:** Threshold raised to `< 60`. Limit raised from 100 to 200 titles per run.
+File: `radd-hub/hub/scanner.py`
+
+---
+
+### Task 8.4: scanner.py — Key rotation broken in parallel enricher DONE
+
+**Root cause:** `updated_count` was 0 when worker closures were created. Inside
+`ThreadPoolExecutor.map()`, every worker read `updated_count % len(tmdb_keys) = 0`,
+always using the first key. No rotation occurred.
+
+**Fix:** Changed `executor.map(worker, titles)` to `executor.map(worker, enumerate(titles))`.
+Worker signature becomes `def worker(idx_and_meta)` where `idx` is used for key slot.
+File: `radd-hub/hub/scanner.py`
+
+---
+
+### Task 8.5: metadata.py — TMDB skipped for titles that already have tmdb_id DONE
+
+**Root cause:**
+```python
+if tmdb_key and not meta.get("tmdb_id"):
+    enriched = fetch_tmdb(...)
+```
+If the legacy scanner saved a tmdb_id but got a truncated response (no plot, no poster),
+this condition permanently blocked TMDB re-enrichment on subsequent scans.
+
+**Fix:** Now checks whether plot or poster is missing and re-fetches TMDB if either is absent:
+```python
+_needs_tmdb = not meta.get("tmdb_id") or not _has_plot or not _has_poster
+if tmdb_key and _needs_tmdb:
+```
+File: `radd-hub/hub/metadata.py`
+
+---
+
+### Task 8.6 + 8.7: library.py — OMDB API called over HTTP not HTTPS DONE
+
+**Root cause:** Both `api_enrich_omdb()` and `api_bulk_enrich_omdb()` used:
+```python
+r = _req.get("http://www.omdbapi.com/", ...)
+```
+OMDB requires HTTPS for paid keys. HTTP triggers a redirect which adds latency
+and can fail for strict SSL configurations.
+
+**Fix:** Both endpoints changed to `https://www.omdbapi.com/`.
+File: `radd-hub/hub/routes/library.py`
+
+---
+
+### Commit
+`65519b741cfb1d92e13134058dd8d396033f0d9e`
+Files: scanner.py, metadata.py, routes/library.py
+
+---
+
+### Root cause of "only TMDB metadata, keys seem ignored":
+After a scan, titles go through three enrichment opportunities:
+1. `_scanner.enrich_and_save()` — legacy scanner, had TMDB only (Bug 8.1 fixed)
+2. `_import_legacy_into_v3_for_account()` — had NO keys at all (Bug 8.2 fixed)
+3. `_enrich_low_confidence_titles()` — threshold too low to catch most titles (Bug 8.3 fixed)
+
+All three were broken simultaneously, which is why only basic TMDB metadata ever appeared
+and why manual ⚡ OMDB Enrich in the library panel worked (it reads the vault correctly)
+but automatic enrichment during scans did not.
+
