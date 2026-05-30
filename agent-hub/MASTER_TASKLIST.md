@@ -291,3 +291,16 @@ All 34 audit bugs resolved:
 | BUG-B03 | Fix search type filter: `media_type = 'tv'` → `IN ('tv', 'show', 'series')` | ✅ | `search_api.py` — TV show type filter now covers all DB media_type variants |
 
 **Commit**: `c86a76f` — CI ✅ GREEN (Build + Tests)
+
+
+---
+
+## Phase 16 — Deep Audit + Route Verification (2026-05-30)
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| BUG-016 | `tid_status_screen.dart` hardcoded prices wrong (Standard ₨299→₨249, Premium ₨499→₨399) | ✅ | Fixed in commit `4755c15` |
+| BUG-017 | Missing `GET /api/catalog/delta` endpoint (Flutter JazzDrive fallback got 404) | ✅ | Added `/delta` endpoint to `catalog_api.py` in commit `4755c15` |
+| BUG-018 | `poster_jd_url` in `/sync` response pointed to dead `/watch/poster/<id>` route | ✅ | Fixed to `/api/poster/<id>` in commit `4755c15` |
+
+**Commit**: `4755c15` — CI pending

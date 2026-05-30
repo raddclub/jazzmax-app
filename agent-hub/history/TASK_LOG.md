@@ -4024,3 +4024,46 @@ All previously fixed Flutter files confirmed correct:
   - Let's Encrypt SSL — blocked until domain name configured
   - Catalog content — empty (count:0); admin must add titles via admin panel
 - **No more known open bugs** as of this session
+
+
+---
+
+## Phase 16 — Deep Flutter-Backend Route Audit + 3 Bug Fixes (2026-05-30)
+
+### Scope
+Full field-level verification of every Flutter → Oracle API call:
+- Fetched 14 Flutter API/service files and all 3 backend route modules
+- Cross-checked every HTTP path, HTTP method, request body field name, and response field name
+- Ran 16-endpoint smoke test (all 200/401/405 as expected) after Phase 15 restart
+
+### Bugs Found & Fixed
+
+| ID | File | Description | Fix |
+|----|------|-------------|-----|
+| BUG-016 | `raddflix_flutter/lib/screens/tid_status_screen.dart` | Hardcoded plan prices wrong: Standard showed ₨299/month (should be ₨249), Premium showed ₨499/month (should be ₨399) | Corrected to match server-seeded plan prices |
+| BUG-017 | `radd-hub/hub/routes/catalog_api.py` | Missing `GET /api/catalog/delta` endpoint — Flutter's `SyncService._syncFromJazzDriveDelta()` calls this Oracle fallback path and received 404 | Added `/delta` endpoint returning full catalog JSON in same format as `/db_update` |
+| BUG-018 | `radd-hub/hub/routes/catalog_api.py` | `poster_jd_url` field in `/sync` response pointed to `/watch/poster/<id>` — a route from the decommissioned `raddflix_watch` prototype | Fixed to `/api/poster/<id>` (live poster proxy registered in app.py) |
+
+### False Positives (verified not bugs)
+- `ApiPaths.playUrl` = `/watch/api/play/<id>` — defined in constants but **never called** in Flutter. Player uses JazzDrive `share_url` from local DB / `CatalogApi.getShareUrl()`. Dead code only.
+- `get_history` endpoint — **IS** decorated with `@_require_auth` (line 636). Confirmed by 401 response during smoke test.
+- `SubscriptionStatus.fromJson` reads `json['subscription'] ?? json` — works correctly because `/api/subscription/status` returns fields at root level.
+- `mark_read` empty IDs — empty array `[]` triggers "mark all" branch in server handler. Correct by design.
+
+### Commit
+`4755c15` — BUG-016 + BUG-017 + BUG-018 fixes
+
+### Oracle Deployment
+- `git pull` succeeded (4 files changed on Oracle)
+- `sudo supervisorctl restart raddflix_radd` → RUNNING pid 433719
+- Verified: `GET /api/catalog/delta` → 200 with correct JSON structure
+- Verified: `GET /api/catalog/sync` → still returns 200
+
+### Notes for Next Agent
+- Oracle at HEAD (`4755c15`). `raddflix_radd` RUNNING.
+- **No known open code-level bugs remain.**
+- Remaining **owner-blocked** tasks (need human action):
+  - `AppConstants.supportWhatsApp` — update to real WhatsApp number before production
+  - Let's Encrypt SSL — needs domain name configured on Oracle
+  - Catalog content — DB is empty (count=0); admin must add titles via admin panel
+  - OTP device-switch endpoints — server stubs only; needs WhatsApp OTP integration
