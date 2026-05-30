@@ -4067,3 +4067,33 @@ Full field-level verification of every Flutter → Oracle API call:
   - Let's Encrypt SSL — needs domain name configured on Oracle
   - Catalog content — DB is empty (count=0); admin must add titles via admin panel
   - OTP device-switch endpoints — server stubs only; needs WhatsApp OTP integration
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Read-only: find out what last agent did)
+
+### Task
+User asked: "find out what last agent did."
+
+### Done
+- Read `agent-hub/README.md`, `agent-hub/SKILLS.md`, and `agent-hub/history/TASK_LOG.md` from GitHub
+- Reported to user: last agent did Phase 16 — Deep Flutter-Backend Route Audit + 3 Bug Fixes
+  - BUG-016: Wrong plan prices in `tid_status_screen.dart` (₨299→₨249, ₨499→₨399)
+  - BUG-017: Missing `GET /api/catalog/delta` endpoint in `catalog_api.py`
+  - BUG-018: `poster_jd_url` in `/sync` response pointed to decommissioned route
+  - All 3 fixes committed as `4755c15`, deployed to Oracle, `raddflix_radd` RUNNING
+- No code changes made this session
+
+### Files Changed
+None.
+
+### Notes for Next Agent
+- Oracle at HEAD (`4755c15`). `raddflix_radd` RUNNING pid 433719.
+- No known open code-level bugs.
+- Owner-blocked tasks unchanged:
+  - `AppConstants.supportWhatsApp` — update to real number before production
+  - Let's Encrypt SSL — needs a domain name first
+  - Catalog content — empty; admin must add titles via admin panel at http://92.4.95.252/admin
+  - OTP device-switch — server stubs only; needs WhatsApp OTP integration
+
+---
