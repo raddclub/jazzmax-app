@@ -1776,6 +1776,30 @@ def catalog_delta():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+@bp.route("/catalog/share_url")
+def catalog_share_url():
+    """Return JazzDrive share_url for a specific file by file_id.
+
+    Called by Flutter app when local SQLite has no share_url (stale sync,
+    fresh install, or content added after last full sync).
+    No auth required — used by zero-rated app clients.
+    Query param: file_id=<int>
+    """
+    file_id = (request.args.get("file_id") or "").strip()
+    if not file_id:
+        return jsonify({"ok": False, "error": "file_id required"}), 400
+    try:
+        with db.conn() as c:
+            row = c.execute(
+                "SELECT share_url FROM files WHERE id = ? LIMIT 1", (file_id,)
+            ).fetchone()
+            if row and row["share_url"]:
+                return jsonify({"ok": True, "share_url": row["share_url"]})
+            return jsonify({"ok": False, "share_url": None, "error": "file not found or no share_url"}), 404
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @bp.route("/status")
 @auth.login_required
 def status():

@@ -22,7 +22,7 @@ def _regen_db_update_bg():
                 "SELECT t.id, t.title, t.year, t.media_type, t.plot, t.overview, "
                 "t.rating, t.genres, t.language, t.is_free, t.updated_at, "
                 "t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count, "
-                "f.id AS file_id "
+                "f.id AS file_id, f.share_url AS file_share_url "
                 "FROM titles t "
                 "LEFT JOIN files f ON f.title_id = t.id "
                 "AND (f.season IS NULL OR f.season = 0) "
@@ -53,13 +53,14 @@ def _regen_db_update_bg():
                 "poster_share_url": r.get("poster_share_url") or "",
                 "db_version": int(r["updated_at"] or 0),
                 "file_id": str(r["file_id"]) if r["file_id"] else None,
+                "share_url": r.get("file_share_url") or "",  # BUG-SHARE: file-level share_url for movies
             })
         episodes_out = []
         if title_ids:
             ph = ",".join("?" * len(title_ids))
             with _db.conn() as c:
                 ep_rows = c.execute(
-                    "SELECT id, title_id, season, episode FROM files "
+                    "SELECT id, title_id, season, episode, share_url FROM files "
                     "WHERE title_id IN (" + ph + ") "
                     "AND season IS NOT NULL AND season > 0 "
                     "ORDER BY title_id, season, episode", title_ids
@@ -71,6 +72,7 @@ def _regen_db_update_bg():
                     "season": r["season"], "episode": r["episode"],
                     "label": "S{:02d}E{:02d}".format(r["season"], r["episode"]),
                     "quality": None, "is_free": 0,
+                    "share_url": r.get("share_url") or "",  # BUG-SHARE: episode-level JazzDrive share_url
                 })
         now = int(_time.time())
         payload = {
