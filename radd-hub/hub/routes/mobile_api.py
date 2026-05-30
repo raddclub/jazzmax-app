@@ -468,6 +468,24 @@ def tid_status(_user_id, _phone):
     })
 
 
+@bp_sub.route("/tid/check_by_phone", strict_slashes=False)
+@_require_auth
+def tid_check_by_phone(_user_id, _phone):
+    """GET /api/subscription/tid/check_by_phone?phone=<phone>
+    Returns all TID payments for the authenticated user as a list.
+    Called by Flutter TidStatusScreen to poll payment verification.
+    The ?phone param is accepted but ignored — auth token identifies the user.
+    Response: {"ok": true, "payments": [{tid, status, plan, admin_note, ...}]}
+    """
+    with db.conn() as c:
+        rows = c.execute(
+            "SELECT tid, status, plan, admin_note, submitted_at, reviewed_at "
+            "FROM tid_payments WHERE user_id=? ORDER BY submitted_at DESC LIMIT 10",
+            (_user_id,)
+        ).fetchall()
+    return jsonify({"ok": True, "payments": [dict(r) for r in rows]})
+
+
 # ── Usage API (Phase 6) ─────────────────────────────────────────────────────
 
 @bp_usage.route("", methods=["POST"], strict_slashes=False)
