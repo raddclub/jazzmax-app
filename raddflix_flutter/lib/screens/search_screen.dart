@@ -34,11 +34,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
   late final AnimationController _glowCtrl;
   late final Animation<double>   _glowAnim;
 
-  static const _staticTrending = [
-    'Money Heist', 'Squid Game', 'Ertugrul', 'Kabul Express',
-    'Parizaad', 'Tere Bin', 'House of the Dragon', 'The Batman',
-  ];
-
   // ── Lifecycle ───────────────────────────────────────────────────────────────
 
   @override
@@ -155,10 +150,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
   // ── Catalog helpers ──────────────────────────────────────────────────────────
 
+  /// BUG-A16: genres may be stored as JSON array '["Action","Drama"]' or
+  /// as comma-separated 'Action, Drama'. Detect and handle both.
   List<String> _extractGenres(List<CatalogItem> all) {
     final counts = <String, int>{};
     for (final item in all) {
-      for (final g in (item.genres ?? '').split(',')) {
+      final raw = item.genres ?? '';
+      List<String> parts;
+      if (raw.trimLeft().startsWith('[')) {
+        // JSON array format from DB — strip brackets, quotes, split by comma
+        final inner = raw.trim().replaceAll(RegExp(r'^\[|\]$'), '');
+        parts = inner.split(',').map((s) => s.trim().replaceAll(RegExp(r'^["\']+|["\']+$'), '')).toList();
+      } else {
+        parts = raw.split(',');
+      }
+      for (final g in parts) {
         final t = g.trim();
         if (t.isNotEmpty) counts[t] = (counts[t] ?? 0) + 1;
       }
@@ -550,18 +556,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
               color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
         ]),
         const SizedBox(height: 10),
-          if (trendingItems.isNotEmpty) ...[
-            SizedBox(
+          Builder(builder: (context) {
+            // BUG-A15: _staticTrending showed hardcoded fake titles when catalog
+            // was empty. Now: prefer real trending items → real top-rated fallback
+            // → nothing (never show titles not in the library).
+            final displayItems = trendingItems.isNotEmpty
+                ? trendingItems
+                : (allItems.isNotEmpty
+                    ? (List<CatalogItem>.from(allItems)
+                        ..sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0)))
+                        .take(8).toList()
+                    : <CatalogItem>[]);
+            if (displayItems.isEmpty) return const SizedBox.shrink();
+            return SizedBox(
               height: 185,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 physics: const BouncingScrollPhysics(),
-                itemCount: trendingItems.length,
+                itemCount: displayItems.length,
                 itemBuilder: (_, i) => Padding(
-                  padding: EdgeInsets.only(right: i < trendingItems.length - 1 ? 10 : 0),
+                  padding: EdgeInsets.only(right: i < displayItems.length - 1 ? 10 : 0),
                   child: SizedBox(
                     width: 114,
-                    child: ContentCard(item: trendingItems[i])
+                    child: ContentCard(item: displayItems[i])
                         .animate(delay: (i * 40).ms)
                         .fadeIn(duration: 280.ms)
                         .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1),
@@ -569,14 +586,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                   ),
                 ),
               ),
-            ),
-          ] else ...[
-            ..._staticTrending.asMap().entries.map((e) =>
-              _TrendingRow(rank: e.key + 1, label: e.value, onTap: () => _tapSuggestion(e.value))
-                  .animate(delay: (e.key * 40).ms)
-                  .fadeIn(duration: 280.ms)
-                  .slideX(begin: 0.15, end: 0, duration: 280.ms, curve: AppCurves.standard)),
-          ],
+            );
+          }),
 
         // ── Browse by Genre ────────────────────────────────────────────────
         if (byGenre.isNotEmpty) ...[

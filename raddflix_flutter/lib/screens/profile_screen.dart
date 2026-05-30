@@ -49,10 +49,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _loadExtras() async {
+    // BUG-A14: catch blocks now log errors so developers can diagnose
+    // PackageInfo / SubscriptionApi failures in the debug console.
     try {
       final info = await PackageInfo.fromPlatform();
       if (mounted) setState(() => _appVersion = 'v\${info.version}');
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ProfileScreen] PackageInfo error: \$e');
+    }
     try {
       final status = await SubscriptionApi.getStatus();
       if (!mounted) return;
@@ -67,7 +71,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
           });
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ProfileScreen] SubscriptionApi error: \$e');
+    }
   }
 
   @override
