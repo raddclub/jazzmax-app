@@ -10,7 +10,7 @@
 You are the AI agent continuing development of **RaddFlix** — a Pakistani streaming platform where Jazz SIM users watch movies and dramas for **free** (zero data cost) via JazzDrive zero-rating.
 
 - GitHub repo: `raddclub/raddflix-app`
-- Oracle server: `ubuntu@92.4.95.252` (SSH unreachable from Replit — use GitHub API for ALL file ops)
+- Oracle server: `ubuntu@92.4.95.252` (SSH **works** from Replit — see AGENT_NOTES.md for key reformat. GitHub Tree API for commits due to Replit git restrictions.)
 - Flutter app package: `com.raddflix.app`
 - Admin panel: Flask on port 5000 at `http://92.4.95.252`
 
@@ -165,7 +165,7 @@ These are confirmed bugs found by reading actual code logic. Fix these in Phase 
 | BUG-A31 | Oracle server | No SSL — all API traffic unencrypted. `http://92.4.95.252` |
 | BUG-A32 | `radd-hub/hub/config.py` | `FLASK_SECRET_KEY` auto-generated on first run. Server restart = new key = all JWTs invalidated = all users logged out |
 | BUG-A33 | App + Server | UI uses Material Design 2. No Material 3 (`useMaterial3: true` not set). No dynamic color. No light theme. |
-| BUG-A34 | `_watch_prototype/` directory | Legacy prototype still in repo. Dead code. `_watch_prototype/routes/app_version.py` is origin of wrong package ID bug (BUG-A07) |
+| BUG-A34 | `_watch_prototype/` directory | ✅ RESOLVED 2026-05-30 — catalog/search/poster migrated to radd-hub routes. `raddflix_watch` supervisor service decommissioned. |
 
 ---
 
@@ -272,13 +272,16 @@ raddflix_flutter/           ← Flutter Android app
     widgets/                ← Reusable UI + 12 player overlay widgets
     services/               ← Cast, local media, thumb, vault
 
-radd-hub/hub/               ← Flask backend (admin panel + mobile API)
+radd-hub/hub/               ← Flask backend (admin panel + mobile API) — ALL on port 5000
   app.py                    ← Flask factory, blueprint registration, background threads
   db.py                     ← SQLite schema (25+ tables), all server-side queries
   routes/
-    mobile_api.py           ← ALL mobile API endpoints (auth/sub/usage/notif/history/app)
-    library.py              ← Catalog sync endpoints + delta JSON generation
-    api.py                  ← JazzDrive OTP, metadata fix, download queue status
+    mobile_api.py           ← ALL mobile API endpoints (auth/sub/usage/notif/history/app/recommend)
+    catalog_api.py          ← Flutter catalog sync (version/sync/posters/db_update) — SQLite live
+    search_api.py           ← Flutter app search (no auth required)
+    poster_proxy.py         ← TMDB/OMDB/IMDbAPI poster key rotation + 30d cache
+    library.py              ← Admin catalog mgmt + delta JSON generation
+    api.py                  ← JazzDrive OTP, scraper search (/api/scraper/search), metadata fix
     [admin routes]          ← analytics, app_users_panel, bots, broadcast, settings, etc.
   templates/                ← Jinja2 HTML admin panel (base.html + page templates)
   jazzdrive.py              ← JazzDrive API wrapper (partially stubbed)
@@ -311,3 +314,38 @@ Priority order based on user impact:
 9. **BUG-A12** — Fix placeholder payment numbers in `subscription_screen.dart`
 10. **BUG-A16** — Fix genre chip deduplication in `search_screen.dart`
 
+---
+
+## Addendum — Oracle Server State (2026-05-30)
+
+### Catalog Migration Done
+All API routes now served from **single radd-hub process on port 5000**.
+`_watch_prototype` catalog service (`raddflix_watch`) decommissioned.
+
+| Before | After |
+|--------|-------|
+| /api/catalog/ → port 6000 (_watch_prototype) | /api/catalog/ → port 5000 (radd-hub catalog_api.py) |
+| /api/search → port 6000 | /api/search → port 5000 (radd-hub search_api.py) |
+| /api/poster/ → port 6000 | /api/poster/ → port 5000 (radd-hub poster_proxy.py) |
+| /api/auth/ → port 5000 | /api/auth/ → port 5000 (unchanged) |
+
+### JazzMAX → RaddFlix Rename (Oracle server)
+- nginx: `sites-available/jazzmax` → `raddflix`, `raddflix-ssl.conf`, `raddflix_security.conf`
+- supervisor: `jazzmax_radd` → `raddflix_radd`; `jazzmax_watch` → removed
+- systemd: `jazzmax_watch.service` → `raddflix_watch.service` (then removed)
+- `/health` endpoint → returns `"RaddFlix Oracle OK"`
+
+### Supervisor Status
+```bash
+sudo supervisorctl status
+# raddflix_radd   RUNNING   # only service — all API on port 5000
+```
+
+### Git State
+- Server at commit `44791ec` (latest main)
+- radd-hub Python changes at commit `46983977`
+- All conflicts resolved
+
+### SSH Key Pattern
+See AGENT_NOTES.md — key is OPENSSH format with spaces instead of newlines.
+Use `re.match(r'(-----BEGIN[^-]+-----)(.+?)(-----END[^-]+-----)', raw)` to reformat.
