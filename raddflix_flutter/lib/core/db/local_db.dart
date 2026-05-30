@@ -164,6 +164,13 @@ class LocalDb {
         last_claim TEXT
       )
     ''');
+    // Phase 12 — Full-text search (FTS5) for title + description
+    await db.execute('''
+      CREATE VIRTUAL TABLE IF NOT EXISTS catalog_fts
+      USING fts5(title, description, content='titles', content_rowid='id')
+    ''');
+    // Populate FTS index from existing titles data
+    await db.execute("INSERT INTO catalog_fts(catalog_fts) VALUES('rebuild')");
   }
 
   static Future<void> _migrate(Database db, int oldV, int newV) async {
@@ -268,6 +275,17 @@ class LocalDb {
         ''');
       } catch (_) {}
     }
+    if (oldV < 13) {
+      // Phase 12 — FTS5 full-text search table
+      try {
+        await db.execute('''
+          CREATE VIRTUAL TABLE IF NOT EXISTS catalog_fts
+          USING fts5(title, description, content='titles', content_rowid='id')
+        ''');
+        // Rebuild the FTS index from all existing titles rows
+        await db.execute("INSERT INTO catalog_fts(catalog_fts) VALUES('rebuild')");
+      } catch (_) {}
+    }
   }
 
   // ── Titles ────────────────────────────────────────────────────────────────
@@ -288,12 +306,36 @@ class LocalDb {
 
   static Future<List<CatalogItem>> searchTitles(String query) async {
     final db = await instance;
+    // Build FTS5 prefix query: "word1*" "word2*" — matches partial words and handles
+    // Urdu/Roman transliterations better than LIKE (e.g. "khuda" finds "khuda hafiz")
+    final terms = query.trim().split(RegExp(r'\s+'));
+    final ftsQuery = terms.map((w) => '"${w.replaceAll('"', '')}"*').join(' ');
+    try {
+      final rows = await db.rawQuery('''
+        SELECT t.* FROM titles t
+        INNER JOIN catalog_fts fts ON t.id = fts.rowid
+        WHERE catalog_fts MATCH ?
+        ORDER BY rank, t.title ASC
+        LIMIT 50
+      ''', [ftsQuery]);
+      if (rows.isNotEmpty) return rows.map(_rowToItem).toList();
+    } catch (_) {}
+    // Fallback: plain LIKE (used on first install before FTS index is populated)
     final rows = await db.query('titles',
         where: 'title LIKE ?',
         whereArgs: ['%$query%'],
         orderBy: 'title ASC',
         limit: 50);
     return rows.map(_rowToItem).toList();
+  }
+
+  /// Rebuild the FTS5 catalog index from the current titles table.
+  /// Call after a bulk sync so search reflects new/updated titles immediately.
+  static Future<void> rebuildFtsIndex() async {
+    final db = await instance;
+    try {
+      await db.execute("INSERT INTO catalog_fts(catalog_fts) VALUES('rebuild')");
+    } catch (_) {}
   }
 
   static Future<void> upsertTitle(CatalogItem item) async {

@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-29 (Phase 11 ✅ full codebase audit | Phase 5-6-7-8-9 ✅ | sqflite_sqlcipher 3.1.0+1)
+> Last updated: 2026-05-30 (Phase 12 ✅ FTS5 search | CI fixes | Continue Watching shows | Resume button | sqflite_sqlcipher 3.1.0+1)
 > Read PRODUCT_CONTEXT.md first. This file tracks every task — done, in progress, and upcoming.
 > Update this file at the end of every session.
 
@@ -178,6 +178,19 @@
 
 ---
 
+## Phase 12 — Full-Text Search (FTS5)
+
+| # | Task | Status | Notes |
+|---|------|--------|-------|
+| 12.1 | `catalogDbVersion` 12 → 13 | ✅ | constants.dart |
+| 12.2 | `CREATE VIRTUAL TABLE catalog_fts USING fts5(title, description, content='titles')` | ✅ | _createAll + _migrate (oldV < 13) in local_db.dart |
+| 12.3 | `rebuildFtsIndex()` method (fire-and-forget, called after every catalog load) | ✅ | local_db.dart + catalog_provider.dart |
+| 12.4 | `searchTitles()` — FTS5 MATCH with prefix terms + LIKE fallback | ✅ | Handles partial names, Roman Urdu transliterations; e.g. "khuda" matches "Khuda Hafiz" |
+
+> **FTS5 query format:** Each word becomes a prefix term `"word*"` — space-separated terms are AND'd. Falls back to LIKE if FTS index is empty (fresh install before first sync).
+
+---
+
 ## Known Issues / Bugs Open
 
 | ID | Description | File | Priority |
@@ -197,15 +210,16 @@
 4. `agent-hub/history/TASK_LOG.md` — what each session did
 
 **Recommended next tasks (in order):**
-1. Phase 5/6/8/9 ✅ DONE — device binding, usage tracking, subscription API, SIMOSA card
-2. Phase 6 remaining: 6.9 auto-downgrade offline enforcement only
-2. Phase 6 — Data Usage Tracking — required for subscription enforcement
-3. Phase 8 — Subscription Plans & Enforcement
+1. Phase 5.7 — flip `AppConstants.otpDeviceSwitchEnabled = true` when OTP provider ready
+2. Player — pass `titleId` to `JazzDriveService.getStreamLink()` for free poster saving on every stream
+3. Search UX — add description search (FTS already indexes `description` column — just update the search bar hint text)
+4. Offline mode — show "offline, showing cached content" banner when no internet
 
 **Before touching ANY code:**
-- Run the Full Review & Test Checklist from REINCARNATION.md (Step 0–10)
-- Confirm CI is green on latest commit
+- Run the Full Review & Test Checklist from REINCARNATION.md (Step 0–12)
+- Confirm CI is green on latest commit (`a463913c`)
 - [x] **New Episode badge** on show cards — `+N EP` pill badge, auto-clears on open [54660441]
 - [x] **CI compile fix** — `oldVersion` → `oldV` in v12 migration [5bd1ac75] ✅ GREEN
 - [x] **Continue Watching TV fix** — shows now appear in Continue Watching row [f506b917] ✅ GREEN
 - [x] **Resume button** on show detail — "Resume S01E03 · 42%" button when partially-watched [d9e6bfce]
+- [x] **FTS5 search** — prefix-aware full-text search replaces LIKE, DB v13 [pending]

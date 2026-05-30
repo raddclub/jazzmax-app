@@ -2899,3 +2899,45 @@ Verify last agent's work, fix all bugs, and add missing features including Conti
 - Recommended next tasks: see MASTER_TASKLIST.md
 
 ---
+
+---
+
+## [2026-05-30 18:30 UTC] — Agent: Replit Agent (FTS5 Full-Text Search + .md Updates)
+
+### Task
+Implement FTS5 full-text search to replace slow LIKE queries. Update all agent-hub .md files to reflect current state.
+
+### Done
+
+#### Feature — FTS5 Full-Text Search (DB v13)
+- `constants.dart`: `catalogDbVersion` 12 → 13
+- `local_db.dart` `_createAll`: Added `CREATE VIRTUAL TABLE catalog_fts USING fts5(title, description, content='titles', content_rowid='id')` + initial `'rebuild'` populate
+- `local_db.dart` `_migrate`: Added `if (oldV < 13)` block — creates FTS table + rebuilds from existing data on DB upgrade
+- `local_db.dart` `searchTitles()`: Replaced LIKE with FTS MATCH query using prefix terms (`"word*"` format). Falls back to LIKE if FTS throws. Orders by `rank` (relevance) then title.
+- `local_db.dart`: Added `rebuildFtsIndex()` static method — single SQL command to rebuild FTS index from titles table
+- `catalog_provider.dart`: `_loadFromDb()` now calls `LocalDb.rebuildFtsIndex()` fire-and-forget after loading state — keeps FTS in sync with titles after every sync
+
+#### .md Files Updated
+- `MASTER_TASKLIST.md` — Added Phase 12 table, updated header date, updated Next Session starting point
+- `REINCARNATION.md` — Updated date/commit, added Phase 12 to "What's Built", added Steps 11+12 to Review Checklist, updated Recommended Next Tasks, added FTS5 technical note
+- `SKILLS.md` — Added FTS5 addendum with DB version table, query format, `oldV` rule, Continue Watching note, Resume button note
+- `history/TASK_LOG.md` — this entry
+
+### Files Changed
+- `raddflix_flutter/lib/core/constants.dart` — catalogDbVersion 12 → 13
+- `raddflix_flutter/lib/core/db/local_db.dart` — FTS5 table in _createAll, _migrate v13, searchTitles FTS+fallback, rebuildFtsIndex method
+- `raddflix_flutter/lib/providers/catalog_provider.dart` — rebuildFtsIndex() call after _loadFromDb
+- `agent-hub/MASTER_TASKLIST.md` — Phase 12, updated recommended tasks
+- `agent-hub/REINCARNATION.md` — FTS5 summary, Steps 11+12, updated CI status
+- `agent-hub/SKILLS.md` — FTS5 addendum
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- `catalogDbVersion = 13`. FTS5 table `catalog_fts` is linked to `titles` via content= table.
+- Always call `LocalDb.rebuildFtsIndex()` after bulk title inserts. Currently done in catalog_provider._loadFromDb().
+- `searchTitles()` falls back to LIKE if FTS fails — safe during fresh install.
+- The `_migrate` parameter is `oldV` (not `oldVersion`) — this is now documented in SKILLS.md.
+- CI is pending on the FTS commit at time of writing — verify green before next session.
+- Recommended next: flip OTP flag (5.7), player poster saving, offline banner.
+
+---

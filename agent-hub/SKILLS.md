@@ -237,3 +237,35 @@ If something looks wrong, fix it before logging it as done.
   The free IMDB API at `imdbapi.dev` covers many Pakistani/Punjabi films not on TMDB+OMDB.
   It's particularly good for: Lollywood films, Pakistani TV dramas, Punjabi cinema.
 
+
+  ---
+
+  ## Addendum — FTS5 Full-Text Search + DB Version (2026-05-30)
+
+  ### DB Version History
+  | Version | What was added |
+  |---------|---------------|
+  | 1–11    | Core tables (titles, episodes, watch_positions, downloads, etc.) |
+  | 12      | show_ep_seen (new-episode badge), stream_cache (6h link TTL) |
+  | 13      | catalog_fts (FTS5 virtual table — full-text search for title + description) |
+
+  ### FTS5 Rules
+  - The `catalog_fts` virtual table uses `content='titles'` — it reads from the `titles` table but needs an explicit **rebuild** after bulk inserts.
+  - **Always call `LocalDb.rebuildFtsIndex()` after syncing new titles into the DB.** Currently done fire-and-forget in `catalog_provider._loadFromDb()`.
+  - Query format: `"word*"` prefix terms, AND'd. Example: user types `khuda` → FTS query `"khuda*"` → matches "Khuda Hafiz", "Khuda Aur Mohabbat".
+  - If FTS throws (e.g. corrupt index), `searchTitles()` silently falls back to LIKE.
+
+  ### `_migrate` Parameter MUST be `oldV`
+  The `_migrate(Database db, int oldV, int newV)` function uses `oldV` as parameter name.
+  Using `oldVersion` anywhere in that function = compile error. This broke CI for 2 commits (54660441, f571b352). Fixed in 5bd1ac75. **Never rename this parameter.**
+
+  ### Continue Watching — Shows vs Movies
+  `CatalogItem.fileId` is `null` for TV shows (titles table has no file_id for shows).
+  Watch positions store episode file_ids. To match a watch position against a show, you must
+  iterate `show.episodes` list. Fixed in catalog_provider.dart commit f506b917.
+
+  ### Resume Button on Show Detail
+  `show_detail_screen.dart` computes `_resumeEpisodeIndex` in `_loadEpisodes()` — finds episode
+  with progress 0.03–0.95. Shows "Resume S01E03 · 42%" button above episode list. Handles
+  multi-season shows by switching to the correct season tab before playing. Commit d9e6bfce.
+

@@ -9,7 +9,7 @@
 
 You are the AI agent continuing development of **RaddFlix** — a Pakistani streaming platform where Jazz SIM users watch movies and dramas for **free** (zero data cost) via JazzDrive zero-rating. You are working on GitHub repo `raddclub/raddflix-app`. The Oracle server at `92.4.95.252` is SSH-unreachable from Replit — use GitHub API for ALL file operations.
 
-Previous sessions built Phases 1–4 and Phase 7. CI is green as of commit `c0d940a` (2026-05-29).
+Previous sessions built Phases 1–12. CI is green as of commit `a463913c` (2026-05-30).
 
 ---
 
@@ -109,12 +109,23 @@ curl -s -X PATCH -H "Authorization: token $GITHUB_TOKEN" \
 - **App** `constants.dart` — `jazzDriveDeltaUrl = 'http://92.4.95.252/api/catalog/delta'`
 - **Admin** Zero-Rating Manager UI rebuilt — shows Delta JSON card (count, size, timestamp) + old db_update.json card separately; security note about full catalog
 
+### Phase 12 — Full-Text Search (FTS5) ✅ CI GREEN
+- `catalogDbVersion` 13: `catalog_fts` FTS5 virtual table (content='titles')
+- `searchTitles()` uses FTS MATCH with prefix terms — handles partial names and Roman Urdu transliterations
+- `rebuildFtsIndex()` fired fire-and-forget after every catalog load in catalog_provider
+- Falls back to LIKE on fresh install before first sync
+
+### This session also fixed (2026-05-30)
+- **CI compile error** (`oldVersion` → `oldV` in v12 migration) — was breaking builds for 2 commits
+- **Continue Watching shows** — TV shows now appear; fixed null `fileId` by searching `show.episodes`
+- **Resume button** on show detail — "Resume S01E03 · 42%" above episode list
+
 ---
 
 ## Current CI Status
 
 - Workflow: `build-apk.yml` — Flutter 3.22.x, Java 17, AGP 8, ubuntu-latest
-- Last successful commit: `c0d940a` (2026-05-29)
+- Last successful commit: `a463913c` (2026-05-30) — all session commits ✅✅
 - CI includes Gradle namespace patch for legacy pub packages (auto-patches `flutter.compileSdkVersion` → `34`)
 
 **Always check CI first:**
@@ -127,6 +138,23 @@ curl -s -H "Authorization: token $GITHUB_TOKEN" \
 ---
 
 ## Recommended Next Tasks (Priority Order)
+
+### Priority 1 — OTP Device Switch (Phase 5.7)
+- Flip `AppConstants.otpDeviceSwitchEnabled = true` in constants.dart
+- Implement `AuthApi.requestDeviceSwitchOtp()` and `verifyDeviceSwitchOtp()` pointing to real Oracle OTP endpoint
+
+### Priority 2 — Player Poster Saving on Stream
+- `jazzdrive_service.getStreamLink()` — pass `titleId` parameter through, call `PosterService.saveFromJazzDrive()` on fresh link
+
+### Priority 3 — Offline Banner
+- Show "Offline — cached content" banner using `connectivity_plus` (already in pubspec)
+
+### Priority 4 — Search Description Search
+- FTS already indexes `description` — no DB change needed; update hint text in search bar
+
+---
+
+## Original Recommended Next Tasks (archived — Phases 5–12 now done)
 
 ### Option A — Phase 5: Device Binding (1 account = 1 device)
 **Server work (via GitHub API → deployed to Oracle):**
@@ -314,7 +342,41 @@ curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_
 
 ---
 
-## Key File Locations (current as of 2026-05-29)
+### Step 11: FTS5 Search Verification
+```bash
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_flutter/lib/core/db/local_db.dart" \
+  | grep -E "catalog_fts|fts5|rebuildFtsIndex|MATCH"
+```
+**Must see:**
+- `CREATE VIRTUAL TABLE IF NOT EXISTS catalog_fts`
+- `USING fts5(title, description, content='titles', content_rowid='id')`
+- `rebuildFtsIndex()` method defined
+- `catalog_fts MATCH` in searchTitles
+
+```bash
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_flutter/lib/core/constants.dart" \
+  | grep "catalogDbVersion"
+```
+**Must see:** `catalogDbVersion = 13` (not 12).
+
+---
+
+### Step 12: Continue Watching + Resume Button Verification
+```bash
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_flutter/lib/providers/catalog_provider.dart" \
+  | grep -E "show.episodes|seenIds|outer:"
+```
+**Must see:** `show.episodes` iteration in `_loadRecentlyWatched`.
+
+```bash
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/raddflix_flutter/lib/screens/show_detail_screen.dart" \
+  | grep -E "_resumeEpisodeIndex|Resume S"
+```
+**Must see:** `_resumeEpisodeIndex` field and `Resume S` button text.
+
+---
+
+## Key File Locations (current as of 2026-05-30)
 
 ```
 raddflix_flutter/
@@ -322,7 +384,7 @@ raddflix_flutter/
 ├── lib/core/
 │   ├── constants.dart                       ← jazzDriveDeltaUrl, AppConstants
 │   ├── db/
-│   │   ├── local_db.dart                    ← SQLCipher open, mergeDeltaTitle, all DB ops
+│   │   ├── local_db.dart                    ← SQLCipher open, mergeDeltaTitle, FTS5 search, all DB ops
 │   │   └── sync_service.dart                ← Oracle + JazzDrive delta sync
 │   ├── security/
 │   │   ├── keystore.dart                    ← getOrCreateDbKey() + auth token storage
@@ -378,6 +440,13 @@ For files >50KB (player_screen.dart is ~3400 lines), use `base64 -w0` for the bl
 ### Oracle SSH
 Port 22 is unreachable from Replit containers. All server file changes must go through GitHub API. The Oracle server has a deployment mechanism (auto-pull or manual) — check with the user how server deploys happen.
 
+### FTS5 Search — DB v13 (2026-05-30)
+- `catalog_fts` virtual table: `USING fts5(title, description, content='titles', content_rowid='id')`
+- Must call `INSERT INTO catalog_fts(catalog_fts) VALUES('rebuild')` after bulk inserts — wrapped in `LocalDb.rebuildFtsIndex()`, fired fire-and-forget in `catalog_provider._loadFromDb()`
+- Query: `"word*"` prefix terms AND'd together. Falls back to LIKE if FTS throws (safe on fresh install)
+- `_migrate` block: `if (oldV < 13)` — creates table + rebuilds on DB upgrade
+- **CRITICAL**: `_migrate(Database db, int oldV, int newV)` — param is `oldV`, NOT `oldVersion`. Wrong name = compile error.
+
 ---
 
 ## Secrets in Replit
@@ -389,4 +458,4 @@ Port 22 is unreachable from Replit containers. All server file changes must go t
 
 ## The 30-Second Summary for Any AI
 
-RaddFlix is a Pakistani streaming app. Jazz SIM users watch movies/dramas for free because video lives on JazzDrive (zero-rated by Jazz). The app reads JazzDrive share folder URLs from local SQLite, generates stream links locally, no server involved at playback. The most critical secret is those share folder URLs — protected by SQLCipher + Android Keystore. The admin panel (Radd Hub) runs on Oracle, manages content, generates delta JSON (metadata only, no secrets) uploaded to JazzDrive daily for zero-rated catalog updates. CI is green. Next up: Phase 5 (device binding) or Phase 6 (data usage tracking).
+RaddFlix is a Pakistani streaming app. Jazz SIM users watch movies/dramas for free because video lives on JazzDrive (zero-rated by Jazz). The app reads JazzDrive share folder URLs from local SQLite, generates stream links locally, no server involved at playback. The most critical secret is those share folder URLs — protected by SQLCipher + Android Keystore. The admin panel (Radd Hub) runs on Oracle, manages content, generates delta JSON (metadata only, no secrets) uploaded to JazzDrive daily for zero-rated catalog updates. CI is green. Phases 5–12 done. Next: OTP device switch (flip flag), player poster saving on stream, offline banner.

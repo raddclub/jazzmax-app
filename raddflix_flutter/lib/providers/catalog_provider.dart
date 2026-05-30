@@ -83,6 +83,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
         trending: trending,
         totalCount: count,
       );
+      // Background: rebuild FTS search index with freshest data (fire-and-forget)
+      LocalDb.rebuildFtsIndex();
       // Background poster download — runs silently after UI renders
       _schedulePosterSync(movies, shows);
     } catch (e) {
