@@ -452,6 +452,16 @@ class PlayerPrefs {
     );
   }
 
+  // ── Reset all player preferences to defaults ────────────────────────────
+  // BUG-A21: no UI button existed to reset player settings. reset() clears
+  // all SharedPreferences keys with the 'player_' prefix so the next load()
+  // returns factory defaults without requiring an app reinstall.
+  static Future<void> reset() async {
+    final s = await SharedPreferences.getInstance();
+    final keysToRemove = s.getKeys().where((k) => k.startsWith(_p)).toList();
+    await Future.wait(keysToRemove.map((k) => s.remove(k)));
+  }
+
   // ── Save to SharedPreferences ────────────────────────────────────────────
 
   Future<void> save() async {

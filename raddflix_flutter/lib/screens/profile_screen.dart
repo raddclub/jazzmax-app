@@ -12,6 +12,9 @@ import '../providers/auth_provider.dart';
 import '../providers/subscription_provider.dart';
 import '../core/api/subscription_api.dart';
 import '../widgets/loading_overlay.dart';
+import '../core/player/scene_bookmark_store.dart';  // BUG-A23
+import '../core/player/player_prefs.dart';          // BUG-A21
+import '../core/db/local_db.dart';                  // BUG-A22
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -95,6 +98,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     ));
     if (ok != true) return;
     setState(() => _loggingOut = true);
+    // BUG-A23: clean up per-user scene bookmarks on logout
+    await SceneBookmarkStore.deleteAll();
     await ref.read(authProvider.notifier).logout();
     if (mounted) Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
@@ -228,6 +233,64 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       trailing: Text(ref.watch(themeProvider.notifier).displayName,
                           style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
                       onTap: () => _showThemePicker(context),
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  // Player — BUG-A21 + BUG-A22: expose reset actions
+                  _Section(title: 'Player', children: [
+                    _SectionTile(
+                      icon: Icons.tune_rounded,
+                      label: 'Reset Player Settings',
+                      onTap: () async {
+                        final ok = await showDialog<bool>(context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Reset Player Settings'),
+                              content: const Text(
+                                  'This will reset all playback preferences '
+                                  '(gestures, subtitles, equalizer, etc.) '
+                                  'to their defaults.'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Cancel')),
+                                TextButton(onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('Reset',
+                                        style: TextStyle(color: AppColors.error))),
+                              ],
+                            ));
+                        if (ok != true || !context.mounted) return;
+                        await PlayerPrefs.reset();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Player settings reset to defaults')));
+                        }
+                      },
+                    ),
+                    _divider(),
+                    _SectionTile(
+                      icon: Icons.history_toggle_off_rounded,
+                      label: 'Reset Watch Progress',
+                      onTap: () async {
+                        final ok = await showDialog<bool>(context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text('Reset Watch Progress'),
+                              content: const Text(
+                                  'This will clear your resume positions '
+                                  'for all content. You cannot undo this.'),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false),
+                                    child: const Text('Cancel')),
+                                TextButton(onPressed: () => Navigator.pop(context, true),
+                                    child: const Text('Clear',
+                                        style: TextStyle(color: AppColors.error))),
+                              ],
+                            ));
+                        if (ok != true || !context.mounted) return;
+                        await LocalDb.clearAllPositions();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Watch progress cleared')));
+                        }
+                      },
                     ),
                   ]),
                   const SizedBox(height: 12),

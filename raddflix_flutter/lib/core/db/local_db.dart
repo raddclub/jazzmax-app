@@ -610,6 +610,14 @@ class LocalDb {
         where: 'file_id = ?', whereArgs: [fileId]);
   }
 
+  /// BUG-A22: clearPosition(fileId) was never called from the UI.
+  /// Added clearAllPositions() to support a 'Reset Watch Progress' action
+  /// in profile_screen without needing a specific fileId.
+  static Future<void> clearAllPositions() async {
+    final db = await instance;
+    await db.delete('watch_positions');
+  }
+
   static Future<List<Map<String, dynamic>>> getWatchPositions() async {
     final db = await instance;
     return db.query('watch_positions',
