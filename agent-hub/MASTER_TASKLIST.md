@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-30 (Full Codebase Audit complete — 34 bugs catalogued in Phase 13)
+> Last updated: 2026-05-30 (Phase 13 in progress — 8 bugs fixed: A01 A02 A03 A05 A06 A09 A10 A12)
 > Read REINCARNATION.md first. Read CODE_MAP.md before touching any file.
 > This file tracks every task — done, in progress, and upcoming.
 
@@ -193,12 +193,12 @@
 
 | ID | Task | Status | File to Fix | Priority |
 |----|------|--------|-------------|----------|
-| BUG-A02 | Normalize `media_type` to `"show"` for TV series in library.py delta output | ⬜ | `radd-hub/hub/routes/library.py` | P1 — TV shows invisible |
-| BUG-A01 | Change `year` to `INTEGER` in db.py DDL + fix `fromJson` in catalog_item.dart | ⬜ | `hub/db.py` + `lib/models/catalog_item.dart` | P1 — year never shown |
-| BUG-A03 | Fix `is_active` serialization — return `1`/`0` int not bool in `/api/auth/me` | ⬜ | `hub/routes/mobile_api.py` | P2 — subscription status unreliable |
+| BUG-A02 | Normalize `media_type` to `"show"` for TV series in library.py delta output | ✅ | `radd-hub/hub/routes/library.py` | P1 — TV shows invisible |
+| BUG-A01 | Change `year` to `INTEGER` in db.py DDL + fix `fromJson` in catalog_item.dart | ✅ | `hub/db.py` + `lib/models/catalog_item.dart` | P1 — year never shown |
+| BUG-A03 | Fix `is_active` serialization — return `1`/`0` int not bool in `/api/auth/me` | ✅ | `hub/routes/mobile_api.py` | P2 — subscription status unreliable |
 | BUG-A19 | Create `HistoryApi` class in Flutter + wire to server history endpoints | ⬜ | New file: `lib/core/api/history_api.dart` | P2 — history lost on reinstall |
-| BUG-A05 | Fix vault PIN length: align `_expectedPinLength` (6) with setup mode (4) | ⬜ | `lib/screens/vault_lock_screen.dart` | P2 — vault unusable after 4-digit setup |
-| BUG-A06 | Fix `session_err` NameError in `app.py` `download_proxy()` | ⬜ | `radd-hub/hub/app.py` | P2 — download proxy crashes |
+| BUG-A05 | Fix vault PIN length: align `_expectedPinLength` (6) with setup mode (4) | ✅ | `lib/screens/vault_lock_screen.dart` | P2 — vault unusable after 4-digit setup |
+| BUG-A06 | Fix `session_err` NameError in `app.py` `download_proxy()` | ✅ | `radd-hub/hub/app.py` | P2 — download proxy crashes |
 | BUG-A07 | Fix `/api/app/check` package ID: `pk.jazzmax.app` → `com.raddflix.app` | ⬜ | `hub/routes/mobile_api.py` | P2 — force update never works |
 | BUG-A04 | Replace `ON CONFLICT(id) DO UPDATE` with compatible INSERT OR REPLACE or version check | ⬜ | `lib/core/db/local_db.dart` | P3 — crashes Android 8 |
 
@@ -207,9 +207,9 @@
 | ID | Task | Status | File to Fix | Priority |
 |----|------|--------|-------------|----------|
 | BUG-A11 | Add seconds↔milliseconds conversion in history sync (server=sec, Flutter=ms) | ⬜ | `lib/core/api/history_api.dart` (when created) | P2 — implement alongside BUG-A19 |
-| BUG-A09 | Fix `/api/notifications/read` to actually filter by IDs from request body | ⬜ | `hub/routes/mobile_api.py` | P3 |
-| BUG-A10 | Fix `POST /api/auth/device` crash (HTTP 500) when called with guest token | ⬜ | `hub/routes/mobile_api.py` | P2 |
-| BUG-A12 | Replace `03xxxxxxxxx` placeholder payment numbers in subscription_screen.dart | ⬜ | `lib/screens/subscription_screen.dart` | P2 |
+| BUG-A09 | Fix `/api/notifications/read` to actually filter by IDs from request body | ✅ | `hub/routes/mobile_api.py` | P3 |
+| BUG-A10 | Fix `POST /api/auth/device` crash (HTTP 500) when called with guest token | ✅ | `hub/routes/mobile_api.py` | P2 |
+| BUG-A12 | Replace `03xxxxxxxxx` placeholder payment numbers in subscription_screen.dart | ✅ | `lib/screens/subscription_screen.dart` | P2 |
 | BUG-A14 | Fix silent error swallowing in `profile_screen.dart` `_loadExtras()` | ⬜ | `lib/screens/profile_screen.dart` | P3 |
 | BUG-A15 | Replace `_staticTrending` with real data from catalog (top-rated or most-watched) | ⬜ | `lib/screens/search_screen.dart` | P3 |
 | BUG-A16 | Fix genre chip duplication: trim whitespace in `_extractGenres()` | ⬜ | `lib/screens/search_screen.dart` | P3 |

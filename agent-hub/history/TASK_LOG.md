@@ -3000,3 +3000,39 @@ No coding — audit only. Create CODE_MAP.md for quick future reference.
 
 ---
 
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Phase 13 Bug Fixes — Batch 1)
+
+### Task
+Fix Phase 13 audit bugs (BUG-A01 through A12, selected). 8 fixes across 5 files. Commit `48680c66`.
+
+### Bugs Fixed
+
+| Bug | File | Fix Applied |
+|-----|------|-------------|
+| BUG-A01 | `raddflix_flutter/lib/models/catalog_item.dart` | `year` parse: `json['year'] as int?` → `int.tryParse(json['year'].toString())` (year stored as TEXT in DB, hard cast returned null) |
+| BUG-A02 | `radd-hub/hub/routes/library.py` | Added `_normalize_media_type()` helper; DB values `"tv"/"series"` now normalized to `"show"` in both `_regen_db_update_bg()` and `api_trending()` |
+| BUG-A03 | `radd-hub/hub/routes/mobile_api.py` | All `is_active` fields now return `1`/`0` (int) instead of Python `True`/`False` — affects `/me`, `subscription_status`, `_get_subscription_status` |
+| BUG-A05 | `raddflix_flutter/lib/screens/vault_lock_screen.dart` | Fixed misleading subtitle "Choose a 4–6 digit PIN" → "Choose a 6-digit PIN" (setup always requires 6 digits; 4-digit path was never reachable) |
+| BUG-A06 | `radd-hub/hub/app.py` | `session_err` undefined → added `session_err = None` before jazzdrive block; error string captured in `else` branch |
+| BUG-A09 | `radd-hub/hub/routes/mobile_api.py` | `mark_read()` now filters by `ids` array from request body when provided; falls back to mark-all when no IDs sent |
+| BUG-A10 | `radd-hub/hub/routes/mobile_api.py` | `bind_device()` returns 403 for guest token (`_user_id == 0`) instead of crashing with `NoneType` |
+| BUG-A12 | `radd-hub/hub/routes/mobile_api.py` | Removed hardcoded `"03xxxxxxxxx"` fallback payment numbers; replaced with empty string + support contact message |
+
+### Bugs NOT Yet Fixed (Phase 13 remaining)
+- BUG-A04: `ON CONFLICT DO UPDATE` crashes Android 8 — needs db.py DDL rewrite
+- BUG-A07: App check endpoint / package ID
+- BUG-A08/A19: Watch history sync — needs new HistoryApi class in Flutter
+- BUG-A11: History timestamp unit mismatch (seconds vs ms)
+- BUG-A13–A34: Lower-priority audit bugs
+
+### Notes for Next Agent
+- Commit `48680c66` is live on main — server auto-reloads via Gunicorn
+- BUG-A04 (Android 8 UPSERT crash) is the next-highest priority backend fix — affects `db.py` `_migrate()` calls
+- Oracle SSH still unreachable — GitHub API only
+- sqflite_sqlcipher MUST stay at `3.1.0+1`
+- `_migrate` param MUST be `oldV` not `oldVersion`
+
+---
