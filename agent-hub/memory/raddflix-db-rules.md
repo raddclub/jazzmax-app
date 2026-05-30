@@ -24,23 +24,40 @@ catalogDbVersion = 13 (as of 2026-05-30)
 | v13 | catalog_fts (FTS5 virtual table) |
 Next version when adding tables: 14, add `if (oldV < 14)` block.
 
-## ON CONFLICT Compatibility
+## Android 8 SQLite Compatibility (BUG-A04)
 `ON CONFLICT(id) DO UPDATE SET...` requires SQLite 3.24+. Android 8 ships 3.19-3.22.
-Check minSdk in android/app/build.gradle before using this syntax.
-If minSdk < 26 (Android 8.0), use `INSERT OR REPLACE INTO` instead.
+**mergeDeltaTitle() now uses SELECT + db.update()/db.insert()** — do NOT revert to rawInsert UPSERT.
+If you need UPSERT in any new code: use `conflictAlgorithm: ConflictAlgorithm.replace` (sqflite API)
+or manual SELECT+UPDATE/INSERT. Never use raw SQL UPSERT if minSdk < 26.
+
+## HistoryApi + watched_at Units (BUG-A08/A11)
+- `HistoryApi` is at `lib/core/api/history_api.dart`
+- Server `/api/history` GET returns `watched_at` as epoch SECONDS (not ms)
+- Always use `HistoryApi.watchedAtToDateTime(watchedAt)` to parse it — multiplies by 1000
+- `syncPosition()` is fire-and-forget; called from player_screen dispose
+
+## JWT Secret Persistence (BUG-A32)
+- `_secret()` in mobile_api.py now reads from `settings` table key `mobile_jwt_secret`
+- First server restart after deploy will generate and store the key
+- All existing sessions invalidated once after deploy — expected, users log in once
 
 ## CODE_MAP Location
 agent-hub/CODE_MAP.md (914 lines) — maps every file to purpose/functions/known bugs.
 Read before touching any source file. Fetch with:
 `curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/CODE_MAP.md"`
 
-## media_type Normalization (BUG-A02)
-Server must return "show" for TV series in delta JSON.
-Flutter filters: `item.mediaType == 'show'`
-Server currently returns: "tv" or "series" -> TV shows invisible.
-Fix in library.py: normalize before delta output.
+## media_type Normalization (BUG-A02 — FIXED)
+Fixed in commit 48680c66. `_normalize_media_type()` in library.py returns "show" for TV content.
 
 ## GitHub Commit Pattern
 blob->tree->commit->PATCH ref.
 For large files (base64 encoded content > ~50KB): use Python urllib, not curl -d (shell arg size limit).
 Always `"force": false` in PATCH call. Never force-push.
+
+## Memory Restore (new Replit session)
+```bash
+mkdir -p .agents/memory
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/memory/MEMORY.md" > .agents/memory/MEMORY.md
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/memory/raddflix-audit-bugs.md" > .agents/memory/raddflix-audit-bugs.md
+curl -sL "https://raw.githubusercontent.com/raddclub/raddflix-app/main/agent-hub/memory/raddflix-db-rules.md" > .agents/memory/raddflix-db-rules.md
+```
