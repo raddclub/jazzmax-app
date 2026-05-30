@@ -104,27 +104,65 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     });
   }
 
+  /// Build the "Continue Watching" list from local watch_positions.
+  ///
+  /// Matches positions against:
+  ///   1. Movies — by item.fileId
+  ///   2. Shows  — by iterating each show's pre-loaded episodes list
+  ///
+  /// Shows are deduplicated: if multiple episodes of the same show were
+  /// watched, only the most recently watched one appears (positions are
+  /// already ordered by updated_at DESC from LocalDb.getWatchPositions).
   Future<List<CatalogItem>> _loadRecentlyWatched(
       List<CatalogItem> movies, List<CatalogItem> shows) async {
     try {
       final positions = await LocalDb.getWatchPositions();
       if (positions.isEmpty) return [];
-      final all = [...movies, ...shows];
-      final result = <CatalogItem>[];
+
+      final result  = <CatalogItem>[];
+      final seenIds = <int>{};   // Deduplicate by title id
+
       for (final pos in positions) {
-        final fileId   = pos['file_id'] as String? ?? '';
-        final posMs    = pos['position_ms'] as int? ?? 0;
-        final durMs    = pos['duration_ms'] as int? ?? 0;
-        if (posMs < 3000) continue; // Skip if barely watched
+        final fileId = pos['file_id'] as String? ?? '';
+        final posMs  = pos['position_ms'] as int? ?? 0;
+        final durMs  = pos['duration_ms'] as int? ?? 0;
+
+        if (posMs < 3000) continue;                              // Skip barely-started
         final progress = durMs > 0 ? posMs / durMs : 0.0;
-        if (progress > 0.95) continue; // Skip if essentially finished
-        // Find the CatalogItem that has this fileId
-        final match = all.where((i) => i.fileId == fileId).firstOrNull;
-        if (match != null) {
+        if (progress > 0.95) continue;                           // Skip essentially-finished
+
+        CatalogItem? match;
+
+        // 1. Check movies (fileId is stored directly on the title row)
+        for (final m in movies) {
+          if (m.fileId == fileId) {
+            match = m;
+            break;
+          }
+        }
+
+        // 2. If not a movie, search show episodes
+        if (match == null) {
+          outer:
+          for (final show in shows) {
+            if (seenIds.contains(show.id)) continue; // Already added this show
+            for (final ep in show.episodes) {
+              if (ep['file_id']?.toString() == fileId) {
+                match = show;
+                break outer;
+              }
+            }
+          }
+        }
+
+        if (match != null && !seenIds.contains(match.id)) {
+          seenIds.add(match.id);
           result.add(match.copyWith(watchProgress: progress));
         }
+
         if (result.length >= 10) break;
       }
+
       return result;
     } catch (_) {
       return [];
