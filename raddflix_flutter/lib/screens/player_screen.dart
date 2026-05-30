@@ -918,20 +918,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       setState(() => _buffering = b);
       if (b) {
         _bufferingStartedAt = DateTime.now();
-        _slowConnTimer?.cancel();
-        _slowConnTimer = Timer(const Duration(seconds: 8), () {
-          if (!mounted || !_buffering) return;
-          if (!_slowConnectionShown) {
-            _slowConnectionShown = true;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Slow connection — video may stutter'),
-                duration: Duration(seconds: 3),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
-          }
-        });
+        if (!_isLocalFile) {
+          _slowConnTimer?.cancel();
+          _slowConnTimer = Timer(const Duration(seconds: 8), () {
+            if (!mounted || !_buffering) return;
+            if (!_slowConnectionShown) {
+              _slowConnectionShown = true;
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Slow connection — video may stutter'),
+                  duration: Duration(seconds: 3),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          });
+        }
       } else {
         _slowConnTimer?.cancel();
         _bufferingStartedAt = null;
@@ -1034,29 +1036,56 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
 
     if (mounted) setState(() => _isLinkLoading = true);
 
-    // Step 1: Get share_url from local DB (fast, works offline on Jazz SIM)
-    String? shareUrl = await LocalDb.getShareUrl(fileId);
+    // Step 0.5: Read inline share_url from route args BEFORE any await
+    // (BuildContext is only safe to use synchronously before first await)
+    final _routeArgs = ModalRoute.of(context)?.settings.arguments as Map?;
+    final _inlineShareUrl = _routeArgs?['stream_url'] as String?;
 
-    // Step 2: If not in local DB, ask Oracle for a fresh share_url
-    // Oracle stores catalog metadata (incl. share_urls) — NOT the video files.
+    // Step 1: Get share_url from local DB (fast, works offline on Jazz SIM)
+    String? shareUrl = fileId.isNotEmpty ? await LocalDb.getShareUrl(fileId) : null;
+
+    // Step 2: If not in local DB, try inline shareUrl or ask Oracle
     if (shareUrl == null || shareUrl.isEmpty) {
-      try {
-        shareUrl = await CatalogApi.getShareUrl(fileId);
-        DebugLogger.log('PLAYER', 'Got share_url from Oracle for ${fileId}');
-      } catch (e) {
-        DebugLogger.logError('PLAYER', 'Oracle share_url lookup failed for ${fileId}', e);
+      if (_inlineShareUrl != null && _inlineShareUrl.isNotEmpty) {
+        // Caller passed shareUrl directly (handles movies without file_id in catalog)
+        shareUrl = _inlineShareUrl;
+        DebugLogger.log('PLAYER', 'Using inline share_url for ${fileId.isEmpty ? "direct-share" : fileId}');
+      } else if (fileId.isNotEmpty) {
+        // Oracle stores catalog metadata (incl. share_urls) — NOT the video files.
+        try {
+          shareUrl = await CatalogApi.getShareUrl(fileId);
+          DebugLogger.log('PLAYER', 'Got share_url from Oracle for ${fileId}');
+        } catch (e) {
+          DebugLogger.logError('PLAYER', 'Oracle share_url lookup failed for ${fileId}', e);
+        }
       }
     }
 
     // Step 3: Generate direct CDN stream URL via JazzDrive (zero-rated on Jazz SIM)
     if (shareUrl != null && shareUrl.isNotEmpty) {
+      final cacheKey = fileId.isNotEmpty ? fileId : 'share_\${shareUrl.hashCode}';
       try {
-        final link = await JazzDriveService.getStreamLink(fileId, shareUrl);
+        final link = await JazzDriveService.getStreamLink(cacheKey, shareUrl);
         await _player.open(Media(link.streamUrl));
-        setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
+        if (mounted) setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
         return;
       } catch (e) {
-        DebugLogger.logError('PLAYER', 'JazzDrive stream link failed for ${fileId}', e);
+        DebugLogger.logError('PLAYER', 'JazzDrive stream link failed for \$cacheKey', e);
+        // Step 3b: shareUrl may be stale/expired — force-refresh from Oracle and retry once
+        if (fileId.isNotEmpty) {
+          try {
+            final freshUrl = await CatalogApi.getShareUrl(fileId);
+            if (freshUrl != null && freshUrl.isNotEmpty) {
+              await JazzDriveService.invalidate(fileId);
+              final link2 = await JazzDriveService.getStreamLink(fileId, freshUrl);
+              await _player.open(Media(link2.streamUrl));
+              if (mounted) setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
+              return;
+            }
+          } catch (e2) {
+            DebugLogger.logError('PLAYER', 'Oracle+JazzDrive retry failed for \$fileId', e2);
+          }
+        }
       }
     }
 
