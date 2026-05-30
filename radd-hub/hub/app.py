@@ -73,7 +73,8 @@ def create_app() -> Flask:
     from .routes import home, settings as settings_route, library, scan, upload, \
                         stream, admin, bots, api, db_mgmt, organizer as organizer_route, \
                         tid_panel, app_users_panel, analytics, subscriptions, broadcast, zero_rating, \
-                        plans_panel, payment_gateway, mobile_api
+                        plans_panel, payment_gateway, mobile_api, \
+                        catalog_api, search_api, poster_proxy
     app.register_blueprint(auth.bp,                    url_prefix="/auth")
     app.register_blueprint(home.bp)
     app.register_blueprint(settings_route.bp,          url_prefix="/settings")
@@ -103,6 +104,10 @@ def create_app() -> Flask:
     app.register_blueprint(mobile_api.bp_hist,         url_prefix="/api/history")
     app.register_blueprint(mobile_api.bp_app,          url_prefix="/api/app")
     app.register_blueprint(mobile_api.bp_rec,          url_prefix="/api/recommend")  # BUG-A26
+    # ── Catalog / Search / Poster (migrated from _watch_prototype) ────────
+    app.register_blueprint(catalog_api.bp)   # url_prefix in blueprint: /api/catalog
+    app.register_blueprint(search_api.bp)    # url_prefix in blueprint: /api/search
+    app.register_blueprint(poster_proxy.poster_proxy_bp)  # /api/poster/*
 
     # ------------------------------------------------------------------
     # Download proxy — /d/<remote_id>

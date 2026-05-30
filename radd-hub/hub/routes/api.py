@@ -922,7 +922,7 @@ def push_all():
 # Scraper search endpoints
 # ---------------------------------------------------------------------------
 
-@bp.route("/search")
+@bp.route("/scraper/search")
 @auth.login_required
 def scraper_search():
     """Search all movie sites. ?q=title&year=2023&sites=vegamovies,rogmovies"""
@@ -941,7 +941,7 @@ def scraper_search():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@bp.route("/search/links")
+@bp.route("/scraper/links")
 @auth.login_required
 def scraper_links():
     """Get download links for a page. ?url=...&site=vegamovies"""
@@ -1675,131 +1675,6 @@ def queue_add_alias():
 # ---------------------------------------------------------------------------
 
 from ..config import DATA_DIR as _DATA_DIR
-_CATALOG_JSON_PATH = str(_DATA_DIR / "db_update.json")
-
-
-def _load_catalog():
-    """Load db_update.json; return (version, titles, episodes) or raise."""
-    if not os.path.exists(_CATALOG_JSON_PATH):
-        return 0, [], []
-    with open(_CATALOG_JSON_PATH, encoding="utf-8") as fh:
-        data = json.load(fh)
-    return (
-        int(data.get("version") or 0),
-        data.get("titles") or [],
-        data.get("episodes") or [],
-    )
-
-
-@bp.route("/catalog/version")
-def catalog_version():
-    """Return current catalog version + item count.
-    Used by Flutter app to decide whether a sync is needed.
-    No auth required — zero-rated users must be able to hit this.
-    """
-    try:
-        version, titles, _ = _load_catalog()
-        return jsonify({"ok": True, "version": version, "count": len(titles)})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e), "version": 0, "count": 0}), 500
-
-
-@bp.route("/catalog/sync")
-def catalog_sync():
-    """Return catalog titles (+ episodes) for the Flutter app to store locally.
-
-    Optional query param:
-      since=<unix_ts>  — return only titles with db_version > since (delta sync).
-                         If omitted, returns all titles (full sync).
-    """
-    try:
-        since_raw = request.args.get("since")
-        since = int(since_raw) if since_raw else 0
-
-        version, titles, episodes = _load_catalog()
-
-        if since:
-            titles    = [t for t in titles   if int(t.get("db_version") or 0) > since]
-            title_ids = {t["id"] for t in titles}
-            episodes  = [e for e in episodes if e.get("title_id") in title_ids]
-
-        return jsonify({
-            "ok":       True,
-            "version":  version,
-            "count":    len(titles),
-            "titles":   titles,
-            "episodes": episodes,
-        })
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e), "titles": [], "episodes": []}), 500
-
-
-@bp.route("/catalog/db_update")
-def catalog_db_update():
-    """Serve raw db_update.json — used by JazzDrive zero-rating link and admin."""
-    try:
-        from flask import send_file as _sf
-        if not os.path.exists(_CATALOG_JSON_PATH):
-            return jsonify({"ok": False, "error": "db_update.json not generated yet"}), 404
-        return _sf(_CATALOG_JSON_PATH, mimetype="application/json")
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-
-_DELTA_JSON_PATH = str(_DATA_DIR / "delta.json")
-
-
-@bp.route("/catalog/delta")
-def catalog_delta():
-    """Serve delta.json — metadata-only catalog (no file_id, no share_url).
-
-    Safe for zero-rated JazzDrive access. No streaming credentials exposed.
-    Auto-generates the delta on first request if db_update.json already exists.
-    """
-    try:
-        from flask import send_file as _sf
-        if not os.path.exists(_DELTA_JSON_PATH):
-            if os.path.exists(_CATALOG_JSON_PATH):
-                try:
-                    from hub.routes.zero_rating import generate_delta_payload
-                    import json as _json
-                    payload = generate_delta_payload()
-                    with open(_DELTA_JSON_PATH, "w", encoding="utf-8") as fh:
-                        _json.dump(payload, fh, ensure_ascii=False, indent=2)
-                except Exception as _gen_err:
-                    log.warning("catalog/delta: auto-generate failed: %s", _gen_err)
-            if not os.path.exists(_DELTA_JSON_PATH):
-                return jsonify({"ok": False, "error": "delta.json not generated yet — use Zero-Rating Manager"}), 404
-        return _sf(_DELTA_JSON_PATH, mimetype="application/json")
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-@bp.route("/catalog/share_url")
-def catalog_share_url():
-    """Return JazzDrive share_url for a specific file by file_id.
-
-    Called by Flutter app when local SQLite has no share_url (stale sync,
-    fresh install, or content added after last full sync).
-    No auth required — used by zero-rated app clients.
-    Query param: file_id=<int>
-    """
-    file_id = (request.args.get("file_id") or "").strip()
-    if not file_id:
-        return jsonify({"ok": False, "error": "file_id required"}), 400
-    try:
-        with db.conn() as c:
-            row = c.execute(
-                "SELECT share_url FROM files WHERE id = ? LIMIT 1", (file_id,)
-            ).fetchone()
-            if row and row["share_url"]:
-                return jsonify({"ok": True, "share_url": row["share_url"]})
-            return jsonify({"ok": False, "share_url": None, "error": "file not found or no share_url"}), 404
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
 @bp.route("/status")
 @auth.login_required
 def status():
