@@ -1866,15 +1866,47 @@ def generate_direct_link(share_url: str, target_filename: str = "") -> dict:
             return {"ok": False, "error": "No videos found in share"}
         
         # 4. Find the best match
-        # If target_filename provided, match it; else take first
+        # If target_filename provided, match it; else take first.
+        # Three-pass approach handles both clean and dirty (scene-release) JazzDrive filenames.
         match = None
         if target_filename:
+            import re as _re2
+
+            def _norm_fn(s: str) -> str:
+                """Normalise: replace dots/underscores/hyphens with spaces, lowercase."""
+                return _re2.sub(r'[._\-]+', ' ', s).lower().strip()
+
+            tf_norm = _norm_fn(target_filename)
+            # Stem without extension for broader match
+            tf_stem = _re2.sub(r'\.[\w]{2,5}$', '', tf_norm).strip()
+            # Episode code e.g. s01e04
+            ep_m = _re2.search(r's\d{1,2}e\d{1,2}', target_filename, _re2.I)
+            ep_code = ep_m.group().lower() if ep_m else ""
+
+            # Pass 1: exact substring (clean name on JazzDrive — the common case)
             for r in records:
                 name = r.get("name") or r.get("filename") or ""
                 if target_filename.lower() in name.lower():
                     match = r
                     break
-        
+
+            # Pass 2: normalised match (handles scene-release dirty names with dots vs spaces)
+            if not match:
+                for r in records:
+                    name = r.get("name") or r.get("filename") or ""
+                    n_norm = _norm_fn(name)
+                    if tf_stem and tf_stem in n_norm:
+                        match = r
+                        break
+
+            # Pass 3: episode-code match — S01E04 anywhere in the filename (most robust)
+            if not match and ep_code:
+                for r in records:
+                    name = r.get("name") or r.get("filename") or ""
+                    if ep_code in _norm_fn(name):
+                        match = r
+                        break
+
         if not match:
             match = records[0]
             
