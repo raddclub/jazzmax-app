@@ -4169,3 +4169,72 @@ None.
 - Catalog: 0 titles (no flix account for upload)
 - Staging: 8.2GB (Pathaan 1.6GB, Off Campus ~888MB download, Fast&Furious, Salaar, Sarvam Maya, Reborn)
 - Queue: Off Campus downloading, Pathan retry processing
+
+---
+## Session Addendum — 2026-05-30 (Uploads + Vegamovies Fix)
+
+### Upload Pipeline Final State
+All 20 JazzDrive upload jobs completed end-to-end:
+- **Files uploaded to JazzDrive**: 18/20 (last 2 Off Campus eps in progress)
+- **Staging cleared**: Pathaan, Salaar (both x264+x265), Sarvam Maya, F&F Spy Racers S05, Reborn S01+S03E01/E02
+- **Off Campus S01**: All 8 episodes downloading and uploading (/Off Campus Season 1/ folder)
+- **Pathaan 2023**: 1.3GB file uploaded (rogmovies.club download)
+
+### New Download Jobs Added
+- Pathaan 2023 rogmovies job ✅ downloaded (814MB, moved to media/)
+- Off Campus S01 zip ✅ extracted 8 episodes, all uploading
+- Salaar old staging files (May 23) included in this upload batch
+
+### Titles Table
+Still 0 titles — metadata enrichment requires TMDB/OMDB API keys.
+Keys table is empty (provider-based encrypted table). Titles will populate once keys added via admin UI or API.
+
+### Bug Fix: Vegamovies Wrong-Match Scoring (commit deployed)
+**Bug**: Query Salaar Part 1 2023 matched The Flash 2023 on vegamovies.
+**Root cause**: Leniency logic in  only vetoed wrong titles when . For 1-word titles like Salaar, if year matched (has_any_match=True), veto was skipped even with no title word match.
+**Fix**: Removed leniency — always veto unconditionally when no title word appears in slug.
+**Files**:  (committed + deployed)
+
+### WhatsApp Bot
+Connected to  (is_active=true, connected=true) but not running.
+OTP endpoint returns stored OTP correctly — no WA delivery until bot started.
+
+### Keys Table (for catalog metadata)
+Table has columns: 
+Currently 0 keys. Needs TMDB and/or OMDB keys added via admin panel to enable catalog title enrichment.
+
+
+---
+## Session Addendum — 2026-05-30 (Uploads + Vegamovies Fix)
+
+### Upload Pipeline — Final State
+All 20 JazzDrive upload jobs completed end-to-end:
+- Files on JazzDrive: 18/20 (last 2 still uploading at session close)
+- Content batch: Pathaan (2 versions), Salaar Part 1 (x264 + x265), Sarvam Maya 2025,
+  Fast&Furious Spy Racers S05 480p, Reborn S01 pack + S03E01/E02, Off Campus S01 (8 eps)
+- All staging files queued and dispatched via manual-upload API
+- Off Campus episodes uploaded to /Off Campus Season 1/ JazzDrive folder
+- Local files deleted by uploader after successful upload
+
+### Titles Table — Still 0
+Metadata enrichment requires TMDB or OMDB API keys.
+Keys table is empty — add via admin panel (provider=tmdb or provider=omdb) to enable catalog.
+Titles will auto-populate on next upload after keys are set.
+
+### Bug Fix: Vegamovies Wrong-Match Scoring
+Bug: Salaar Part 1 2023 matched The Flash 2023 on vegamovies.
+Root cause: Leniency branch in _rank_candidate() skipped title veto for 1-word titles
+when year matched (has_any_match=True). len(title_core_sig)<=1 never triggered the veto.
+Fix: Removed leniency entirely — always veto unconditionally when no title word in slug.
+Commit: cd8707bee27bf06225f876f0beaf959e8b709cec pushed to main.
+Server restarted to pick up fix.
+
+### WhatsApp Bot Status
+Connected to 923257719165 (connected=True) but process not running (running=False).
+OTP device-switch flow works end-to-end — just no WA delivery until bot is started.
+Start via: POST /bots/api/whatsapp/start (admin auth required)
+
+### Keys Table Schema (for future reference)
+Columns: id, provider, label, value_enc, is_active, exhausted_until, failure_count,
+         total_uses, last_used_at, last_status, created_at, updated_at
+Currently 0 rows. Add via admin UI or direct DB insert.
