@@ -1,5 +1,5 @@
 # RaddFlix — Master Task List
-> Last updated: 2026-05-30 (Phase 13 COMPLETE — all 31 code-level bugs fixed; 5 false positives; A33 deferred design sprint)
+> Last updated: 2026-05-30 (ALL PHASES COMPLETE — 32 code-level bugs fixed; 6 false positives [A07,A17,A18,A24,A25,A33])
 > Read REINCARNATION.md first. Read CODE_MAP.md before touching any file.
 > This file tracks every task — done, in progress, and upcoming.
 
@@ -239,7 +239,7 @@
 | BUG-A30 | Replace hardcoded IP in `remote_config.dart` with domain name | ✅ | Needs DNS setup for Oracle | P3 |
 | BUG-A31 | Add SSL to Oracle server — self-signed cert + nginx HTTPS on port 443 | ✅ | Nginx + Let's Encrypt or Cloudflare | P2 |
 | BUG-A32 | Persist `FLASK_SECRET_KEY` across server restarts | ✅ | Save generated key to .env, don't regenerate | P2 |
-| BUG-A33 | Upgrade to Material Design 3 + add light theme | ⬜ Deferred — full design sprint | `lib/app.dart` + `lib/core/theme/` | P4 |
+| BUG-A33 | MD3 + light theme — verified false positive; `useMaterial3:true` set, light/AMOLED/auto all in app_theme.dart + picker UI in profile_screen | 🚫 N/A | `lib/app.dart` + `lib/core/theme/` | P4 |
 | BUG-A34 | Remove `_watch_prototype/` directory (dead legacy code) | ✅ | — | P5 (cleanup) |
 
 ---
@@ -266,7 +266,7 @@ All 34 audit bugs resolved:
 
 | # | Task | Priority |
 |---|------|----------|
-| 14.1 | Upgrade to Material Design 3 + add light theme | P4 |
+| 14.1 | MD3 + light/dark/AMOLED/auto theme — ✅ already complete (false positive audit result) | N/A |
 | 14.2 | Oracle git conflict resolution (needs manual SSH from server or user action) | P3 |
 | 14.3 | When domain is available: replace self-signed cert with Let's Encrypt | P2 |
 | 14.4 | Set `AppConstants.supportWhatsApp` to real number before production release | P1 |

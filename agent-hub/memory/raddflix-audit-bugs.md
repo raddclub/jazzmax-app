@@ -46,7 +46,7 @@ description: 34 bugs found in 2026-05-30 full codebase audit, tracked as BUG-A01
 ## Infrastructure
 - BUG-A30: Hardcoded IP 92.4.95.252 in constants.dart → ✅ FIXED commit [BATCH4]: jazzDriveDeltaUrl + jazzDriveDbUpdateUrl now static String getters derived from mutable apiBaseUrl
 - BUG-A31: ✅ PARTIAL — self-signed cert + nginx HTTPS port 443. Swap for Let's Encrypt when domain available.
-- BUG-A33: Material Design 2 only — no MD3, no light theme — ⬜ TODO (theme/design scope)
+- BUG-A33: 🚫 FALSE POSITIVE — useMaterial3:true already set in app_theme.dart; light/AMOLED/auto themes fully implemented; _ThemePicker UI in profile_screen with 4 options
 - BUG-A34: _watch_prototype/ is dead legacy code still in repo → ✅ FIXED commit [BATCH4]: all 17 files deleted from repo
 
 **Why:** Full code-logic audit 2026-05-30, 363 files, 7 parallel subagents.
