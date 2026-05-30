@@ -130,9 +130,9 @@ class _TidStatusScreenState extends State<TidStatusScreen>
       case 'basic':
         return 'Basic (₨149/month)';
       case 'standard':
-        return 'Standard (₨299/month)';
+        return 'Standard (₨249/month)';
       case 'premium':
-        return 'Premium (₨499/month)';
+        return 'Premium (₨399/month)';
       default:
         return widget.plan.toUpperCase();
     }
