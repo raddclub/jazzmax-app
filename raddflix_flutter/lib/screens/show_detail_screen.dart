@@ -9,7 +9,9 @@ import '../core/constants.dart';
 import '../core/db/local_db.dart';
 import '../models/catalog_item.dart';
 import '../providers/catalog_provider.dart';
+import '../core/download/download_service.dart';
 import '../providers/downloads_provider.dart';
+import 'subscription_screen.dart';
 
 class ShowDetailScreen extends ConsumerStatefulWidget {
   final CatalogItem item;
@@ -168,6 +170,23 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
         'content_type': 'movie',
       },
     );
+  }
+
+  void _showQuotaError(BuildContext ctx, String msg) {
+    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+      content: Text(msg),
+      backgroundColor: AppColors.error,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 6),
+      action: SnackBarAction(
+        label: 'Upgrade',
+        textColor: Colors.white,
+        onPressed: () => Navigator.push(
+          ctx,
+          MaterialPageRoute(builder: (_) => const SubscriptionScreen()),
+        ),
+      ),
+    ));
   }
 
   @override
@@ -370,17 +389,21 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                           return SizedBox(
                             height: 52,
                             child: ElevatedButton(
-                              onPressed: isDownloading ? null : () {
-                                ref2.read(downloadsProvider.notifier).startDownload(
-                                  fileId: widget.item.fileId!,
-                                  titleText: widget.item.title,
-                                  streamUrl: widget.item.shareUrl ?? '',
-                                  posterUrl: widget.item.posterUrl,
-                                );
+                              onPressed: isDownloading ? null : () async {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text('Downloading ${widget.item.title}…'),
                                     duration: const Duration(seconds: 2)),
                                 );
+                                try {
+                                  await ref2.read(downloadsProvider.notifier).startDownload(
+                                    fileId: widget.item.fileId!,
+                                    titleText: widget.item.title,
+                                    streamUrl: widget.item.shareUrl ?? '',
+                                    posterUrl: widget.item.posterUrl,
+                                  );
+                                } on DownloadQuotaException catch (e) {
+                                  if (context.mounted) _showQuotaError(context, e.userMessage);
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.surface,
@@ -571,17 +594,21 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                               onTap: () => _playEpisode(i),
                               isDownloading: isDownloading,
                               isDownloaded: isDownloaded,
-                              onDownload: fileId.isEmpty || isDownloaded ? null : () {
-                                ref.read(downloadsProvider.notifier).startDownload(
-                                  fileId: fileId,
-                                  titleText: '${widget.item.title} $label',
-                                  streamUrl: epShareUrl,
-                                  posterUrl: widget.item.posterUrl,
-                                );
+                              onDownload: fileId.isEmpty || isDownloaded ? null : () async {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text('Downloading $label…'),
                                     duration: const Duration(seconds: 2)),
                                 );
+                                try {
+                                  await ref.read(downloadsProvider.notifier).startDownload(
+                                    fileId: fileId,
+                                    titleText: '${widget.item.title} $label',
+                                    streamUrl: epShareUrl,
+                                    posterUrl: widget.item.posterUrl,
+                                  );
+                                } on DownloadQuotaException catch (e) {
+                                  if (context.mounted) _showQuotaError(context, e.userMessage);
+                                }
                               },
                             ).animate().fadeIn(
                               delay: Duration(milliseconds: 50 + i * 40),

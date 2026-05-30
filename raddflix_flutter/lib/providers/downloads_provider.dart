@@ -6,22 +6,27 @@ class DownloadsState {
   final List<Map<String, dynamic>> downloads;
   final bool loading;
   final Map<String, double> activeProgress; // fileId → progress
+  final String? quotaError;
 
   const DownloadsState({
     this.downloads = const [],
     this.loading = false,
     this.activeProgress = const {},
+    this.quotaError,
   });
 
   DownloadsState copyWith({
     List<Map<String, dynamic>>? downloads,
     bool? loading,
     Map<String, double>? activeProgress,
+    String? quotaError,
+    bool clearQuotaError = false,
   }) {
     return DownloadsState(
       downloads: downloads ?? this.downloads,
       loading: loading ?? this.loading,
       activeProgress: activeProgress ?? this.activeProgress,
+      quotaError: clearQuotaError ? null : (quotaError ?? this.quotaError),
     );
   }
 
@@ -64,10 +69,10 @@ class DownloadsNotifier extends StateNotifier<DownloadsState> {
     required String streamUrl,
     String? posterUrl,
   }) async {
-    // Add to active progress
+    // Clear any previous quota error and mark as active
     final progress = Map<String, double>.from(state.activeProgress);
     progress[fileId] = 0.0;
-    state = state.copyWith(activeProgress: progress);
+    state = state.copyWith(activeProgress: progress, clearQuotaError: true);
 
     try {
       await DownloadService.downloadFile(
@@ -81,14 +86,19 @@ class DownloadsNotifier extends StateNotifier<DownloadsState> {
           state = state.copyWith(activeProgress: updated);
         },
       );
+    } on DownloadQuotaException catch (e) {
+      state = state.copyWith(quotaError: e.userMessage);
+      rethrow;
     } finally {
-      // Remove from active regardless
+      // Remove from active regardless of success or failure
       final updated = Map<String, double>.from(state.activeProgress);
       updated.remove(fileId);
       state = state.copyWith(activeProgress: updated);
       await loadDownloads();
     }
   }
+
+  void clearQuotaError() => state = state.copyWith(clearQuotaError: true);
 
   Future<void> deleteDownload(String fileId) async {
     await DownloadService.deleteDownload(fileId);
