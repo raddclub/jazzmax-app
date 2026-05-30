@@ -17,6 +17,7 @@ import '../core/constants.dart';
 import '../core/security/keystore.dart';
 import '../core/db/local_db.dart';
 import '../core/api/catalog_api.dart';
+import '../core/api/history_api.dart';
 import '../core/services/jazzdrive_service.dart';
 import '../core/debug/debug_logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1520,6 +1521,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _logWatchSession(); // log partial session on exit
     if (_position.inMilliseconds > 0 && _duration.inMilliseconds > 0) {
       LocalDb.saveWatchPosition(
+          fileId: widget.fileId,
+          positionMs: _position.inMilliseconds,
+          durationMs: _duration.inMilliseconds);
+      // BUG-A08/A19: sync position to server on player exit.
+      // BUG-A11: server expects position_ms/duration_ms in milliseconds.
+      // watched_at in GET /api/history is epoch SECONDS — use
+      // DateTime.fromMillisecondsSinceEpoch(watchedAt * 1000) to parse.
+      HistoryApi.syncPosition(
           fileId: widget.fileId,
           positionMs: _position.inMilliseconds,
           durationMs: _duration.inMilliseconds);

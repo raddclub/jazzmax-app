@@ -37,9 +37,32 @@ log = logging.getLogger("hub.mobile_api")
 # ── JWT helpers ────────────────────────────────────────────────────────────
 
 def _secret() -> str:
-    return (os.environ.get("SESSION_SECRET")
-            or os.environ.get("FLASK_SECRET_KEY")
-            or "raddflix-dev-secret-change-in-prod")
+    """JWT signing secret. Priority: SESSION_SECRET env -> FLASK_SECRET_KEY env
+    -> DB-persisted random key (generated once, survives server restarts).
+    BUG-A32 fix: secret no longer a predictable hardcoded fallback.
+    """
+    env_val = (os.environ.get("SESSION_SECRET") or os.environ.get("FLASK_SECRET_KEY"))
+    if env_val and len(env_val) >= 16:
+        return env_val
+    try:
+        with db.conn() as _c:
+            row = _c.execute(
+                "SELECT v FROM settings WHERE k='mobile_jwt_secret'"
+            ).fetchone()
+            if row and row["v"]:
+                return row["v"]
+            import secrets as _sec
+            generated = _sec.token_hex(32)
+            _c.execute(
+                "INSERT OR IGNORE INTO settings(k,v) VALUES('mobile_jwt_secret',?)",
+                (generated,)
+            )
+            row2 = _c.execute(
+                "SELECT v FROM settings WHERE k='mobile_jwt_secret'"
+            ).fetchone()
+            return row2["v"] if row2 else generated
+    except Exception:
+        return "raddflix-dev-secret-change-in-prod"
 
 def _b64url_encode(data: bytes) -> str:
     return _b64.urlsafe_b64encode(data).rstrip(b"=").decode()

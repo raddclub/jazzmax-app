@@ -370,41 +370,65 @@ class LocalDb {
   ///
   /// Safe to call with JazzDrive delta entries that intentionally carry
   /// NO share_url and NO file_id.
+  /// Merge a delta title into local DB.
+  /// Uses SELECT then UPDATE or INSERT instead of UPSERT syntax,
+  /// which requires SQLite 3.24+ and crashes Android 8 (BUG-A04).
   static Future<void> mergeDeltaTitle(Map<String, dynamic> row) async {
     final db = await instance;
-    await db.rawInsert("""
-      INSERT INTO titles
-        (id, title, year, media_type, description, rating, genres,
-         poster_url, is_free, db_version, language, status, is_ongoing)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        title       = excluded.title,
-        year        = excluded.year,
-        media_type  = excluded.media_type,
-        description = excluded.description,
-        rating      = excluded.rating,
-        genres      = excluded.genres,
-        poster_url  = CASE WHEN excluded.poster_url != '' THEN excluded.poster_url ELSE poster_url END,
-        is_free     = excluded.is_free,
-        db_version  = CASE WHEN excluded.db_version > db_version THEN excluded.db_version ELSE db_version END,
-        language    = excluded.language,
-        status      = excluded.status,
-        is_ongoing  = excluded.is_ongoing
-    """, [
-      row['id'],
-      row['title'] ?? '',
-      row['year'],
-      row['media_type'] ?? 'movie',
-      row['description'] ?? '',
-      (row['rating'] as num?)?.toDouble() ?? 0.0,
-      row['genres'] ?? '[]',
-      row['poster_url'] ?? '',
-      (row['is_free'] == true || row['is_free'] == 1) ? 1 : 0,
-      row['db_version'] ?? 0,
-      row['language'] ?? '',
-      row['status'] ?? 'released',
-      (row['is_ongoing'] == true || row['is_ongoing'] == 1) ? 1 : 0,
-    ]);
+    final id = row['id'] as int?;
+    if (id == null) return;
+    final title     = row['title']       as String? ?? '';
+    final year      = row['year'];
+    final mediaType = row['media_type']  as String? ?? 'movie';
+    final desc      = row['description'] as String? ?? '';
+    final rating    = (row['rating'] as num?)?.toDouble() ?? 0.0;
+    final genres    = row['genres']      as String? ?? '[]';
+    final posterUrl = row['poster_url']  as String? ?? '';
+    final isFree    = (row['is_free'] == true || row['is_free'] == 1) ? 1 : 0;
+    final dbVer     = row['db_version']  as int?    ?? 0;
+    final language  = row['language']    as String? ?? '';
+    final status    = row['status']      as String? ?? 'released';
+    final isOngoing = (row['is_ongoing'] == true || row['is_ongoing'] == 1) ? 1 : 0;
+
+    final existing = await db.query('titles',
+        columns: ['id', 'poster_url', 'db_version'],
+        where: 'id = ?',
+        whereArgs: [id]);
+
+    if (existing.isNotEmpty) {
+      final oldPoster = existing.first['poster_url'] as String? ?? '';
+      final oldDbVer  = existing.first['db_version'] as int?    ?? 0;
+      await db.update('titles', {
+        'title':       title,
+        'year':        year,
+        'media_type':  mediaType,
+        'description': desc,
+        'rating':      rating,
+        'genres':      genres,
+        'poster_url':  posterUrl.isNotEmpty ? posterUrl : oldPoster,
+        'is_free':     isFree,
+        'db_version':  dbVer > oldDbVer ? dbVer : oldDbVer,
+        'language':    language,
+        'status':      status,
+        'is_ongoing':  isOngoing,
+      }, where: 'id = ?', whereArgs: [id]);
+    } else {
+      await db.insert('titles', {
+        'id':          id,
+        'title':       title,
+        'year':        year,
+        'media_type':  mediaType,
+        'description': desc,
+        'rating':      rating,
+        'genres':      genres,
+        'poster_url':  posterUrl,
+        'is_free':     isFree,
+        'db_version':  dbVer,
+        'language':    language,
+        'status':      status,
+        'is_ongoing':  isOngoing,
+      }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
   }
 
 
