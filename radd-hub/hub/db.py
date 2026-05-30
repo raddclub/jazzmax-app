@@ -1581,7 +1581,7 @@ def check_duplicate(query: str, year: Optional[str] = None) -> Optional[dict]:
             }
 
         # --- 2. Check Active Queue ---
-        queue_sql = "SELECT job_id, movie, status FROM queue WHERE status IN ('queued', 'processing')"
+        queue_sql = "SELECT job_id, movie, status FROM queue WHERE status IN ('queued', 'processing', 'paused')"
         in_queue = c.execute(queue_sql).fetchall()
         
         for q in in_queue:

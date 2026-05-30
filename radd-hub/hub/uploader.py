@@ -1251,12 +1251,14 @@ def upload_to_jazzdrive(
             "media_type": plan.kind or "movie",
         }
         
-        if tmdb_key or omdb_key:
-            enriched = metadata.enrich_title(initial_meta, tmdb_key=tmdb_key, omdb_key=omdb_key)
-            title_id = db.upsert_title(enriched)
-            if title_id:
-                if enriched.get("poster"):
-                    assets.process_title_poster(title_id, enriched["poster"], aid, folder_id=folder_id)
+        # Always enrich — IMDbAPI.dev (free/no-key) covers Pakistani/South Asian content;
+        # AI fallback covers anything else; TMDB/OMDB used when keys are available.
+        initial_meta.setdefault("is_published", 1)
+        enriched = metadata.enrich_title(initial_meta, tmdb_key=tmdb_key, omdb_key=omdb_key)
+        title_id = db.upsert_title(enriched)
+        if title_id:
+            if enriched.get("poster"):
+                assets.process_title_poster(title_id, enriched["poster"], aid, folder_id=folder_id)
 
         if _claimed_file_id:
             with db.conn() as _dc:
@@ -1275,7 +1277,7 @@ def upload_to_jazzdrive(
                 "title_id":         title_id,
                 "source":           "upload",
                 "account_id":       aid,
-                "filename":         file_path.name,
+                "filename":         plan.filename,
                 "local_path":       str(file_path),
                 "size_bytes":       file_path.stat().st_size,
                 "remote_id":        remote_id,
@@ -1542,7 +1544,8 @@ def _upload_pending() -> None:
         
         folder_id = current_parent
 
-        resp = _upload_file(sess, vk, jsid, file_path, parent_id=folder_id, account_id=acct["id"])
+        resp = _upload_file(sess, vk, jsid, file_path, parent_id=folder_id, account_id=acct["id"],
+                              override_name=plan.filename)
         remote_id = resp.get("id")
 
         if remote_id is None:
@@ -1572,12 +1575,14 @@ def _upload_pending() -> None:
             "media_type": plan.kind or "movie",
         }
         
-        if tmdb_key or omdb_key:
-            enriched = metadata.enrich_title(initial_meta, tmdb_key=tmdb_key, omdb_key=omdb_key)
-            title_id = db.upsert_title(enriched)
-            if title_id:
-                if enriched.get("poster"):
-                    assets.process_title_poster(title_id, enriched["poster"], acct["id"], folder_id=folder_id)
+        # Always enrich — IMDbAPI.dev (free/no-key) covers Pakistani/South Asian content;
+        # AI fallback covers anything else; TMDB/OMDB used when keys are available.
+        initial_meta.setdefault("is_published", 1)
+        enriched = metadata.enrich_title(initial_meta, tmdb_key=tmdb_key, omdb_key=omdb_key)
+        title_id = db.upsert_title(enriched)
+        if title_id:
+            if enriched.get("poster"):
+                assets.process_title_poster(title_id, enriched["poster"], acct["id"], folder_id=folder_id)
 
         with db.conn() as c:
             c.execute(

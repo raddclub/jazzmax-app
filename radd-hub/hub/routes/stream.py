@@ -307,6 +307,24 @@ def queue_direct():
 
     now    = int(time.time())
     queued: list[dict] = []
+    skipped: list[dict] = []
+
+    # BUG-3 fix: Check for duplicates before queuing direct downloads
+    dup = db.check_duplicate(name)
+    if dup:
+        if dup["reason"] == "library":
+            return jsonify({
+                "ok": True,
+                "skipped": [{"name": name, "reason": "already in library"}],
+                "existing_title_id": dup.get("title_id")
+            })
+        elif dup["reason"] == "queue":
+            return jsonify({
+                "ok": True,
+                "skipped": [{"name": name, "reason": "already in queue"}],
+                "job_id": dup.get("job_id"),
+                "status": dup.get("status")
+            })
 
     with db.conn() as c:
         for url in urls:
@@ -334,10 +352,16 @@ def queue_batch():
         return jsonify({"error": "movies list required"}), 400
     now   = int(time.time())
     count = 0
+    skipped = 0
     with db.conn() as c:
         for movie in movies:
             movie = (movie or "").strip()
             if not movie:
+                continue
+            # BUG-4 fix: Check for duplicates before queuing each movie
+            dup = db.check_duplicate(movie)
+            if dup:
+                skipped += 1
                 continue
             jid = uuid.uuid4().hex[:10]
             c.execute(
@@ -346,7 +370,7 @@ def queue_batch():
                 (jid, movie, site, "queued", now, now)
             )
             count += 1
-    return jsonify({"ok": True, "queued": count})
+    return jsonify({"ok": True, "queued": count, "skipped": skipped})
 
 
 # ─────────────────────────────────────────────
