@@ -88,10 +88,16 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
     final fileId = ep['file_id']?.toString();
     final epShareUrl = ep['share_url'] as String?;
 
-    // BUG-SHARE fix: only block when BOTH fileId AND shareUrl are missing.
-    // If shareUrl exists, the player can stream directly from JazzDrive even
-    // without a fileId (matches _playMovie() behaviour for catalog movies).
-    if (fileId == null && (epShareUrl == null || epShareUrl.isEmpty)) {
+    // Prefer locally-downloaded file: plays offline, no JazzDrive needed.
+    final dlState = ref.read(downloadsProvider);
+    final localPath = (fileId != null && fileId.isNotEmpty)
+        ? dlState.getLocalPath(fileId)
+        : null;
+
+    // Only block when ALL three are missing: no local file, no fileId, no share_url.
+    if (localPath == null &&
+        (fileId == null || fileId.isEmpty) &&
+        (epShareUrl == null || epShareUrl.isEmpty)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Video not available yet. Please sync in Settings → Sync.'),
@@ -108,8 +114,8 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
       arguments: {
         'file_id': fileId ?? '',
         'title': ep['label'] ?? '${widget.item.title} S${_selectedSeason.toString().padLeft(2, '0')}E${(ep['episode'] as int? ?? 0).toString().padLeft(2, '0')}',
-        'stream_url': epShareUrl,
-        'local_path': null,
+        'local_path': localPath,
+        'stream_url': localPath != null ? null : epShareUrl,
         'episodes': allEps,
         'episode_index': episodeIndex,
         'show_title': widget.item.title,

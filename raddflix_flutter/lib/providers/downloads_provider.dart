@@ -29,6 +29,24 @@ class DownloadsState {
       activeProgress.containsKey(fileId);
   double progressOf(String fileId) =>
       activeProgress[fileId] ?? 0.0;
+
+  /// True when this file has a completed local download on device.
+  bool isDownloaded(String fileId) => downloads.any(
+        (d) => d['file_id'] == fileId && d['status'] == 'completed' &&
+               (d['local_path'] as String?)?.isNotEmpty == true);
+
+  /// Returns the local file path for a completed download, or null.
+  String? getLocalPath(String fileId) {
+    try {
+      final match = downloads.firstWhere(
+        (d) => d['file_id'] == fileId && d['status'] == 'completed' &&
+               (d['local_path'] as String?)?.isNotEmpty == true,
+      );
+      return match['local_path'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class DownloadsNotifier extends StateNotifier<DownloadsState> {
