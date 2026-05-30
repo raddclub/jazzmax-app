@@ -49,7 +49,7 @@ class AppConstants {
   ///   3. Implement AuthApi.verifyDeviceSwitchOtp() with your OTP provider
   ///   4. Add server endpoints: POST /api/auth/device-switch/request
   ///                            POST /api/auth/device-switch/verify
-  static const bool otpDeviceSwitchEnabled = false;
+  static const bool otpDeviceSwitchEnabled = true;
 
   // ── SIMOSA (Phase 9) ─────────────────────────────────────────────────────
   /// Play Store URL for the SIMOSA app (Jazz daily free MB offer).
