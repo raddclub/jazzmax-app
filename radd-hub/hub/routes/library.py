@@ -9,6 +9,15 @@ from ..config import DATA_DIR as _DATA_DIR
 
 bp = Blueprint("library", __name__)
 
+def _normalize_media_type(raw: str) -> str:
+    """Normalize DB media_type values to Flutter-expected 'movie' or 'show'."""
+    mt = (raw or "movie").lower().strip()
+    if mt in ("tv", "series", "tvshow", "tv show", "tv_show", "show"):
+        return "show"
+    return "movie"
+
+
+
 
 
 def _regen_db_update_bg():
@@ -41,7 +50,7 @@ def _regen_db_update_bg():
                 pass
             titles_out.append({
                 "id": r["id"], "title": r["title"] or "",
-                "year": r["year"], "media_type": r["media_type"] or "movie",
+                "year": r["year"], "media_type": _normalize_media_type(r["media_type"]),
                 "description": r["plot"] or r["overview"] or "",
                 "rating": float(r["rating"] or 0), "genres": genres,
                 "language": r["language"] or "",
@@ -348,7 +357,7 @@ def api_trending():
                 "id": r["id"],
                 "title": r["title"] or "",
                 "year": r["year"],
-                "media_type": r["media_type"] or "movie",
+                "media_type": _normalize_media_type(r["media_type"]),
                 "description": r["plot"] or r["overview"] or "",
                 "rating": float(r["rating"] or 0),
                 "genres": genres,

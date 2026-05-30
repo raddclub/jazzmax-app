@@ -151,11 +151,14 @@ def create_app() -> Flask:
                     t_row = c.execute("SELECT folder_share_url FROM titles WHERE id=?", (row["title_id"],)).fetchone()
                     share_url = t_row["folder_share_url"] if t_row else None
             
+            session_err = None
             if share_url:
                 res = jazzdrive.generate_direct_link(share_url, target_filename=row["filename"])
                 if res.get("ok"):
                     db.save_stream_link(row["id"], res["direct_link"], expires_in=28800, account_id=row.get("account_id"))
                     return redirect(res["direct_link"], code=302)
+                else:
+                    session_err = res.get("error") or "JazzDrive link generation failed"
 
             # 3. Last resort: Direct URL from files table
             direct = row.get("download_url") or row.get("share_url") or ""

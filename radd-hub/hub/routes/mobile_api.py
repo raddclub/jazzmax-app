@@ -286,7 +286,7 @@ def logout():
 def me(_user_id, _phone):
     if _user_id == 0:
         return jsonify({"ok": True, "id": 0, "phone": "guest",
-                        "plan": "free", "subscription": {"is_active": False}})
+                        "plan": "free", "subscription": {"is_active": 0}})
     with db.conn() as c:
         user = c.execute(
             "SELECT id, phone, device_name, is_active, created_at, last_login_at "
@@ -303,13 +303,15 @@ def me(_user_id, _phone):
         "plan":        sub.get("plan", "free"),
         "device_name": user.get("device_name"),
         "subscription": sub,
-        "is_active":   bool(user.get("is_active", 1)),
+        "is_active":   1 if user.get("is_active", 1) else 0,
     })
 
 
 @bp_auth.route("/device", methods=["POST"])
 @_require_auth
 def bind_device(_user_id, _phone):
+    if _user_id == 0:
+        return jsonify({"error": "guests cannot bind a device"}), 403
     data        = request.get_json(silent=True) or {}
     device_id   = (data.get("device_id") or "").strip()
     device_name = (data.get("device_name") or "Android Device").strip()
@@ -390,7 +392,7 @@ def plans():
 @_require_auth
 def subscription_status(_user_id, _phone):
     if _user_id == 0:
-        return jsonify({"ok": True, "is_active": False, "plan": "free"})
+        return jsonify({"ok": True, "is_active": 0, "plan": "free"})
     sub = _get_subscription_status(_user_id)
     return jsonify({"ok": True, **sub})
 
@@ -504,12 +506,12 @@ def payment_methods():
     except Exception:
         methods = [
             {"code": "jazzcash",  "name": "JazzCash",
-             "account_number": "03xxxxxxxxx",
-             "instructions":   "Send to this JazzCash number, then enter your Transaction ID.",
+             "account_number": "",
+             "instructions":   "Please contact support to get the payment number.",
              "is_enabled": True},
             {"code": "easypaisa", "name": "EasyPaisa",
-             "account_number": "03xxxxxxxxx",
-             "instructions":   "Send to this EasyPaisa account, then enter your Transaction ID.",
+             "account_number": "",
+             "instructions":   "Please contact support to get the payment number.",
              "is_enabled": True},
         ]
     out = [{
@@ -543,12 +545,22 @@ def list_notifications(_user_id, _phone):
 @bp_notif.route("/read", methods=["POST"])
 @_require_auth
 def mark_read(_user_id, _phone):
+    data = request.get_json(silent=True) or {}
+    ids  = [int(i) for i in (data.get("ids") or []) if str(i).isdigit()]
     try:
         with db.conn() as c:
-            c.execute(
-                "UPDATE notifications SET is_read=1 WHERE user_id=? OR user_id IS NULL",
-                (_user_id,)
-            )
+            if ids:
+                ph = ",".join("?" * len(ids))
+                c.execute(
+                    f"UPDATE notifications SET is_read=1 "
+                    f"WHERE id IN ({ph}) AND (user_id=? OR user_id IS NULL)",
+                    (*ids, _user_id)
+                )
+            else:
+                c.execute(
+                    "UPDATE notifications SET is_read=1 WHERE user_id=? OR user_id IS NULL",
+                    (_user_id,)
+                )
     except Exception:
         pass
     return jsonify({"ok": True})
@@ -697,10 +709,10 @@ def _get_subscription_status(user_id: int) -> dict:
             (user_id, now)
         ).fetchone()
     if not row:
-        return {"is_active": False, "plan": "free", "expires_at": None}
+        return {"is_active": 0, "plan": "free", "expires_at": None}
     row = dict(row)
     return {
-        "is_active":          True,
+        "is_active":          1,
         "plan":               row.get("plan", "free"),
         "plan_name":          row.get("plan_name") or row.get("plan", "free").title(),
         "expires_at":         _epoch_to_iso(row.get("expires_at")),

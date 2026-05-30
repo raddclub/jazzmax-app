@@ -209,7 +209,7 @@ class _VaultLockScreenState extends State<VaultLockScreen>
                       const SizedBox(height: 4),
                       Text(
                         widget.isSetup
-                            ? (_confirming ? 'Re-enter your PIN to confirm' : 'Choose a 4–6 digit PIN')
+                            ? (_confirming ? 'Re-enter your PIN to confirm' : 'Choose a 6-digit PIN')
                             : isLocked
                                 ? VaultLockedException(_lockedUntil!).message
                                 : 'Enter your PIN to continue',

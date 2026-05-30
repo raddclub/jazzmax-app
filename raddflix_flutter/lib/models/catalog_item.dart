@@ -69,7 +69,7 @@ class CatalogItem {
     return CatalogItem(
       id:          json['id'] as int,
       title:       json['title'] as String? ?? '',
-      year:        json['year'] as int?,
+      year:        json['year'] == null ? null : int.tryParse(json['year'].toString()),
       mediaType:   json['media_type'] as String? ?? 'movie',
       description: json['description'] as String? ?? json['plot'] as String?,
       rating:      (json['rating'] as num?)?.toDouble(),
