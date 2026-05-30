@@ -18,6 +18,7 @@ log = logging.getLogger("hub.scrapers.ssrmovies")
 
 DOMAINS = [
     "https://ssrmovies.irish",
+    "https://ssrmovies.fit",
     "https://ssrmovies.club",
     "https://ssrmovies.art",
 ]
