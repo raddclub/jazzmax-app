@@ -33,7 +33,7 @@ def _data_dir() -> Path:
     d = os.environ.get("RADD_HUB_DATA_DIR", "")
     if d:
         return Path(d)
-    return Path(__file__).parent.parent.parent / "radd-hub" / "data"
+    return Path(__file__).parent.parent.parent / "data"  # was: / "radd-hub" / "data" — wrong
 
 
 def _radd_db() -> sqlite3.Connection:

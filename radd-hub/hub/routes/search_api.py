@@ -31,7 +31,7 @@ def search():
     if kind == "movie":
         type_filter = "AND t.media_type = 'movie'"
     elif kind in ("tv", "show"):
-        type_filter = "AND t.media_type = 'tv'"
+        type_filter = "AND t.media_type IN ('tv', 'show', 'series')"
     else:
         type_filter = ""
 

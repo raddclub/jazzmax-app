@@ -356,6 +356,8 @@ def create_app() -> Flask:
     def _e403(e): return _ej({'error': 'forbidden'}), 403
     @app.errorhandler(404)
     def _e404(e): return _ej({'error': 'not found'}), 404
+    @app.errorhandler(405)
+    def _e405(e): return _ej({'error': 'method not allowed'}), 405
     @app.errorhandler(500)
     def _e500(e):
         app.logger.error('500: %s', e)
