@@ -89,7 +89,7 @@
 | 5.4 | App: generate device fingerprint on first login | ✅ | DeviceIdentifier.getDeviceId() already wired in auth_api.dart |
 | 5.5 | App: send device_id with every login request | ✅ | auth_api.dart.login() sends device_id |
 | 5.6 | App: show "account active on another device" error | ✅ | auth_provider catches 409 → state.deviceConflictName |
-| 5.7 | App: device switch flow (OTP verification) | 🔄 | Shows "contact support on WhatsApp" — no OTP needed for MVP |
+| 5.7 | App: device switch flow (OTP verification) | ✅ | WhatsApp-only (primary). Full OTP UI + API stubs in code, gated by `AppConstants.otpDeviceSwitchEnabled = false` — flip to true + implement `AuthApi.requestDeviceSwitchOtp/verifyDeviceSwitchOtp` to activate |
 | 5.8 | Admin panel: reset device binding for a user | ✅ | /app-users panel already has delete/toggle-active |
 
 ---

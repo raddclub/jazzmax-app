@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/api/auth_api.dart';
 import '../core/constants.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/loading_overlay.dart';
@@ -197,22 +198,91 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 }
 
 // ── Device Conflict Panel ──────────────────────────────────────────────────────
-class _DeviceConflictPanel extends StatelessWidget {
+//
+// Current mode: WhatsApp-only (AppConstants.otpDeviceSwitchEnabled = false).
+//
+// To enable OTP self-serve device switching in future:
+//   1. Set AppConstants.otpDeviceSwitchEnabled = true
+//   2. Implement AuthApi.requestDeviceSwitchOtp() + verifyDeviceSwitchOtp()
+//   3. Add server endpoints (see ApiPaths.deviceSwitchOtpRequest/Verify)
+//   The OTP UI section below will become visible automatically.
+//
+class _DeviceConflictPanel extends StatefulWidget {
   final String deviceName;
   const _DeviceConflictPanel({required this.deviceName});
+  @override
+  State<_DeviceConflictPanel> createState() => _DeviceConflictPanelState();
+}
 
-  Future<void> _openWhatsApp(BuildContext context, String phone) async {
+class _DeviceConflictPanelState extends State<_DeviceConflictPanel> {
+  // ── OTP HOOK — state vars (used only when otpDeviceSwitchEnabled = true) ──
+  bool _otpSent      = false;
+  bool _otpLoading   = false;
+  String? _otpError;
+  final _otpCtrl     = TextEditingController();
+  final _phoneCtrl   = TextEditingController();
+  // ─────────────────────────────────────────────────────────────────────────
+
+  @override
+  void dispose() {
+    _otpCtrl.dispose();
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openWhatsApp() async {
     final msg = Uri.encodeComponent(
       'Hi RaddFlix Support, I need to switch my account to a new device. '
-      'Currently signed in on: $phone');
-    final url = Uri.parse('https://wa.me/${AppConstants.supportWhatsApp}?text=$msg');
+      'My account was active on: ${widget.deviceName}');
+    final url = Uri.parse(
+        'https://wa.me/${AppConstants.supportWhatsApp}?text=$msg');
     if (await canLaunchUrl(url)) {
       await launchUrl(url, mode: LaunchMode.externalApplication);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cannot open WhatsApp. Install it first.')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot open WhatsApp. Install it first.')));
+      }
     }
   }
+
+  // ── OTP HOOK — request OTP (wire when otpDeviceSwitchEnabled = true) ──────
+  Future<void> _requestOtp() async {
+    // TODO(OTP): validate _phoneCtrl.text before calling
+    setState(() { _otpLoading = true; _otpError = null; });
+    try {
+      await AuthApi.requestDeviceSwitchOtp(phone: _phoneCtrl.text.trim());
+      setState(() { _otpSent = true; _otpLoading = false; });
+    } catch (e) {
+      setState(() {
+        _otpError = e.toString().contains('Unimplemented')
+            ? 'OTP not yet configured' : 'Failed to send OTP. Try again.';
+        _otpLoading = false;
+      });
+    }
+  }
+
+  // ── OTP HOOK — verify OTP (wire when otpDeviceSwitchEnabled = true) ───────
+  Future<void> _verifyOtp() async {
+    setState(() { _otpLoading = true; _otpError = null; });
+    try {
+      await AuthApi.verifyDeviceSwitchOtp(
+        phone: _phoneCtrl.text.trim(),
+        otpCode: _otpCtrl.text.trim(),
+      );
+      // TODO(OTP): on success — save new tokens via Keystore, then navigate home
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+      }
+    } catch (e) {
+      setState(() {
+        _otpError = e.toString().contains('Unimplemented')
+            ? 'OTP not yet configured' : 'Invalid or expired OTP.';
+        _otpLoading = false;
+      });
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +294,7 @@ class _DeviceConflictPanel extends StatelessWidget {
         border: Border.all(color: const Color(0xFFB45309).withOpacity(0.4), width: 1),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // Header
         Row(children: [
           const Icon(Icons.devices_outlined, color: Color(0xFFF59E0B), size: 18),
           const SizedBox(width: 8),
@@ -233,11 +304,13 @@ class _DeviceConflictPanel extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         Text(
-          'This account is already signed in on "$deviceName". '
+          'This account is already signed in on "${widget.deviceName}". '
           'RaddFlix allows only one device per account.',
           style: const TextStyle(color: AppColors.textMuted, fontSize: 13, height: 1.5),
         ),
         const SizedBox(height: 12),
+
+        // ── Primary action: WhatsApp support (always visible) ──────────────
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
@@ -249,9 +322,90 @@ class _DeviceConflictPanel extends StatelessWidget {
             icon: const Icon(Icons.chat_outlined, size: 16),
             label: const Text('Contact Support on WhatsApp',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            onPressed: () => _openWhatsApp(context, ''),
+            onPressed: _openWhatsApp,
           ),
         ),
+
+        // ── OTP HOOK — shown only when otpDeviceSwitchEnabled = true ───────
+        // To activate: set AppConstants.otpDeviceSwitchEnabled = true
+        // and implement the two AuthApi OTP methods.
+        if (AppConstants.otpDeviceSwitchEnabled) ...[
+          const SizedBox(height: 14),
+          Row(children: [
+            const Expanded(child: Divider(color: Color(0x33FFFFFF))),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10),
+              child: Text('or switch yourself',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
+            ),
+            const Expanded(child: Divider(color: Color(0x33FFFFFF))),
+          ]),
+          const SizedBox(height: 12),
+          if (!_otpSent) ...[
+            // Step 1: enter phone + request OTP
+            RaddTextField(
+              controller: _phoneCtrl,
+              label: 'Your Phone Number',
+              hint: '03001234567',
+              keyboardType: TextInputType.phone,
+              prefixIcon: Icons.phone_outlined,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppColors.primary.withOpacity(0.6)),
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                onPressed: _otpLoading ? null : _requestOtp,
+                child: _otpLoading
+                    ? const SizedBox(height: 16, width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Send OTP to My Number',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ),
+          ] else ...[
+            // Step 2: enter OTP + verify
+            RaddTextField(
+              controller: _otpCtrl,
+              label: 'Enter OTP',
+              hint: '6-digit code',
+              keyboardType: TextInputType.number,
+              prefixIcon: Icons.pin_outlined,
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: AppColors.primary.withOpacity(0.6)),
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+                onPressed: _otpLoading ? null : _verifyOtp,
+                child: _otpLoading
+                    ? const SizedBox(height: 16, width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('Verify & Switch Device',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              ),
+            ),
+            TextButton(
+              onPressed: () => setState(() { _otpSent = false; _otpCtrl.clear(); }),
+              child: const Text('Resend OTP',
+                  style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            ),
+          ],
+          if (_otpError != null) ...[
+            const SizedBox(height: 8),
+            Text(_otpError!,
+                style: const TextStyle(color: AppColors.error, fontSize: 12)),
+          ],
+        ],
+        // ── END OTP HOOK ────────────────────────────────────────────────────
       ]),
     );
   }

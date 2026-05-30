@@ -80,6 +80,62 @@ class AuthApi {
       data: {'device_id': deviceId, 'device_name': deviceName},
     );
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OTP DEVICE SWITCH — future integration hook
+  //
+  // These methods are stubs. To activate:
+  //   1. Set AppConstants.otpDeviceSwitchEnabled = true in constants.dart
+  //   2. Add your OTP provider call inside requestDeviceSwitchOtp()
+  //   3. Add your OTP verification call inside verifyDeviceSwitchOtp()
+  //   4. Add the two server endpoints listed in ApiPaths
+  //
+  // The UI in login_screen.dart _DeviceConflictPanel already has the
+  // "Switch via OTP" button wired up — it just needs these to be real.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// Request an OTP to switch this account to the current device.
+  /// [phone] — the account's registered phone number.
+  ///
+  /// TODO(OTP): replace the throw with a real API call to
+  ///   ApiPaths.deviceSwitchOtpRequest using your OTP provider.
+  ///   Expected server response: { "ok": true }
+  static Future<void> requestDeviceSwitchOtp({required String phone}) async {
+    // TODO(OTP): implement when OTP provider is available
+    // Example:
+    //   await _client.post(
+    //     ApiPaths.deviceSwitchOtpRequest,
+    //     data: {'phone': phone},
+    //   );
+    throw UnimplementedError(
+      'OTP device switch is not yet configured. '
+      'Set AppConstants.otpDeviceSwitchEnabled = true and implement this method.',
+    );
+  }
+
+  /// Verify the OTP and bind the current device to the account.
+  /// [phone] — the account's registered phone number.
+  /// [otpCode] — the 6-digit code the user received via SMS.
+  ///
+  /// TODO(OTP): replace the throw with a real API call to
+  ///   ApiPaths.deviceSwitchOtpVerify using your OTP provider.
+  ///   Expected server response: { "ok": true, "access_token": "...", "refresh_token": "..." }
+  static Future<LoginResult> verifyDeviceSwitchOtp({
+    required String phone,
+    required String otpCode,
+  }) async {
+    // TODO(OTP): implement when OTP provider is available
+    // Example:
+    //   final resp = await _client.post(
+    //     ApiPaths.deviceSwitchOtpVerify,
+    //     data: {'phone': phone, 'otp_code': otpCode},
+    //   );
+    //   return LoginResult.fromJson(resp.data as Map<String, dynamic>);
+    throw UnimplementedError(
+      'OTP device switch is not yet configured. '
+      'Set AppConstants.otpDeviceSwitchEnabled = true and implement this method.',
+    );
+  }
 }
 
 class LoginResult {

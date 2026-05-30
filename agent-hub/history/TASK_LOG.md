@@ -2756,3 +2756,65 @@ See pushed SHA below.
 - CI triggered on this commit — verify green before next session.
 
 ---
+
+---
+
+## [2026-05-30 15:00 UTC] — Agent: Replit Agent (Phase 5.7 — Device Switch OTP Hook)
+
+### Task
+Keep device switch as WhatsApp-only. Add code structure / OTP hook so the feature
+can be activated later without any UI redesign.
+
+### Audit First
+Checked existing `_DeviceConflictPanel` in `login_screen.dart`:
+- WhatsApp button already worked correctly ✅
+- Panel was a `StatelessWidget` with no OTP provisions ✅ (just needed the hook added)
+
+### Done
+
+#### constants.dart
+- Added `AppConstants.otpDeviceSwitchEnabled = false` — single flag to activate OTP
+- Added `ApiPaths.deviceSwitchOtpRequest = '/api/auth/device-switch/request'`
+- Added `ApiPaths.deviceSwitchOtpVerify  = '/api/auth/device-switch/verify'`
+- Added full activation instructions in comments (4 steps)
+
+#### auth_api.dart
+- Added `AuthApi.requestDeviceSwitchOtp({required String phone})` — stubbed, throws
+  `UnimplementedError` with clear message until OTP provider is wired
+- Added `AuthApi.verifyDeviceSwitchOtp({required String phone, required String otpCode})`
+  — same stub pattern, returns `LoginResult` on success
+- Both methods have `// TODO(OTP):` comments with example API call code ready to uncomment
+
+#### login_screen.dart
+- Converted `_DeviceConflictPanel` from `StatelessWidget` → `StatefulWidget`
+  (needed for OTP step tracking: sent/not sent, loading, error)
+- WhatsApp button: unchanged, still primary, always visible
+- OTP section: wrapped in `if (AppConstants.otpDeviceSwitchEnabled)` — completely
+  invisible when flag is false (current state)
+- When enabled, shows: phone field → "Send OTP" button → OTP code field →
+  "Verify & Switch Device" button → "Resend OTP" link
+- Added `import '../core/api/auth_api.dart'`
+
+### How to Activate OTP When Ready
+1. Set `AppConstants.otpDeviceSwitchEnabled = true` in `constants.dart`
+2. Replace `throw UnimplementedError(...)` in `AuthApi.requestDeviceSwitchOtp()` with
+   your OTP provider's send call
+3. Replace `throw UnimplementedError(...)` in `AuthApi.verifyDeviceSwitchOtp()` with
+   your OTP provider's verify call + token save
+4. Add server endpoints: `POST /api/auth/device-switch/request` +
+   `POST /api/auth/device-switch/verify` in `mobile_api.py`
+5. UI appears automatically — no further frontend changes needed
+
+### Files Changed
+- `raddflix_flutter/lib/core/constants.dart` — OTP flag + API paths
+- `raddflix_flutter/lib/core/api/auth_api.dart` — OTP stub methods
+- `raddflix_flutter/lib/screens/login_screen.dart` — OTP hook section in panel
+- `agent-hub/MASTER_TASKLIST.md` — task 5.7 marked ✅
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Notes for Next Agent
+- Task 5.7 is now ✅ — WhatsApp works, OTP hook is in place
+- Oracle SSH still unreachable from Replit — GitHub API only
+- CI triggered on this commit — verify green before next session
+
+---

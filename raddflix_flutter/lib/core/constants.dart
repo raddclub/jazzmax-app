@@ -35,8 +35,19 @@ class AppConstants {
 
   // ── Support ──────────────────────────────────────────────────────────────
   /// WhatsApp support number (international format, no +, no spaces).
-  /// Replace with actual support number before production release.
   static const String supportWhatsApp = '923001234567';
+
+  // ── Device Switch / OTP Hook ─────────────────────────────────────────────
+  /// Set to true when an OTP API is available to enable self-serve device
+  /// switching. When false, the UI shows WhatsApp-only contact support.
+  ///
+  /// To enable OTP device switch in future:
+  ///   1. Set this to true
+  ///   2. Implement AuthApi.requestDeviceSwitchOtp() with your OTP provider
+  ///   3. Implement AuthApi.verifyDeviceSwitchOtp() with your OTP provider
+  ///   4. Add server endpoints: POST /api/auth/device-switch/request
+  ///                            POST /api/auth/device-switch/verify
+  static const bool otpDeviceSwitchEnabled = false;
 
   // ── SIMOSA (Phase 9) ─────────────────────────────────────────────────────
   /// Play Store URL for the SIMOSA app (Jazz daily free MB offer).
@@ -270,6 +281,12 @@ class ApiPaths {
   static const String logout            = '/api/auth/logout';
   static const String me                = '/api/auth/me';
   static const String bindDevice        = '/api/auth/device';
+
+  // ── OTP Device Switch (future — wire when otpDeviceSwitchEnabled = true) ──
+  // POST body: { phone } → server sends OTP to the phone
+  static const String deviceSwitchOtpRequest = '/api/auth/device-switch/request';
+  // POST body: { phone, otp_code } → server unbinds old device, binds new one
+  static const String deviceSwitchOtpVerify  = '/api/auth/device-switch/verify';
 
   static const String catalogVersion    = '/api/catalog/version';
   static const String catalogSync       = '/api/catalog/sync';
