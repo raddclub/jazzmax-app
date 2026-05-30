@@ -145,6 +145,11 @@
                 border:1px solid var(--border);border-radius:6px;color:var(--muted);
                 background:transparent;cursor:pointer"
          title="OMDB enrich titles missing metadata (batch of 10)">⚡ Bulk Enrich</button>
+      <button onclick="reEnrichAll()" id="re-enrich-all-btn"
+         style="padding:5px 10px;font-size:12px;white-space:nowrap;
+                border:1px solid var(--border);border-radius:6px;color:var(--muted);
+                background:transparent;cursor:pointer"
+         title="Run TMDB + OMDB enrichment on ALL titles with confidence &lt; 60 (missing plot/poster/genres) — runs in background">🔄 Re-enrich All</button>
     </div>
   </div>
 </div>
@@ -819,6 +824,27 @@ async function autoIdentifyOrphans() {
   } catch(e) { toast('Error: ' + e.message); }
   finally {
     if (btn) { btn.textContent = '🪄 Auto-Identify All'; btn.disabled = false; }
+  }
+}
+
+// ── Re-enrich All — background TMDB+OMDB pass on all low-confidence titles ──
+async function reEnrichAll() {
+  const btn = document.getElementById('re-enrich-all-btn');
+  if (btn) { btn.textContent = '⏳ Starting…'; btn.disabled = true; }
+  try {
+    const d = await fetch('/library/api/titles/re-enrich-all', {method:'POST'}).then(r=>r.json());
+    if (d.ok) {
+      toast(d.message || 'Re-enrichment started in background — check Scan log for progress');
+    } else {
+      toast('Error: ' + (d.error || '?'));
+    }
+  } catch(e) {
+    toast('Error: ' + e.message);
+  } finally {
+    // Re-enable after a short delay to allow reloading when enrichment finishes
+    setTimeout(() => {
+      if (btn) { btn.textContent = '🔄 Re-enrich All'; btn.disabled = false; }
+    }, 3000);
   }
 }
 

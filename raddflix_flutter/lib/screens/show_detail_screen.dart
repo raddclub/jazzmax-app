@@ -491,7 +491,9 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                             final isFree = (ep['is_free'] as int? ?? 0) == 1;
 
                             final epShareUrl = ep['share_url'] as String? ?? '';
-                            final isDownloading = ref.watch(downloadsProvider).isDownloading(fileId);
+                            final dlState = ref.watch(downloadsProvider);
+                            final isDownloading = dlState.isDownloading(fileId);
+                            final isDownloaded  = dlState.isDownloaded(fileId);
                             return _EpisodeTile(
                               index: i,
                               label: label,
@@ -499,7 +501,8 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
                               progress: progress,
                               onTap: () => _playEpisode(i),
                               isDownloading: isDownloading,
-                              onDownload: fileId.isEmpty ? null : () {
+                              isDownloaded: isDownloaded,
+                              onDownload: fileId.isEmpty || isDownloaded ? null : () {
                                 ref.read(downloadsProvider.notifier).startDownload(
                                   fileId: fileId,
                                   titleText: '${widget.item.title} $label',
@@ -557,6 +560,7 @@ class _EpisodeTile extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback? onDownload;
   final bool isDownloading;
+  final bool isDownloaded;
 
   const _EpisodeTile({
     required this.index,
@@ -566,6 +570,7 @@ class _EpisodeTile extends StatelessWidget {
     required this.onTap,
     this.onDownload,
     this.isDownloading = false,
+    this.isDownloaded = false,
   });
 
   @override
@@ -632,7 +637,26 @@ class _EpisodeTile extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (isFree)
+                            if (isDownloaded)
+                              Container(
+                                margin: const EdgeInsets.only(left: 8),
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.teal.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.download_done_rounded, color: Colors.teal, size: 9),
+                                    SizedBox(width: 3),
+                                    Text('OFFLINE', style: TextStyle(
+                                      color: Colors.teal, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.5,
+                                    )),
+                                  ],
+                                ),
+                              )
+                            else if (isFree)
                               Container(
                                 margin: const EdgeInsets.only(left: 8),
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -671,7 +695,12 @@ class _EpisodeTile extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   // Download + Play icons
-                  if (isDownloading)
+                  if (isDownloaded)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 4),
+                      child: Icon(Icons.download_done_rounded,
+                          color: Colors.teal, size: 22))
+                  else if (isDownloading)
                     const Padding(
                       padding: EdgeInsets.symmetric(horizontal: 4),
                       child: SizedBox(width: 20, height: 20,

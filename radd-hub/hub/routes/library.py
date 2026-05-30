@@ -792,6 +792,39 @@ def api_bulk_enrich_omdb():
     return jsonify({"ok": True, "processed": len(results), "results": results})
 
 
+@bp.route("/api/titles/re-enrich-all", methods=["POST"])
+@auth.login_required
+def api_re_enrich_all():
+    """Background re-enrichment of all incomplete titles (confidence < 60) across
+    all accounts using TMDB + OMDB keys from the vault.
+    Returns immediately; enrichment runs in a daemon thread."""
+    import threading
+    from .. import scanner as _scanner, db as _db
+
+    accounts = _db.list_accounts()
+    if not accounts:
+        return jsonify({"ok": False, "error": "No JazzDrive accounts configured"}), 400
+
+    def _run():
+        for acct in accounts:
+            try:
+                n = _scanner._enrich_low_confidence_titles(acct["id"])
+                log.info("re-enrich-all: account %s → %s titles enriched", acct["id"], n or 0)
+            except Exception as _e:
+                log.debug("re-enrich-all error for account %s: %s", acct["id"], _e)
+
+    threading.Thread(target=_run, daemon=True, name="re-enrich-all").start()
+    return jsonify({
+        "ok": True,
+        "accounts": len(accounts),
+        "message": (
+            f"Re-enrichment started for {len(accounts)} account(s) in the background. "
+            "Titles with confidence < 60 (missing plot/poster/genres) will be filled "
+            "using TMDB + OMDB. Check the Scan log for per-title progress."
+        ),
+    })
+
+
 @bp.route("/api/files/auto-identify", methods=["POST"])
 @auth.login_required
 def api_auto_identify():
