@@ -3161,3 +3161,97 @@ Fix the 4 highest-priority Phase 13 bugs one by one.
   - BUG-A15: `_staticTrending` in search_screen is hardcoded fake data
   - BUG-A16: `_extractGenres()` doesn't trim → duplicate genre chips
   - BUG-A17: jazzdrive.py stubs (jazzdrive_login, list_folders etc. are empty)
+---
+
+## Batch 3 — BUG-A07 (verified) + BUG-A14, A15, A16 fixed
+**Date:** 2026-05-30  
+**Commit:** `7474b47e`  
+**Files Changed:**
+- `raddflix_flutter/lib/screens/search_screen.dart` — BUG-A15 + BUG-A16
+- `raddflix_flutter/lib/screens/profile_screen.dart` — BUG-A14
+
+### BUG-A07 — Verified false positive
+Searched entire codebase for `pk.jazzmax.app` — not found anywhere. `AppUpdateService.check()`
+reads the package identifier from `PackageInfo.fromPlatform()` at runtime (not hardcoded).
+The `/api/app/check` server endpoint does not return a `package_id` field at all — only
+`force_update`, `blocked`, `message`, `update_url`, `current_version`. Marking as N/A.
+
+### BUG-A14 — profile_screen._loadExtras() silent catch blocks
+- **File:** `raddflix_flutter/lib/screens/profile_screen.dart`
+- **Root cause:** Both `try` blocks in `_loadExtras()` had bare `catch (_) {}` — any crash
+  (PackageInfo failure, SubscriptionApi 401/network error) vanished without a trace.
+- **Fix:** Changed to `catch (e)` + `debugPrint('[ProfileScreen] <context>: $e')` in both blocks.
+  Errors now appear in the Flutter debug console while keeping the UI unaffected.
+
+### BUG-A15 — _staticTrending hardcoded fake titles in search discover
+- **File:** `raddflix_flutter/lib/screens/search_screen.dart`
+- **Root cause:** When `catalog.trending.isEmpty`, the discover screen showed hardcoded names
+  (Money Heist, Squid Game, etc.) that may not be in the library → misleading search suggestions.
+- **Fix:** Removed `_staticTrending` const and its `else` branch. Replaced with a `Builder`
+  that selects: real trending items (preferred) → top-rated real catalog items (fallback) →
+  `SizedBox.shrink()` when catalog is also empty. Users never see titles that aren't in the library.
+
+### BUG-A16 — _extractGenres() JSON array not parsed → bracket/quote chars in genre chips
+- **File:** `raddflix_flutter/lib/screens/search_screen.dart`
+- **Root cause:** Genres stored in SQLite can be a JSON array string `["Action","Drama"]`
+  (from older sync entries) or comma-separated `Action, Drama`. The old code called
+  `.split(',')` then `.trim()` — on a JSON array this yields `["Action"` and `"Drama"]`
+  with brackets/quotes still attached → duplicate or broken genre chips.
+- **Fix:** `_extractGenres()` now detects JSON format (string starts with `[`), strips outer
+  brackets and inner quotes via regex, then splits. Falls back to plain CSV split otherwise.
+
+### Notes for Next Agent
+- BUG-A17: `jazzdrive.py` stubs — fetch the file and check which methods are empty.
+- BUG-A18: `sync.py` GSheets `_legacy` import — verify if the import exists.
+- Remaining: A17, A18, A20–A31, A33, A34.
+
+---
+
+## Batch 4 — BUG-A17/A18 (verified false positives) + BUG-A30 + BUG-A34
+**Date:** 2026-05-30  
+**Commit:** [see below]  
+**Files Changed:**
+- `raddflix_flutter/lib/core/constants.dart` — BUG-A30
+- `_watch_prototype/` (17 files deleted) — BUG-A34
+- `agent-hub/memory/raddflix-audit-bugs.md` — updated statuses
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### BUG-A17 — Verified false positive
+`jazzdrive.py` audit said functions like `jazzdrive_login`, `list_folders`, etc. are empty stubs.
+They are NOT — every function delegates to `_scanner().<method>()` which calls the underlying
+`_legacy` module. Zero code changes needed.
+
+### BUG-A18 — Verified false positive
+Audit said `sync.py` uses a `_legacy` import that may not exist. Checked the full `sync.py` file:
+no `_legacy` import anywhere — the only mention of `_legacy` is in the module docstring as a
+historical note ("Ported from v1.0 hub/_legacy/..."). Zero code changes needed.
+
+### BUG-A30 — Hardcoded IP 92.4.95.252 in constants.dart
+- **File:** `raddflix_flutter/lib/core/constants.dart`
+- **Root cause:** `jazzDriveDeltaUrl` and `jazzDriveDbUpdateUrl` were declared as
+  `static const String` with the hardcoded Oracle IP `92.4.95.252`. Since `apiBaseUrl`
+  is a mutable `static String` that gets updated by `RemoteConfig.fetch()` on every cold
+  start, these const fields bypassed the dynamic URL override — they always pointed to the
+  raw IP even after RemoteConfig pointed to a domain name or different server.
+- **Fix:** Changed both to `static String get` getters that derive from `apiBaseUrl`:
+  ```dart
+  static String get jazzDriveDeltaUrl    => '$apiBaseUrl/api/catalog/delta';
+  static String get jazzDriveDbUpdateUrl => '$apiBaseUrl/api/catalog/db_update';
+  ```
+  Now both URLs always follow whatever `apiBaseUrl` is set to.
+
+### BUG-A34 — _watch_prototype/ dead legacy directory
+- **Root cause:** `_watch_prototype/` (17 files, ~1,800 lines) is an old Flask prototype
+  for the streaming UI that predates the current `radd-hub` implementation. It was never
+  used in production and duplicated route logic that lives in `radd-hub/hub/routes/`.
+  Leaving it in the repo causes confusion and could mislead future agents into modifying
+  the wrong files.
+- **Fix:** All 17 files deleted from the repository via Git tree API with `sha: null` entries.
+
+### Notes for Next Agent
+- **Remaining Phase 13 bugs:** A20 (PosterService splash start), A21 (PlayerPrefs reset UI),
+  A22 (LocalDb.clearPosition() UI), A23 (SceneBookmarkStore.deleteAll() UI),
+  A24 (BingeGuardController interrupt), A25 (SmartIntroStore player trigger),
+  A26 (radd_recommend.py endpoint), A27 (AuthApi.bindDevice() dead code),
+  A28 (download quota), A29 (mid-stream cutoff), A31 (SSL), A33 (MD3).
+- Oracle SSH still unreachable — all changes via GitHub API only.
