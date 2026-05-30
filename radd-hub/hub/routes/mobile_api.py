@@ -685,7 +685,7 @@ bp_rec = Blueprint("mobile_rec", __name__)
 
 @bp_rec.route("", methods=["GET"], strict_slashes=False)
 @_require_auth
-def get_recommendations():
+def get_recommendations(_user_id, _phone):
     """GET /api/recommend
     Returns up to `limit` TMDB-seeded recommended titles not already in
     the user's library.  Cached 12h server-side in recommendation_cache.
