@@ -3085,3 +3085,79 @@ Before that, the audit session catalogued 34 bugs (BUG-A01..A34) across 363 file
 - Oracle SSH still unreachable from Replit — GitHub API only
 - `_migrate` param = `oldV` (not `oldVersion`). DB is at v13.
 - sqflite_sqlcipher pinned at `3.1.0+1` — do not upgrade
+
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Phase 13 Bugs: A04 + A32 + A08/A19 + A11)
+
+### Task
+Fix the 4 highest-priority Phase 13 bugs one by one.
+
+### Done
+
+#### BUG-A04 — Android 8 crash: ON CONFLICT DO UPDATE (SQLite 3.24+)
+- **File:** `raddflix_flutter/lib/core/db/local_db.dart`
+- **Root cause:** `mergeDeltaTitle()` used `rawInsert` with `ON CONFLICT(id) DO UPDATE SET`
+  syntax, which requires SQLite 3.24+. Android 8 ships SQLite 3.19–3.22 → crash on first catalog sync.
+- **Fix:** Replaced with `db.query()` (SELECT) → `db.update()` if exists, `db.insert()` if new.
+  Preserves existing `poster_url` when new value is empty; never regresses `db_version`.
+  Zero SQL dialect change — uses sqflite's typed API throughout.
+
+#### BUG-A32 — JWT signing key regenerated on restart → all users logged out
+- **File:** `radd-hub/hub/routes/mobile_api.py`
+- **Root cause:** `_secret()` fell back to hardcoded `"raddflix-dev-secret-change-in-prod"` when
+  `SESSION_SECRET` and `FLASK_SECRET_KEY` env vars were not set. Any env change or restart that
+  cleared those vars invalidated all mobile JWTs.
+- **Fix:** On first call with no env var, generates `secrets.token_hex(32)` and persists it to
+  `settings` table as `mobile_jwt_secret` using `INSERT OR IGNORE`. Subsequent calls read from DB.
+  Matches the pattern already used by `app.py` for Flask's own `SECRET_KEY`.
+
+#### BUG-A08 / BUG-A19 — No HistoryApi class; watch history never synced to server
+- **New file:** `raddflix_flutter/lib/core/api/history_api.dart`
+- **Root cause:** The server had working `/api/history` endpoints since Phase 5–9, but no Flutter
+  API client existed. The endpoints were entirely unused — watch progress was local-only.
+- **Fix:** Created `HistoryApi` with:
+  - `syncPosition(fileId, positionMs, durationMs)` — fire-and-forget POST on player exit
+  - `getHistory()` — GET returning server history list
+  - `watchedAtToDateTime(watchedAt)` — parses epoch SECONDS correctly (BUG-A11)
+- **Wired in:** `player_screen.dart` dispose — calls `HistoryApi.syncPosition()` alongside the
+  existing `LocalDb.saveWatchPosition()` every time the player closes.
+
+#### BUG-A11 — History timestamp mismatch: server=epoch seconds, Flutter=ms
+- **File:** `raddflix_flutter/lib/core/api/history_api.dart`
+- **Root cause:** Server stores `watched_at = int(time.time())` (epoch seconds). Flutter's
+  `DateTime.fromMillisecondsSinceEpoch` expects milliseconds → 1000× wrong date if used naively.
+- **Fix:** `HistoryApi.watchedAtToDateTime(watchedAt)` multiplies by 1000 before passing to
+  `DateTime.fromMillisecondsSinceEpoch`. Documented in comments in both the API class and
+  the player_screen.dart call site.
+
+### Files Changed
+- `raddflix_flutter/lib/core/db/local_db.dart` — BUG-A04: mergeDeltaTitle() SELECT+UPDATE/INSERT
+- `radd-hub/hub/routes/mobile_api.py` — BUG-A32: DB-persisted JWT secret
+- `raddflix_flutter/lib/core/api/history_api.dart` — NEW: HistoryApi class (BUG-A08/A19 + A11)
+- `raddflix_flutter/lib/screens/player_screen.dart` — import + HistoryApi.syncPosition() in dispose
+- `agent-hub/memory/MEMORY.md` — updated Phase 13 fix status
+- `agent-hub/memory/raddflix-audit-bugs.md` — A04, A32, A08/A19, A11 marked fixed
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### Commit
+`2833a37357e29b97cac58290400081b29c990598`
+
+### Notes for Next Agent
+- **BUG-A04 is fixed** — `mergeDeltaTitle()` no longer uses UPSERT SQL. Android 8 can now sync catalog.
+- **BUG-A32 is fixed** — `mobile_jwt_secret` is now in the `settings` DB table. First server restart
+  after this deploy will generate and store the key. Existing sessions using the old hardcoded key
+  will be invalidated once — users need to log in once after this deploy. This is expected.
+- **BUG-A08/A19 is fixed** — `HistoryApi` exists at `lib/core/api/history_api.dart`.
+  It is fire-and-forget (no error shown to user on offline). Future work: show cross-device resume position.
+- **BUG-A11 is fixed** — `HistoryApi.watchedAtToDateTime()` handles the epoch-seconds→ms conversion.
+  Always use this helper; never pass `watched_at` directly to `DateTime.fromMillisecondsSinceEpoch`.
+- Oracle SSH still unreachable from Replit — all changes via GitHub API only.
+- CI will build APK from this commit — verify it passes before next session.
+- **Remaining Phase 13 bugs (next priority):**
+  - BUG-A07: `/api/app/check` still returns old package ID `pk.jazzmax.app`
+  - BUG-A14: `profile_screen._loadExtras()` swallows all exceptions silently
+  - BUG-A15: `_staticTrending` in search_screen is hardcoded fake data
+  - BUG-A16: `_extractGenres()` doesn't trim → duplicate genre chips
+  - BUG-A17: jazzdrive.py stubs (jazzdrive_login, list_folders etc. are empty)
