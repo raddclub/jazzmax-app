@@ -3255,3 +3255,59 @@ historical note ("Ported from v1.0 hub/_legacy/..."). Zero code changes needed.
   A26 (radd_recommend.py endpoint), A27 (AuthApi.bindDevice() dead code),
   A28 (download quota), A29 (mid-stream cutoff), A31 (SSL), A33 (MD3).
 - Oracle SSH still unreachable — all changes via GitHub API only.
+
+---
+
+## Batch 5 — BUG-A24/A25 (verified false positives) + BUG-A20, A26, A27 fixed
+**Date:** 2026-05-30
+**Commit:** `dbbd1af9`
+**Files Changed:**
+- `raddflix_flutter/lib/screens/home_screen.dart` — BUG-A20
+- `raddflix_flutter/lib/core/api/auth_api.dart` — BUG-A27
+- `radd-hub/hub/routes/mobile_api.py` — BUG-A26
+- `radd-hub/hub/app.py` — BUG-A26 blueprint registration
+
+### BUG-A24 + BUG-A25 — Verified false positives
+Both `BingeGuardController` and `SmartIntroStore` are imported and actively used in
+`player_screen.dart`. No code changes needed.
+
+### BUG-A20 — PosterService.runBackgroundSync() never called
+Added `ref.listenManual<CatalogState>` in `home_screen.dart` initState. Fires once
+when `CatalogStatus.ready` is first reached. `_posterSyncDone` flag prevents duplicate
+runs within a session.
+
+### BUG-A26 — radd_recommend.py had no Flask endpoint
+Added `GET /api/recommend` (`bp_rec` blueprint) to `mobile_api.py`. Calls
+`radd_recommend.get_recommendations(limit)`. Registered in `app.py` at
+`url_prefix='/api/recommend'`. Auth required. Returns `{ok, results, count}`.
+
+### BUG-A27 — AuthApi.bindDevice() orphaned dead code
+Removed from `auth_api.dart`. Device binding is handled inside `login()` on the server.
+
+---
+
+## Batch 6 — BUG-A21, A22, A23 fixed
+**Date:** 2026-05-30
+**Commit:** `1621ff7f`
+**Files Changed:**
+- `raddflix_flutter/lib/core/player/player_prefs.dart` — BUG-A21
+- `raddflix_flutter/lib/core/db/local_db.dart` — BUG-A22
+- `raddflix_flutter/lib/screens/profile_screen.dart` — BUG-A21 + A22 + A23
+
+### BUG-A21 — PlayerPrefs.reset() had no UI button
+Added `static Future<void> reset()` to `player_prefs.dart` — removes all keys prefixed
+`player_` from SharedPreferences. Added "Reset Player Settings" confirmation tile under
+new "Player" section in `profile_screen.dart`.
+
+### BUG-A22 — LocalDb.clearPosition() never called from UI
+Added `static Future<void> clearAllPositions()` to `local_db.dart` — deletes all rows in
+`watch_positions`. Added "Reset Watch Progress" confirmation tile in `profile_screen.dart`.
+
+### BUG-A23 — SceneBookmarkStore.deleteAll() never called
+Called in `profile_screen._logout()` before `authProvider.logout()`. Bookmarks are now
+cleaned up on every sign-out.
+
+### Notes for Next Agent
+- Remaining: A28 (download quota), A29 (mid-stream cutoff — architectural), A31 (SSL — infra), A33 (MD3 — design).
+- A28 is the only remaining code-level bug worth fixing next.
+- Oracle SSH still unreachable — all changes via GitHub API only.

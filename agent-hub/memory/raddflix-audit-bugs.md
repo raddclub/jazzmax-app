@@ -32,21 +32,21 @@ description: 34 bugs found in 2026-05-30 full codebase audit, tracked as BUG-A01
 | BUG-A32 | FLASK_SECRET_KEY regenerated on restart → all JWTs invalidated | ✅ FIXED commit 2833a37: _secret() persists key to DB settings table |
 
 ## Unwired Features
-- BUG-A20: PosterService.runBackgroundSync() — not confirmed started on splash
-- BUG-A21: PlayerPrefs.reset() — no UI button
-- BUG-A22: LocalDb.clearPosition() — never called from UI
-- BUG-A23: SceneBookmarkStore.deleteAll() — never called
-- BUG-A24: BingeGuardController — no confirmed interrupt point in player
-- BUG-A25: SmartIntroStore — needs confirm triggered in player_screen
-- BUG-A26: radd_recommend.py — no API endpoint exposes it to Flutter
-- BUG-A27: AuthApi.bindDevice() — orphaned dead code (binding done in login())
-- BUG-A28: Download quota not returned by server, not enforced
-- BUG-A29: Mid-stream cutoff doesn't exist
+- BUG-A20: PosterService.runBackgroundSync() — ✅ FIXED commit dbbd1af9: ref.listenManual in home_screen fires once when CatalogStatus.ready
+- BUG-A21: PlayerPrefs.reset() — ✅ FIXED [Batch6]: static reset() added to player_prefs.dart; 'Reset Player Settings' tile in profile_screen
+- BUG-A22: LocalDb.clearPosition() — ✅ FIXED [Batch6]: clearAllPositions() added; 'Reset Watch Progress' tile in profile_screen
+- BUG-A23: SceneBookmarkStore.deleteAll() — ✅ FIXED [Batch6]: called in profile_screen._logout() before auth logout
+- BUG-A24: BingeGuardController — 🚫 FALSE POSITIVE: already imported + used in player_screen.dart
+- BUG-A25: SmartIntroStore — 🚫 FALSE POSITIVE: already imported + used in player_screen.dart
+- BUG-A26: radd_recommend.py — ✅ FIXED commit dbbd1af9: GET /api/recommend (bp_rec) added to mobile_api.py + registered in app.py
+- BUG-A27: AuthApi.bindDevice() — ✅ FIXED commit dbbd1af9: dead method removed from auth_api.dart
+- BUG-A28: Download quota not returned by server, not enforced — ⬜ TODO
+- BUG-A29: Mid-stream cutoff doesn't exist — ⬜ TODO (architecture decision)
 
 ## Infrastructure
 - BUG-A30: Hardcoded IP 92.4.95.252 in constants.dart → ✅ FIXED commit [BATCH4]: jazzDriveDeltaUrl + jazzDriveDbUpdateUrl now static String getters derived from mutable apiBaseUrl
-- BUG-A31: No SSL on Oracle server
-- BUG-A33: Material Design 2 only — no MD3, no light theme
+- BUG-A31: No SSL on Oracle server — ⬜ INFRA (cannot fix via code; requires Let's Encrypt on Oracle)
+- BUG-A33: Material Design 2 only — no MD3, no light theme — ⬜ TODO (theme/design scope)
 - BUG-A34: _watch_prototype/ is dead legacy code still in repo → ✅ FIXED commit [BATCH4]: all 17 files deleted from repo
 
 **Why:** Full code-logic audit 2026-05-30, 363 files, 7 parallel subagents.
