@@ -2439,3 +2439,94 @@ Build 6.10 "Quota full" screen and fix BUG-P4 stale title count on Zero-Rating a
 - raddflix_flutter/lib/screens/profile_screen.dart (PackageInfo + expiry countdown)
 - agent-hub/MASTER_TASKLIST.md (Phase 11 added)
 - agent-hub/history/TASK_LOG.md (this entry)
+
+---
+
+## Session 2026-05-30 — Deep Bug Audit: Video Playback (share_url / fileId pipeline)
+
+### Root-Cause Audit Summary
+
+Full audit of why catalog movies/episodes and local downloads would not play.
+Four interlinked root causes identified and fixed across three files.
+
+---
+
+### Task 7.1: library.py — share_url never in db_update.json DONE
+
+**Root cause:** `_regen_db_update_bg()` episodes query was:
+```sql
+SELECT id, title_id, season, episode FROM files
+```
+Missing `share_url`. Titles query also missing `f.share_url AS file_share_url`.
+Result: db_update.json synced to app always had null share_urls in SQLite →
+nothing could play if fileId was also null.
+
+**Fix:** Both queries updated. Episodes output dict includes `"share_url": r.get("share_url") or ""`.
+Titles output includes `"share_url": r.get("file_share_url") or ""`.
+
+File: `radd-hub/hub/routes/library.py`
+Commit: `8a76a06336768b8d81762c05bdce97c51545b32e`
+
+---
+
+### Task 7.2: api.py — /api/catalog/share_url endpoint missing DONE
+
+**Root cause:** Session 7 logs claimed this endpoint was added to `app_catalog.py`, but
+that file does not exist in the repo and was never registered in `app.py`. Oracle fallback
+always returned 404, silently caught by the app → no recovery path when SQLite share_url
+was null.
+
+**Fix:** `GET /api/catalog/share_url?file_id=<id>` added directly to `api.py` (same blueprint
+as all `/api/catalog/*` routes). Queries `files` table, no auth required (zero-rated clients
+need this). Returns `{"share_url": "...", "expires_at": ...}`.
+
+File: `radd-hub/hub/routes/api.py`
+Commit: `8a76a06336768b8d81762c05bdce97c51545b32e`
+
+---
+
+### Task 7.3: show_detail_screen.dart — _playEpisode blocks on null fileId DONE
+
+**Root cause:** `_playEpisode()` blocked and showed error whenever `ep['file_id'] == null`,
+even if `ep['share_url']` was populated and playback could proceed via JazzDrive direct URL.
+Also: `stream_url` was NOT passed in route arguments (unlike `_playMovie()`).
+
+**Fix (commit 1):** Added epShareUrl read in episode tile (for download); stream_url now passed.
+**Fix (commit 2):** `_playEpisode()` method body updated:
+- Reads `ep['share_url']` from episode data
+- Checks `downloadsProvider.getLocalPath(fileId)` for offline playback
+- Only shows 'not available' when ALL of localPath / fileId / shareUrl are missing
+- Passes `local_path` to player when episode is downloaded (offline)
+- Passes `stream_url` when no local file (mirrors `_playMovie` logic)
+
+File: `raddflix_flutter/lib/screens/show_detail_screen.dart`
+Commits: `8a76a06336768b8d81762c05bdce97c51545b32e`, `0fc1fdab1ba7135b425a5f6e50c987e533b89bc0`
+
+---
+
+### Task 7.4: downloads_provider.dart — DownloadsState missing offline-check helpers DONE
+
+**Root cause:** `DownloadsState` had `isDownloading()` (active download in progress) but no way
+for widgets to check if a file is already fully downloaded without an extra async DB call.
+This blocked the local-download-playback feature.
+
+**Fix:** Added two synchronous helpers to `DownloadsState`:
+- `isDownloaded(fileId)` — true when downloads list has a completed entry with non-empty local_path
+- `getLocalPath(fileId)` — returns local_path string for completed download (null if not found)
+State is already loaded by the provider on init, so no extra DB round-trip needed.
+
+File: `raddflix_flutter/lib/providers/downloads_provider.dart`
+Commit: `0fc1fdab1ba7135b425a5f6e50c987e533b89bc0`
+
+---
+
+### Commit Summary
+
+| Commit | Files | Description |
+|--------|-------|-------------|
+| `8a76a063` | library.py, api.py, show_detail_screen.dart | share_url pipeline: db_update.json + Oracle endpoint + download tile |
+| `0fc1fdab` | show_detail_screen.dart, downloads_provider.dart | _playEpisode method fix + DownloadsState offline helpers |
+
+CI triggered on both commits (Build RaddFlix APK + RaddFlix CI workflows).
+Oracle deploy required after CI passes: `systemctl restart radd-hub` on 92.4.95.252.
+
