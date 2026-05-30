@@ -17,7 +17,7 @@ log = logging.getLogger("hub.search_api")
 bp = Blueprint("search_api", __name__, url_prefix="/api/search")
 
 
-@bp.route("", methods=["GET"])
+@bp.route("", methods=["GET"], strict_slashes=False)
 def search():
     q     = (request.args.get("q", "") or "").strip()
     kind  = (request.args.get("type", "all") or "all").lower()
