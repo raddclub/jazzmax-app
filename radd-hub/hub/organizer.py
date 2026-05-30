@@ -683,7 +683,8 @@ def auto_organize(account_id: int) -> Generator[str, None, None]:
                 db.update_title(_t["id"], _m)
                 _enrich_count += 1
         if _enrich_count:
-            yield f"data: {json.dumps({\'type\': \'enriched\', \'count\': _enrich_count})}\n\n"
+            _payload = {"type": "enriched", "count": _enrich_count}
+            yield f"data: {json.dumps(_payload)}\n\n"
     except Exception:
         pass  # enrichment is best-effort; never block the organizer
 
