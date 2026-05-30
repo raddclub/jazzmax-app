@@ -653,6 +653,30 @@ def save_history(file_id, _user_id, _phone):
 
 # ── App version / update check ─────────────────────────────────────────────
 
+# ── Recommendations ────────────────────────────────────────────────────────
+# BUG-A26: radd_recommend.py had no API endpoint — Flutter could never call it.
+bp_rec = Blueprint("mobile_rec", __name__)
+
+@bp_rec.route("", methods=["GET"])
+@_require_auth
+def get_recommendations():
+    """GET /api/recommend
+    Returns up to `limit` TMDB-seeded recommended titles not already in
+    the user's library.  Cached 12h server-side in recommendation_cache.
+    """
+    try:
+        limit = min(int(request.args.get("limit", 24)), 100)
+    except (TypeError, ValueError):
+        limit = 24
+    try:
+        from ..radd_recommend import get_recommendations as _rec
+        results = _rec(limit=limit)
+        return jsonify({"ok": True, "results": results, "count": len(results)})
+    except Exception as e:
+        log.warning("recommend error: %s", e)
+        return jsonify({"ok": True, "results": [], "count": 0})
+
+
 bp_app = Blueprint("mobile_app_check", __name__)
 
 @bp_app.route("/check", methods=["POST"])

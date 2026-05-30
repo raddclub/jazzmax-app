@@ -102,6 +102,7 @@ def create_app() -> Flask:
     app.register_blueprint(mobile_api.bp_notif,        url_prefix="/api/notifications")
     app.register_blueprint(mobile_api.bp_hist,         url_prefix="/api/history")
     app.register_blueprint(mobile_api.bp_app,          url_prefix="/api/app")
+    app.register_blueprint(mobile_api.bp_rec,          url_prefix="/api/recommend")  # BUG-A26
 
     # ------------------------------------------------------------------
     # Download proxy — /d/<remote_id>

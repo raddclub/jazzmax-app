@@ -71,15 +71,9 @@ class AuthApi {
     }
   }
 
-  /// Bind device to account (call after login on new devices).
-  static Future<void> bindDevice() async {
-    final deviceId = await DeviceIdentifier.getDeviceId();
-    final deviceName = await DeviceIdentifier.getDeviceName();
-    await _client.post(
-      ApiPaths.bindDevice,
-      data: {'device_id': deviceId, 'device_name': deviceName},
-    );
-  }
+  // BUG-A27: bindDevice() removed — device binding is handled
+  // automatically inside login() via the /api/auth/login endpoint.
+
 
   // ═══════════════════════════════════════════════════════════════════════════
   // OTP DEVICE SWITCH — future integration hook
