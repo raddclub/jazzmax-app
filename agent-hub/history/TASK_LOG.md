@@ -3639,3 +3639,72 @@ After reading the actual code, this is incorrect:
 
 ### All tasks from .md files — COMPLETE
 No remaining code-level tasks found. Only blocked/user-input items remain.
+
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Oracle Sync + JazzMAX->RaddFlix + Nginx Fix)
+
+### Task
+Full review and fix of Oracle Ubuntu instance. Sync GitHub code, rename all JazzMAX->RaddFlix,
+resolve blocking git conflict, and fix nginx routing so Flutter app uses fixed mobile_api.py
+in radd-hub (port 5000) instead of old _watch_prototype (port 6000).
+
+### Critical Finding — Flutter API was routing to wrong server
+nginx was sending ALL /api/ to port 6000 (_watch_prototype — old unfixed code).
+All Phase 13 bug fixes to auth/subscription/notifications/history were never reaching users.
+
+### Done
+
+#### 1. Git clean
+git fetch + reset --hard origin/main via Python subprocess on server.
+Server at 44791ec (latest main). All conflicts cleared.
+
+#### 2. nginx fully rewritten
+- /etc/nginx/sites-available/raddflix replaces jazzmax
+- /etc/nginx/sites-available/raddflix-ssl.conf replaces jazzmax-ssl.conf
+- /etc/nginx/conf.d/raddflix_security.conf replaces jazzmax_security.conf
+- Routing fixed: auth/subscription/usage/notifications/history/payment/recommend/app -> 5000
+- Catalog stays: /api/catalog/, /api/search, /api/poster/ -> port 6000 (_watch_prototype)
+- Health: "JazzMAX Oracle OK" -> "RaddFlix Oracle OK" on HTTP:80 and HTTPS:443
+
+#### 3. Supervisor renamed
+- jazzmax_radd -> raddflix_radd  (radd-hub port 5000)
+- jazzmax_watch -> raddflix_watch (_watch_prototype catalog port 6000)
+- Logs: /var/log/jazzmax_*.log -> /var/log/raddflix_*.log
+
+#### 4. Systemd services updated
+jazzmax_watch.service, jazzmax-backup.service, jazzmax-backup.timer
+renamed to raddflix equivalents. Old files removed.
+
+#### 5. _watch_prototype stabilized (catalog routes only)
+Not in GitHub (deleted in commit 4f8db47) but needed for catalog sync.
+Backed up before git reset, restored after.
+run.py replaced with minimal version: only app_catalog, app_search, poster_proxy.
+Stub .py files for missing modules (watch, sms_gateway, app_plans, security).
+
+### Service Status at Close
+```
+raddflix_radd    RUNNING   pid 418657   radd-hub admin + mobile API  port 5000
+raddflix_watch   RUNNING   pid 422010   catalog sync API             port 6000
+nginx            ACTIVE    HTTP:80 + HTTPS:443
+```
+
+### Endpoint Verification
+- GET /health -> "RaddFlix Oracle OK"
+- GET /api/ping -> {"ok":true} from radd-hub port 5000
+- GET /api/catalog/version -> {"count":0,"version":0} from catalog port 6000
+- POST /api/auth/login -> {"error":"phone and password required"} from radd-hub
+- HTTPS GET /health -> "RaddFlix Oracle OK"
+
+### Notes for Next Agent
+- Flutter API routing is now FIXED. Phase 13 bug fixes are live for real users.
+- Catalog sync on port 6000 (_watch_prototype). When catalog migrates to radd-hub,
+  update nginx and decommission raddflix_watch.
+- _watch_prototype NOT in git. Lives only on Oracle at /opt/jazzmax/_watch_prototype.
+  run.py is the minimal catalog-only version (not the original full one).
+- SSH key: ORACLE_SSH_KEY in Replit Secrets has spaces not newlines — reformat before SSH.
+- Oracle git: clean at 44791ec. Future pulls work without conflicts.
+- DB v13. _migrate param = oldV. sqflite pinned at 3.1.0+1.
+- /api/app/check is POST-only; GET returns 500 (expected).
+- Remaining "jazzmax" strings are physical dir/script names on disk — acceptable.
