@@ -18,6 +18,7 @@ from .base import (
 log = logging.getLogger("hub.scrapers.rogmovies")
 
 DOMAINS = [
+    "https://rogmovies.club",
     "https://rogmovies.blog",
     "https://rogmovies.com",
     "https://rogmovies.net",
