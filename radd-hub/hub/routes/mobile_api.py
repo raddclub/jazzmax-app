@@ -549,7 +549,7 @@ def payment_methods():
 
 # ── Notifications API ───────────────────────────────────────────────────────
 
-@bp_notif.route("/")
+@bp_notif.route("/", strict_slashes=False)
 @_require_auth
 def list_notifications(_user_id, _phone):
     try:
@@ -560,9 +560,17 @@ def list_notifications(_user_id, _phone):
                 "ORDER BY created_at DESC LIMIT 50",
                 (_user_id,)
             ).fetchall()
-        return jsonify({"ok": True, "notifications": [dict(r) for r in rows]})
+        notifs    = []
+        unread    = 0
+        for r in rows:
+            d = dict(r)
+            d["is_read"] = bool(d.get("is_read", 0))
+            if not d["is_read"]:
+                unread += 1
+            notifs.append(d)
+        return jsonify({"ok": True, "notifications": notifs, "unread_count": unread})
     except Exception:
-        return jsonify({"ok": True, "notifications": []})
+        return jsonify({"ok": True, "notifications": [], "unread_count": 0})
 
 
 @bp_notif.route("/read", methods=["POST"])
@@ -657,7 +665,7 @@ def save_history(file_id, _user_id, _phone):
 # BUG-A26: radd_recommend.py had no API endpoint — Flutter could never call it.
 bp_rec = Blueprint("mobile_rec", __name__)
 
-@bp_rec.route("", methods=["GET"])
+@bp_rec.route("", methods=["GET"], strict_slashes=False)
 @_require_auth
 def get_recommendations():
     """GET /api/recommend

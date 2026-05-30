@@ -148,6 +148,33 @@ def sync():
                     "episodes": episodes, "count": len(titles)})
 
 
+
+
+@bp.route("/share_url")
+def get_share_url():
+    """GET /api/catalog/share_url?file_id=<id>
+    Returns the JazzDrive share_url for a specific file.
+    Called by the Flutter player as a fallback when the local SQLite DB
+    doesn't have the share_url (fresh install, DB corruption, or new content).
+    Public endpoint — the catalog sync also exposes share_urls openly.
+    """
+    file_id = request.args.get("file_id", "").strip()
+    if not file_id:
+        return jsonify({"error": "file_id required"}), 400
+    try:
+        with db.conn() as c:
+            row = c.execute(
+                "SELECT f.share_url FROM files f "
+                "JOIN titles t ON f.title_id = t.id "
+                "WHERE f.id=? AND t.is_published=1",
+                (file_id,)
+            ).fetchone()
+        if row and row["share_url"]:
+            return jsonify({"ok": True, "share_url": row["share_url"]})
+        return jsonify({"error": "not found"}), 404
+    except Exception:
+        log.exception("Error in get_share_url for file_id=%s", file_id)
+        return jsonify({"error": "server error"}), 500
 @bp.route("/posters")
 def posters():
     with db.conn() as c:
