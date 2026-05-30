@@ -3383,3 +3383,60 @@ BUG-A28 (commit `d6094e0b`) added `_checkDownloadQuota()` to `DownloadService.do
 | Quota exceeded (monthly) | Red banner: "You've reached your monthly download limit — Upgrade" |
 | No active subscription | Red banner: "Download requires an active subscription — Upgrade" |
 | Server unreachable | Fails open (download proceeds) — per A28 implementation |
+
+---
+
+## [2026-05-30 18:45 UTC] — Agent: Replit Agent (Bug Fix — scraper.py hardcoded Replit path)
+
+### Task
+User reported an error during auto-download of "Sarvam Maya". Error log showed:
+```
+DL Error: [Errno 2] No such file or directory:
+  '/opt/jazzmax/radd-hub/data/staging/Sarvam.Maya...mkv'
+  -> '/home/runner/workspace/radd-hub/data/media/Sarvam.Maya...mkv'
+```
+
+### Root Cause Analysis
+
+**Two-part diagnosis:**
+
+1. **Wrong destination path** — `scraper.py` line 461 had a hardcoded Replit workspace path as fallback:
+   ```python
+   # BROKEN:
+   watch_dir = Path(_db.setting("upload_watch_root") or "/home/runner/workspace/radd-hub/data/media")
+   ```
+   When `upload_watch_root` is not set in the DB, `watch_dir` resolved to a Replit path that does not exist on the Oracle server. `Path.rename()` then threw `[Errno 2]` because the **destination parent directory** `/home/runner/workspace/radd-hub/data/media/` does not exist on the Oracle server.
+
+2. **Why it looked like the source was missing** — The error message format `[Errno 2] No such file or directory: 'src' -> 'dest'` is ambiguous in Python's `Path.rename()`. The download DID complete (aria2c reached 99.3%), and the file WAS in staging. The failure was purely the non-existent destination.
+
+3. **Why the path was wrong** — `_do_download(job, config, url, log_fn)` takes `config` as a parameter (a dict). Inside the function, `config` the local dict **shadows** the module-level `config` import. A developer writing the fallback likely copy-pasted the path from their Replit dev environment rather than using `config.MEDIA_DIR`.
+
+### Fix Applied
+
+**File:** `radd-hub/hub/scraper.py`  
+**Commit:** `a28b9cdc85802759f366484fcd77ac6fa100f9fb`
+
+```python
+# BEFORE (broken):
+watch_dir = Path(_db.setting("upload_watch_root") or "/home/runner/workspace/radd-hub/data/media")
+
+# AFTER (correct):
+from . import config as _hub_config  # config param shadows module; use alias
+watch_dir = Path(_db.setting("upload_watch_root") or str(_hub_config.MEDIA_DIR))
+```
+
+`config.MEDIA_DIR` resolves at runtime from `PROJECT_ROOT` (which is `/opt/jazzmax/radd-hub/` on the Oracle server), so the fallback will correctly be `/opt/jazzmax/radd-hub/data/media`.
+
+### Files Changed
+- `radd-hub/hub/scraper.py` — replaced hardcoded Replit path with `config.MEDIA_DIR` fallback
+
+### Notes for Next Agent
+- This bug only triggers when `upload_watch_root` is **not** set in the DB settings. Set it explicitly in Radd Hub → Settings to lock it in permanently.
+- Oracle SSH was unreachable from Replit (install script failed at connection test). The fix was applied via GitHub API only. **The server needs to pull the latest commit to apply the fix:**
+  ```bash
+  ssh ubuntu@92.4.95.252 "cd /opt/jazzmax && git pull && sudo supervisorctl restart jazzmax_radd"
+  ```
+- The `.is.mkv` double extension on the downloaded file is expected — it comes from the scraper site domain (`vegamovies.is`) being included in the filename by aria2c. Not a bug.
+- Previous agents had built many features (FTS5 search, Continue Watching, Resume button, Phase 13 bug fixes, etc.) — all solid. This was the only active blocker for downloads.
+
+---
