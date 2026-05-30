@@ -213,7 +213,7 @@ class LocalDb {
       // Add local poster path to titles
       try { await db.execute('ALTER TABLE titles ADD COLUMN poster_path TEXT'); } catch (_) {}
     }
-    if (oldVersion < 12) {
+    if (oldV < 12) {
       // New-episode badge tracking table
       try {
         await db.execute('''
