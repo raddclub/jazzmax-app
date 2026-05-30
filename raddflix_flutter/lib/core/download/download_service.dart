@@ -5,7 +5,7 @@ import '../db/local_db.dart';
 import '../services/jazzdrive_service.dart';
 import '../debug/debug_logger.dart';
 import '../constants.dart';   // BUG-A28: ApiPaths.quota
-import 'api_client.dart';     // BUG-A28: authenticated quota check
+import '../api/api_client.dart'; // BUG-A28: authenticated quota check
 
 /// Manages video file downloads using Dio.
 /// Files saved to app private storage — not accessible outside the app.

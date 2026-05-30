@@ -160,7 +160,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
       if (raw.trimLeft().startsWith('[')) {
         // JSON array format from DB — strip brackets, quotes, split by comma
         final inner = raw.trim().replaceAll(RegExp(r'^\[|\]$'), '');
-        parts = inner.split(',').map((s) => s.trim().replaceAll(RegExp(r'^["\']+|["\']+$'), '')).toList();
+        parts = inner.split(',').map((s) => s.trim().replaceAll('"', "").replaceAll("'", "")).toList();
       } else {
         parts = raw.split(',');
       }

@@ -101,4 +101,10 @@ class SceneBookmarkStore {
       whereArgs: episodeId != null ? [contentId, episodeId] : [contentId],
     );
   }
+
+  /// Delete ALL bookmarks across all content — used on logout to clear user data.
+  static Future<void> deleteAllContent() async {
+    final db = await _instance;
+    await db.delete('scene_bookmarks');
+  }
 }

@@ -99,7 +99,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     if (ok != true) return;
     setState(() => _loggingOut = true);
     // BUG-A23: clean up per-user scene bookmarks on logout
-    await SceneBookmarkStore.deleteAll();
+    await SceneBookmarkStore.deleteAllContent();
     await ref.read(authProvider.notifier).logout();
     if (mounted) Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
