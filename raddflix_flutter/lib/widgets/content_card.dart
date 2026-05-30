@@ -90,6 +90,14 @@ class ContentCard extends StatelessWidget {
                       fontWeight: FontWeight.w600, letterSpacing: 0.3),
                   ),
                 )),
+            // New-episode badge — bottom-right, symmetric to language badge
+            if (item.isShow &&
+                item.newEpisodeCount != null &&
+                item.newEpisodeCount! > 0)
+              Positioned(
+                bottom: 28, right: 6,
+                child: _NewEpBadge(count: item.newEpisodeCount!),
+              ),
             if (item.rating != null && item.rating! > 0)
               Positioned(top: 6, right: 6,
                 child: Container(
@@ -275,6 +283,30 @@ class _DetailSheet extends StatelessWidget {
         ]),
         ),
       ]),
+    );
+  }
+}
+
+/// Small badge shown on show cards when new episodes were added since last view.
+class _NewEpBadge extends StatelessWidget {
+  final int count;
+  const _NewEpBadge({required this.count});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(3),
+        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 4,
+            offset: Offset(0, 1))],
+      ),
+      child: Text(
+        '+$count EP',
+        style: const TextStyle(
+          color: Colors.white, fontSize: 8,
+          fontWeight: FontWeight.w800, letterSpacing: 0.3),
+      ),
     );
   }
 }

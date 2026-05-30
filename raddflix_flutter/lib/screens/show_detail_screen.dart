@@ -43,6 +43,10 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
 
   Future<void> _loadEpisodes() async {
     final eps = await LocalDb.getEpisodes(widget.item.id);
+    // Clear the new-episode badge on the home screen card for this show
+    if (widget.item.isShow) {
+      LocalDb.markEpisodesSeen(widget.item.id).ignore();
+    }
     final progList = await LocalDb.getWatchPositions();
     final prog = <String, double>{};
     for (final p in progList) {

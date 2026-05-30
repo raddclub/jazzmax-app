@@ -19,6 +19,9 @@ class CatalogItem {
   final bool? isUploading;
   final String? status;
   final bool? isOngoing;
+  /// Number of episodes added since user last viewed this show.
+  /// null = not computed. 0 = nothing new. >0 = badge shown.
+  final int? newEpisodeCount;
 
   const CatalogItem({
     required this.id,
@@ -41,6 +44,7 @@ class CatalogItem {
     this.isUploading,
     this.status,
     this.isOngoing,
+    this.newEpisodeCount,
   });
 
   bool get isMovie      => mediaType == 'movie';
@@ -95,6 +99,7 @@ class CatalogItem {
     bool? isOngoing,
     String? shareUrl,
     String? posterPath,
+    int? newEpisodeCount,
   }) => CatalogItem(
     id: id, title: title, year: year, mediaType: mediaType,
     description: description, rating: rating, genres: genres,
@@ -106,6 +111,7 @@ class CatalogItem {
     isUploading: isUploading ?? this.isUploading,
     status: status ?? this.status,
     isOngoing: isOngoing ?? this.isOngoing,
+    newEpisodeCount: newEpisodeCount ?? this.newEpisodeCount,
   );
 
   CatalogItem copyWithEpisodes(List<Map<String, dynamic>> eps) => CatalogItem(
@@ -118,5 +124,6 @@ class CatalogItem {
     isUploading: isUploading,
     status: status,
     isOngoing: isOngoing,
+    newEpisodeCount: newEpisodeCount,
   );
 }

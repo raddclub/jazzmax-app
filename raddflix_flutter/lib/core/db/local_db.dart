@@ -132,6 +132,13 @@ class LocalDb {
     ''');
     await db.execute('CREATE INDEX idx_titles_type ON titles(media_type)');
     await db.execute('CREATE INDEX idx_episodes_title ON episodes(title_id)');
+    // Phase: new-episode badge tracking
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS show_ep_seen (
+        show_id    INTEGER PRIMARY KEY,
+        seen_count INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
     await db.execute('CREATE INDEX idx_stream_cache_expires ON stream_cache(expires_at)');
     // Phase 6 — usage tracking
     await db.execute('''
@@ -205,6 +212,17 @@ class LocalDb {
       try { await db.execute('ALTER TABLE episodes ADD COLUMN share_url TEXT'); } catch (_) {}
       // Add local poster path to titles
       try { await db.execute('ALTER TABLE titles ADD COLUMN poster_path TEXT'); } catch (_) {}
+    }
+    if (oldVersion < 12) {
+      // New-episode badge tracking table
+      try {
+        await db.execute('''
+          CREATE TABLE IF NOT EXISTS show_ep_seen (
+            show_id    INTEGER PRIMARY KEY,
+            seen_count INTEGER NOT NULL DEFAULT 0
+          )
+        ''');
+      } catch (_) {}
       // Stream link cache table (6h TTL, shared for watch + download)
       try {
         await db.execute('''
@@ -647,6 +665,46 @@ class LocalDb {
     } catch (_) {
       return {'allowed': true};
     }
+  }
+
+  // ── New-episode badge ────────────────────────────────────────────────────
+
+  /// Returns a map of {show_id → new_episode_count} for all shows where the
+  /// current episode count in SQLite exceeds the last-seen count.
+  /// Single query — safe to call on every catalog load.
+  static Future<Map<int, int>> getNewEpisodeCounts() async {
+    final db = await instance;
+    final rows = await db.rawQuery('''
+      SELECT e.title_id,
+             COUNT(e.id)               AS total,
+             COALESCE(s.seen_count, 0) AS seen
+      FROM   episodes e
+      LEFT JOIN show_ep_seen s ON s.show_id = e.title_id
+      GROUP  BY e.title_id
+      HAVING COUNT(e.id) > COALESCE(s.seen_count, 0)
+    ''');
+    final result = <int, int>{};
+    for (final row in rows) {
+      final showId = row['title_id'] as int;
+      final total  = row['total']   as int;
+      final seen   = row['seen']    as int;
+      result[showId] = total - seen;
+    }
+    return result;
+  }
+
+  /// Mark all current episodes of [showId] as seen, clearing the badge.
+  /// Called from ShowDetailScreen when the user opens a show.
+  static Future<void> markEpisodesSeen(int showId) async {
+    final db = await instance;
+    final rows = await db.rawQuery(
+      'SELECT COUNT(*) AS cnt FROM episodes WHERE title_id = ?', [showId]);
+    final count = (rows.first['cnt'] as int?) ?? 0;
+    await db.insert(
+      'show_ep_seen',
+      {'show_id': showId, 'seen_count': count},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   // ── Phase 9: SIMOSA Streak ──────────────────────────────────────────────

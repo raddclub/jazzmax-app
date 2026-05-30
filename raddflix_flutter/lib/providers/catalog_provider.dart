@@ -69,10 +69,16 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       final count   = await LocalDb.getTotalCount();
       final recent   = await _loadRecentlyWatched(movies, shows);
       final trending = _computeTrending(movies, shows);
+      // New-episode badge: compare episode counts vs last-seen counts per show
+      final newEpCounts = await LocalDb.getNewEpisodeCounts();
+      final showsWithBadge = shows.map((s) {
+        final n = newEpCounts[s.id];
+        return (n != null && n > 0) ? s.copyWith(newEpisodeCount: n) : s;
+      }).toList();
       state = state.copyWith(
         status: CatalogStatus.ready,
         movies: movies,
-        shows: shows,
+        shows: showsWithBadge,
         recentlyWatched: recent,
         trending: trending,
         totalCount: count,
