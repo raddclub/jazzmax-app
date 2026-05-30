@@ -654,9 +654,23 @@ def enrich(parsed, config: dict, log_fn=None) -> dict | None:
             say(f"OMDB error: {e}")
             continue
 
-    # 3. AI fallback — Groq → Gemini → OpenAI → OpenRouter
-    #    Best for Pakistani/Indian/South/Punjabi/Chinese content absent from TMDB+OMDB
-    say("TMDB+OMDB both failed — trying AI fallback (Groq/Gemini/OpenAI/OpenRouter) …")
+    # 3. IMDbAPI.dev — free IMDB data, no key, great for Pakistani/Punjabi/South Asian
+    #    Runs BEFORE AI to save paid API quota — free and often finds South Asian content
+    try:
+        _mt = getattr(parsed, "media_type", None) if not isinstance(parsed, dict) else parsed.get("media_type")
+        meta = _imdbapi_search(title, year, _mt or "movie")
+        if meta:
+            meta["_ts"] = int(time.time())
+            cache[ck] = meta
+            _save_cache(cache)
+            say(f"IMDbAPI.dev -> {meta['title']} ({meta.get('year')}) imdb={meta.get('imdb_id')!r}")
+            return {k: v for k, v in meta.items() if not k.startswith("_")}
+    except Exception as e:
+        say(f"IMDbAPI.dev error: {e}")
+
+    # 4. AI fallback — Groq → Gemini → OpenAI → OpenRouter
+    #    Best for Pakistani/Indian/South/Punjabi/Chinese content absent from TMDB+OMDB+IMDbAPI
+    say("TMDB+OMDB+IMDbAPI.dev all failed — trying AI fallback (Groq/Gemini/OpenAI/OpenRouter) …")
     try:
         meta = _ai_search(title, year, config)
         if meta:
@@ -671,19 +685,6 @@ def enrich(parsed, config: dict, log_fn=None) -> dict | None:
             say("AI fallback returned no result for this title")
     except Exception as e:
         say(f"AI fallback error: {e}")
-
-    # 4. IMDbAPI.dev — free IMDB data, no key, great for Pakistani/Punjabi/South Asian
-    try:
-        _mt = getattr(parsed, "media_type", None) if not isinstance(parsed, dict) else parsed.get("media_type")
-        meta = _imdbapi_search(title, year, _mt or "movie")
-        if meta:
-            meta["_ts"] = int(time.time())
-            cache[ck] = meta
-            _save_cache(cache)
-            say(f"IMDbAPI.dev -> {meta['title']} ({meta.get('year')}) imdb={meta.get('imdb_id')!r}")
-            return {k: v for k, v in meta.items() if not k.startswith("_")}
-    except Exception as e:
-        say(f"IMDbAPI.dev error: {e}")
 
     # 5. YouTube — trailer thumbnail as poster (no plot/cast metadata)
     try:
