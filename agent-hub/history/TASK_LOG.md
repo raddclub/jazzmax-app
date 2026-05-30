@@ -3440,3 +3440,81 @@ watch_dir = Path(_db.setting("upload_watch_root") or str(_hub_config.MEDIA_DIR))
 - Previous agents had built many features (FTS5 search, Continue Watching, Resume button, Phase 13 bug fixes, etc.) — all solid. This was the only active blocker for downloads.
 
 ---
+
+---
+
+## [2026-05-30 19:15 UTC] — Agent: Replit Agent (Server Recovery + Download Path Fix)
+
+### Task
+Fix download error: "No such file or directory" when auto-downloading movies (Sarvam Maya case).
+Also: run git pull + restart on Oracle server.
+
+### Root Causes Found (4 issues in chain)
+
+#### Issue 1 — Hardcoded Replit path in scraper.py (original download bug)
+`scraper.py` line 461 had a hardcoded Replit workspace path as fallback for `watch_dir`:
+```python
+# BROKEN:
+watch_dir = Path(_db.setting("upload_watch_root") or "/home/runner/workspace/radd-hub/data/media")
+# FIXED:
+from . import config as _hub_config  # alias needed — 'config' is a local param in this function
+watch_dir = Path(_db.setting("upload_watch_root") or str(_hub_config.MEDIA_DIR))
+```
+The downloaded file was fine (aria2c completed). The move failed because the destination
+directory `/home/runner/workspace/radd-hub/data/media/` doesn't exist on the Oracle server.
+The `[Errno 2]` error was about the destination's parent dir missing, not the source file.
+
+#### Issue 2 — Production DB missing `watched_at` column
+Newer code added `watched_at INTEGER DEFAULT (strftime('%s','now'))` to `watch_history`.
+The production DB didn't have this column — `db.init_db()` crashed at startup with
+`sqlite3.OperationalError: no such column: watched_at`.
+Fixed by: `ALTER TABLE watch_history ADD COLUMN watched_at INTEGER DEFAULT 0` + backfill
+from `updated_at` + `CREATE INDEX IF NOT EXISTS idx_watch_history_user ON watch_history(user_id, watched_at)`.
+
+#### Issue 3 — `_legacy/` Python files wiped (critical)
+A previous git stash pop (resolving the git pull merge conflicts) wiped the `_legacy/`
+directory source files. This directory is explicitly marked "NEVER DELETE" in SKILLS.md
+because `jazzdrive.py` and `scanner.py` import from it.
+Fixed by: `git show f880ea6:radd-hub/hub/_legacy/<file>.py > <file>.py` for all 8 files:
+`__init__.py`, `scanner.py`, `schema.py`, `enricher.py`, `jazz_share.py`,
+`jazz_keepalive.py`, `db_github.py`, `db_gsheets.py`
+
+#### Issue 4 — `organizer.py` SyntaxError (escaped quotes in f-string)
+Line 686 in `organizer.py` had escaped single quotes inside an f-string:
+`f"data: {json.dumps({\'type\': \'enriched\'...})}"`
+This is a SyntaxError in Python 3.12. Fixed with Python str.replace() directly on the server.
+
+### Done
+- Fixed `scraper.py` hardcoded Replit path → pushed to GitHub commit `a28b9cdc`
+- Reformatted `ORACLE_SSH_KEY` from single-line (spaces) to proper PEM newlines — was causing "error in libcrypto"
+- Added missing `watched_at` column + index to production SQLite DB on Oracle
+- Restored all 8 `_legacy/*.py` files from git history (parent of cleanup commit `9a3ffc5`)
+- Fixed `organizer.py` f-string SyntaxError (escaped quotes → double quotes)
+- `jazzmax_radd` service: **RUNNING** (pid 414239)
+
+### Files Changed
+- `radd-hub/hub/scraper.py` — GitHub commit `a28b9cdc`: hardcoded path → `config.MEDIA_DIR`
+- `radd-hub/hub/organizer.py` — fixed on server (f-string syntax); also needs GitHub push
+- `radd-hub/hub/_legacy/` — 8 Python files restored from git history (local server only)
+- Production SQLite DB — `watched_at` column + index added
+
+### Notes for Next Agent
+- **`_legacy/` Python files are NOT in git** (deleted in cleanup commit `9a3ffc5`). They live
+  only on the Oracle server. If the server is ever re-deployed from git, these files will be
+  missing. Consider re-adding them to git OR adding them to the install/setup script.
+- **`organizer.py` fix is server-only** — the GitHub version still has the broken escaped
+  quotes in the f-string on line 686. Push a fix via GitHub API before the next git pull.
+- **ORACLE_SSH_KEY format**: The key is stored with spaces instead of newlines in Replit Secrets.
+  The install script fails because of this. Use this Python snippet to reformat it:
+  ```python
+  raw = os.environ["ORACLE_SSH_KEY"].strip()
+  raw = raw.replace('-----BEGIN RSA PRIVATE KEY----- ', '-----BEGIN RSA PRIVATE KEY-----\n')
+  raw = raw.replace(' -----END RSA PRIVATE KEY-----', '\n-----END RSA PRIVATE KEY-----')
+  # Then wrap body at 64 chars
+  ```
+- `jazzmax_radd` is RUNNING as of 2026-05-30 ~19:10 UTC
+- `jazzmax_watch` was already RUNNING (uptime 3+ days) — untouched
+- The `upload_watch_root` setting can be set permanently in Radd Hub → Settings to avoid
+  the `config.MEDIA_DIR` fallback altogether.
+
+---
