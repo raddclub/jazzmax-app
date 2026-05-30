@@ -3351,3 +3351,35 @@ All 34 audit bugs resolved:
 
 **All commits pushed to raddclub/raddflix-app main branch via GitHub API.**
 Oracle SSH still unreachable from Replit — deploy by pulling on the Oracle server.
+
+---
+
+## Batch 8 — Quota error surfaced to UI
+**Date:** 2026-05-30
+**Commit:** `ca1b3dac`
+**Files Changed:**
+- `raddflix_flutter/lib/providers/downloads_provider.dart`
+- `raddflix_flutter/lib/screens/show_detail_screen.dart`
+
+### Problem
+BUG-A28 (commit `d6094e0b`) added `_checkDownloadQuota()` to `DownloadService.downloadFile()`, which raises `DownloadQuotaException` when the server reports the user has hit their daily/monthly limit. However, `DownloadsNotifier.startDownload()` had a bare `try/finally` — the exception was caught by `finally`, cleaned up, and silently discarded. Users got no feedback.
+
+### Fix — `downloads_provider.dart`
+- Added `String? quotaError` field to `DownloadsState` and `copyWith` (with a dedicated `clearQuotaError` bool flag to distinguish "set null intentionally" from "don't change").
+- `startDownload()` now has an explicit `on DownloadQuotaException catch (e)` clause before `finally`: writes `e.userMessage` to `state.quotaError` and re-throws so call-sites can also react.
+- Added `clearQuotaError()` notifier method.
+
+### Fix — `show_detail_screen.dart`
+- Added imports: `download_service.dart`, `subscription_screen.dart`.
+- Added `_showQuotaError(BuildContext ctx, String msg)` helper: red floating `SnackBar` (6 s duration) showing the server's human-readable message (e.g. "You've reached your daily download limit") with an **Upgrade** action that pushes `SubscriptionScreen`.
+- **Movie download button** (line ~374): `() {}` → `() async {}`. Shows the "Downloading…" toast first (immediate feedback), then `await`s `startDownload()`. On `DownloadQuotaException`, calls `_showQuotaError()` guarded by `context.mounted`.
+- **Episode download tile** (line ~575): identical async/catch pattern on `onDownload` callback.
+
+### Behaviour after this change
+| Scenario | User sees |
+|----------|-----------|
+| Quota OK | "Downloading X…" toast as before |
+| Quota exceeded (daily) | Red banner: "You've reached your daily download limit — Upgrade" |
+| Quota exceeded (monthly) | Red banner: "You've reached your monthly download limit — Upgrade" |
+| No active subscription | Red banner: "Download requires an active subscription — Upgrade" |
+| Server unreachable | Fails open (download proceeds) — per A28 implementation |
