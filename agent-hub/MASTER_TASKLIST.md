@@ -206,3 +206,6 @@
 - Run the Full Review & Test Checklist from REINCARNATION.md (Step 0–10)
 - Confirm CI is green on latest commit
 - [x] **New Episode badge** on show cards — `+N EP` pill badge, auto-clears on open [54660441]
+- [x] **CI compile fix** — `oldVersion` → `oldV` in v12 migration [5bd1ac75] ✅ GREEN
+- [x] **Continue Watching TV fix** — shows now appear in Continue Watching row [f506b917] ✅ GREEN
+- [x] **Resume button** on show detail — "Resume S01E03 · 42%" button when partially-watched [d9e6bfce]

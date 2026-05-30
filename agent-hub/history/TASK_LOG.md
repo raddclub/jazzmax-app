@@ -2841,3 +2841,61 @@ Checked existing `_DeviceConflictPanel` in `login_screen.dart`:
 
 **Performance:** Single SQL query with LEFT JOIN + GROUP BY + HAVING — not N+1. Runs once per catalog load.
 
+
+---
+
+## [2026-05-30 17:00 UTC] — Agent: Replit Agent (Bug Fixes + Continue Watching + Resume Button)
+
+### Task
+Verify last agent's work, fix all bugs, and add missing features including Continue Watching and Resume functionality.
+
+### Audit Findings (pre-work state)
+- CI was **broken** on commits `54660441` and `f571b352` (new-episode badge session): `lib/core/db/local_db.dart:216: Error: Undefined name 'oldVersion'`
+- Continue Watching row existed in home_screen but **never showed TV episodes** — `_loadRecentlyWatched()` matched only `item.fileId` which is `null` for shows (file_id lives on episodes, not show-level titles)
+- No "Resume" button existed on show_detail_screen — user had to scroll the full episode list to find where they left off
+- All other claimed features verified and working: notifications, SIMOSA card, usage tracking, device binding, subscription screen, downloads, player positions
+
+### Done
+
+#### Fix 1 — CI Compile Error (commit `5bd1ac75`) ✅ GREEN
+- `local_db.dart` line 216: `if (oldVersion < 12)` → `if (oldV < 12)`
+- The `_migrate` function parameter is named `oldV`, not `oldVersion`. Last agent introduced this typo when adding the v12 migration for `show_ep_seen` + `stream_cache` tables.
+- Both `Build RaddFlix APK` and `RaddFlix CI` passed immediately.
+
+#### Fix 2 — Continue Watching TV Episodes (commit `f506b917`) ✅ GREEN
+- `catalog_provider.dart`: `_loadRecentlyWatched()` rewritten to handle both movies and shows:
+  - Movies: matched by `item.fileId == fileId` (unchanged)
+  - **Shows (new)**: iterates `show.episodes` list (pre-loaded via `copyWithEpisodes`) searching for matching `file_id`
+  - Deduplication via `seenIds` set — same show only appears once even if multiple episodes watched
+  - Positions ordered by `updated_at DESC` so most-recent episode's progress is used
+- Both CI checks passed.
+
+#### Feature — Resume Button on Show Detail (commit `d9e6bfce`)
+- `show_detail_screen.dart`: Added `_resumeEpisodeIndex` state field
+- In `_loadEpisodes()`: scans all watch positions to find episode with highest progress > 3% and < 95% — the episode most recently left mid-watch
+- When found, shows a red "Resume S01E03 · 42%" button above the episode list
+- Correctly handles multi-season shows: switches to the right season tab before playing
+- Button only appears when there's something to resume (hidden for unwatched shows)
+
+### Files Changed
+- `raddflix_flutter/lib/core/db/local_db.dart` — `oldVersion` → `oldV` in v12 migration block
+- `raddflix_flutter/lib/providers/catalog_provider.dart` — `_loadRecentlyWatched` now searches show episodes list
+- `raddflix_flutter/lib/screens/show_detail_screen.dart` — `_resumeEpisodeIndex` field + computation + Resume button UI
+- `agent-hub/MASTER_TASKLIST.md` — tasks updated
+- `agent-hub/history/TASK_LOG.md` — this entry
+
+### CI Summary
+| Commit | Build APK | RaddFlix CI | What |
+|--------|-----------|-------------|------|
+| `5bd1ac75` | ✅ | ✅ | db oldV fix |
+| `f506b917` | ✅ | ✅ | Continue Watching shows fix |
+| `d9e6bfce` | pending | pending | Resume button |
+
+### Notes for Next Agent
+- CI is green as of `f506b917`. Verify `d9e6bfce` also passes before next session.
+- **Continue Watching now works for TV shows** — the key fix was searching `show.episodes` list, not `item.fileId` (which is null for shows).
+- **Resume button** appears on show detail when user has a partially-watched episode. It shows season+episode+percentage, navigates directly to that episode.
+- Oracle SSH still unreachable from Replit — GitHub API only for all file changes.
+- Recommended next tasks: see MASTER_TASKLIST.md
+
+---
