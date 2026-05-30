@@ -3708,3 +3708,77 @@ nginx            ACTIVE    HTTP:80 + HTTPS:443
 - DB v13. _migrate param = oldV. sqflite pinned at 3.1.0+1.
 - /api/app/check is POST-only; GET returns 500 (expected).
 - Remaining "jazzmax" strings are physical dir/script names on disk — acceptable.
+
+
+---
+
+## [2026-05-30] — Agent: Replit Agent (Catalog Migration + Server Consolidation)
+
+### Task
+Migrate catalog/search/poster routes from `_watch_prototype` (port 6000) into `radd-hub` (port 5000),
+decommission the second process, fix all route conflicts in api.py, and update all .md files.
+
+### Done
+
+#### 1. New radd-hub route files (commit 46983977)
+- `radd-hub/hub/routes/catalog_api.py` — Flask blueprint for /api/catalog/* (SQLite live data)
+  - GET /api/catalog/version, /api/catalog/sync, /api/catalog/posters, /api/catalog/db_update
+- `radd-hub/hub/routes/search_api.py` — Flask blueprint for /api/search (no auth, Flutter)
+- `radd-hub/hub/routes/poster_proxy.py` — poster lookup with TMDB/OMDB/IMDbAPI key rotation + 30d cache
+- `radd-hub/hub/app.py` — registered all 3 new blueprints
+
+#### 2. api.py conflicts fixed
+- Old JSON-file catalog routes removed (125 lines) — they shadowed the SQLite catalog_api.py
+- Scraper admin search `/api/search` renamed `/api/scraper/search` — unblocked Flutter search API
+
+#### 3. nginx updated
+- /api/catalog/, /api/search, /api/poster/ → port 5000 (was 6000)
+- Both HTTP and SSL configs updated
+
+#### 4. raddflix_watch decommissioned
+- `sudo supervisorctl stop raddflix_watch` → stopped
+- `/etc/supervisor/conf.d/raddflix.conf` updated — raddflix_watch section commented out
+- Port 6000 no longer listening (verified: connection refused)
+
+#### 5. All .md files updated
+- MASTER_TASKLIST.md: Phase 0.3 SSH fixed ✅, Phase 14.5/14.6 done ✅, 14.2 git conflict done ✅
+- AGENT_NOTES.md: Full rewrite — raddflix_radd service name, SSH key pattern, catalog migration docs
+- CODE_MAP.md: Added catalog_api.py, search_api.py, poster_proxy.py entries; updated api.py entry
+- REINCARNATION.md: SSH works, single port 5000, BUG-A34 resolved, Oracle server state addendum
+- SKILLS.md: SSH Rule 2 updated (OpenSSH key format), Rule 5 service names (raddflix_radd)
+- TASK_LOG.md: This entry
+
+### Service Status at Close
+```
+raddflix_radd    RUNNING   pid 425101   radd-hub — ALL API on port 5000
+nginx            ACTIVE    HTTP:80 + HTTPS:443
+raddflix_watch   REMOVED   port 6000 dead (connection refused)
+```
+
+### Endpoint Verification (all via nginx port 80)
+- GET /health              -> "RaddFlix Oracle OK"
+- GET /api/ping            -> {"ok":true}
+- GET /api/catalog/version -> {"count":0,"version":0}  (SQLite live, no "ok":true from old route)
+- GET /api/catalog/sync    -> {"version":0,"titles":[],"episodes":[],"count":0}
+- GET /api/search?q=pa     -> {"count":0,"results":[]}  (no auth required)
+- GET /api/poster/keys     -> {"tmdb":{"count":0},"omdb":{"count":0}}
+- POST /api/auth/login     -> {"error":"..."} from radd-hub (auth routes unchanged)
+
+### GitHub Commits This Session
+- 2de5cef1 — docs(task-log): Oracle sync + rename + nginx routing fix
+- 46983977 — feat(radd-hub): migrate catalog/search/poster from _watch_prototype to radd-hub
+- 03b0bead — docs(agent-notes): update service names, SSH pattern, catalog migration
+- 7a4c8e5c — docs(code-map): add catalog_api, search_api, poster_proxy entries
+- 9e761482 — docs(master-tasklist): SSH fixed, catalog migration done, Phase 14 updated
+- d74fefcb — docs(reincarnation): SSH works, single port 5000, catalog migration, BUG-A34 resolved
+- f73f588e — docs(skills): update SSH key pattern, supervisor service names to raddflix_radd
+- (this entry) — docs(task-log): catalog migration + server consolidation session
+
+### Notes for Next Agent
+- Single process: radd-hub handles ALL Flutter API (auth/catalog/search/poster/sub/notif/history).
+- Count shows 0 — catalog is empty. Titles need to be added via admin panel to see real data.
+- Admin panel: http://92.4.95.252/admin (password in /opt/jazzmax/radd-hub/.env as RADD_ADMIN_PASS)
+- Scraper admin search now at /api/scraper/search (was /api/search) — update any admin UI that called it.
+- Remaining "jazzmax" strings are physical dir names on disk (acceptable — do not rename).
+- Top priority tasks: BUG-A02 (media_type normalization), BUG-A07 (app/check package ID), BUG-A19 (HistoryApi Flutter side).
+- DB is empty — populate via admin panel then test Flutter sync.
