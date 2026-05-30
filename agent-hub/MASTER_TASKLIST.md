@@ -205,3 +205,4 @@
 **Before touching ANY code:**
 - Run the Full Review & Test Checklist from REINCARNATION.md (Step 0–10)
 - Confirm CI is green on latest commit
+- [x] **New Episode badge** on show cards — `+N EP` pill badge, auto-clears on open [54660441]

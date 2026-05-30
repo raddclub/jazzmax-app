@@ -2818,3 +2818,26 @@ Checked existing `_DeviceConflictPanel` in `login_screen.dart`:
 - CI triggered on this commit — verify green before next session
 
 ---
+
+---
+
+## 2026-05-30 — feat(home): New-Episode Badge on Show Cards [commit: 54660441]
+
+**Goal:** Show a small "+N EP" badge on show ContentCards so users instantly see when new episodes dropped — clean, non-cluttered.
+
+**Files changed (6):**
+| File | Change |
+|---|---|
+| `core/constants.dart` | `catalogDbVersion` 11 → 12 (triggers migration) |
+| `core/db/local_db.dart` | New `show_ep_seen` table; `getNewEpisodeCounts()` (batch SQL); `markEpisodesSeen()` |
+| `models/catalog_item.dart` | New `newEpisodeCount` field; added to `copyWith` + `copyWithEpisodes` |
+| `providers/catalog_provider.dart` | Calls `getNewEpisodeCounts()` after `_loadFromDb`, merges into `showsWithBadge` |
+| `widgets/content_card.dart` | `_NewEpBadge` widget; `Positioned(bottom:28, right:6)` — symmetric to language badge |
+| `screens/show_detail_screen.dart` | `markEpisodesSeen()` called in `_loadEpisodes()` — auto-clears badge on open |
+
+**Design:** Small red pill "+N EP" at bottom-right of card. Symmetric to language badge (bottom-left). No overlap with existing FREE/NEW/ONGOING/COMPLETED badges (top-left) or star rating (top-right). Badge disappears automatically the moment user taps into the show — no manual dismiss needed.
+
+**DB migration:** `CREATE TABLE IF NOT EXISTS show_ep_seen (show_id PK, seen_count INT)` added to both `_createAll` and `_migrate` (oldVersion < 12). Safe try/catch. No breaking changes.
+
+**Performance:** Single SQL query with LEFT JOIN + GROUP BY + HAVING — not N+1. Runs once per catalog load.
+
