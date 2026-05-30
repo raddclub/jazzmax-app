@@ -2655,3 +2655,36 @@ All three were broken simultaneously, which is why only basic TMDB metadata ever
 and why manual ⚡ OMDB Enrich in the library panel worked (it reads the vault correctly)
 but automatic enrichment during scans did not.
 
+
+---
+
+## [2026-05-30 14:00 UTC] — Agent: Replit Agent (Enrichment Order Fix)
+
+### Task
+Swap IMDbAPI.dev and AI in the legacy enrichment chain inside `metadata_lookup.py`
+so the free tier (IMDbAPI.dev, no key needed) runs before paid AI providers.
+
+### Done
+- Fetched `metadata_lookup.py` from GitHub
+- Swapped step 3 (was AI) and step 4 (was IMDbAPI.dev) in `enrich()`
+- New order: TMDB → OMDB → **IMDbAPI.dev** → **AI** → YouTube → Google KG
+- Updated step comments to reflect new ordering
+- Pushed via GitHub API — commit `6689d2db29c316f5d3189209adce9e5821c19332`
+- Verified correct ordering via GitHub API (bypassing CDN cache)
+
+### Files Changed
+- `radd-hub/hub/metadata_lookup.py` — steps 3 and 4 swapped in `enrich()`
+
+### Why This Matters
+IMDbAPI.dev is free (no API key, no rate limit for reasonable usage) and covers
+Pakistani/Punjabi/Lollywood/South Asian content well. Previously, AI (Groq/Gemini/
+OpenAI/OpenRouter — all paid) ran before it. Any title IMDbAPI.dev could have caught
+for free was burning AI quota instead.
+
+### Notes for Next Agent
+- New enrichment order: TMDB(1) → OMDB(2) → IMDbAPI.dev(3) → AI(4) → YouTube(5) → Google KG(6)
+- This is purely a cost-saving change — no behaviour difference for titles found by TMDB/OMDB
+- CI triggered on commit 6689d2db — verify green before next session
+- Oracle SSH still unreachable from Replit — GitHub API only for all file changes
+
+---
