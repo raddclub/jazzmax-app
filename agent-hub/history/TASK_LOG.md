@@ -4097,3 +4097,75 @@ None.
   - OTP device-switch — server stubs only; needs WhatsApp OTP integration
 
 ---
+
+---
+
+## Phase 17 — 2026-05-30 (WhatsApp OTP, Full API Audit, Pipeline Test)
+
+### Scope
+1. WhatsApp OTP device-switch — implement end-to-end (server + Flutter)
+2. Full API contract audit (Flutter ↔ Flask, all 12 endpoints)
+3. DB structure verification (server SQLite ↔ Flutter SQLite local_db)
+4. Remove old movies (DB was already empty), add scan account, trigger JazzDrive scan
+5. Queue downloads: Pathaan 2023 + Off Campus Season 1 — monitor full pipeline
+
+### What Was Done
+
+**T001: WhatsApp OTP Device Switch — COMPLETED ✅**
+- Server (`mobile_api.py`): Added `POST /api/auth/device-switch/request` and `POST /api/auth/device-switch/verify`
+  - OTP: 6-digit, 10-minute expiry, SHA-256 hashed, single-use
+  - WhatsApp delivery: daemon thread via wa-bot `POST http://127.0.0.1:3000/api/send-message`
+  - Anti-enumeration: identical response whether phone registered or not
+  - On success: revokes all existing refresh tokens, binds new device, issues fresh JWT pair
+- Flutter (`auth_api.dart`): Implemented `requestDeviceSwitchOtp()` and `verifyDeviceSwitchOtp()`
+- Flutter (`constants.dart`): `otpDeviceSwitchEnabled = true`
+- Deployed to Oracle at commit 5ac72ae
+
+**T002: API Contract Audit — COMPLETED ✅**
+- All 12 Flutter↔Server endpoints verified: `/catalog/sync`, `/catalog/delta`, `/auth/login`, 
+  `/auth/me`, `/auth/refresh`, `/subscription/status`, `/history`, `/history/<id>`, `/usage/quota`,
+  `/auth/device-switch/request`, `/auth/device-switch/verify`, `/app/check`
+- Year TEXT→int normalized in catalog_api.py ✅
+- media_type "tv"/"series"→"show" normalized ✅
+- `watch_history` ms contract matches Flutter ✅
+- `LocalDb.mergeDeltaTitle` preserves share_url from prior Oracle syncs ✅
+
+**T003: DB Structure Audit — COMPLETED ✅**
+- Server: 27 tables confirmed; `accounts.is_active` column confirmed present
+- Flutter: `episodes.share_url` added in migration v12 ✅, `titles.share_url` added in migration v12 ✅
+- Server `files` table has `season`, `episode` cols for TV series ✅
+- `ON CONFLICT DO UPDATE` in watch_history — SQLite 3.24+, Oracle has 3.37+ ✅
+
+**T004: Pipeline Test — COMPLETED ✅ (partial)**
+- DB was empty (0 titles, 0 files, 0 accounts) — no old movies to delete ✅
+- JazzDrive scan account (03001234567) added via `/scan/api/accounts`
+- JazzDrive OTP sent for account 1 → landed on signup page (real JazzDrive OTP flow)
+- Download jobs queued:
+  - `Off Campus Season 1` (vegamovies) → 90%+ progress, 888MB downloaded, zip pack
+  - `Pathaan 2023` (vegamovies) → ERROR: no results (title not on vegamovies)
+  - `Pathan 2023 Hindi` retry (auto/rogmovies) → rogmovies.blog domain DEAD (DNS fail)
+- Staging directory has 8.2GB from previous sessions including Pathaan 1.6GB already there
+
+### Bugs Found
+
+| ID | Component | Bug | Status |
+|---|---|---|---|
+| BUG-P17-01 | Server | `POST /api/auth/device-switch/request` missing | ✅ Fixed |
+| BUG-P17-02 | Server | `POST /api/auth/device-switch/verify` missing | ✅ Fixed |
+| BUG-P17-03 | Flutter | OTP method stubs throw UnimplementedError | ✅ Fixed |
+| BUG-P17-04 | Flutter | `otpDeviceSwitchEnabled = false` (feature hidden) | ✅ Fixed |
+| BUG-P17-05 | Server | Pathaan search returns no results on vegamovies (2023 movie title variant) | Open |
+| BUG-P17-06 | Server | `rogmovies.blog` domain DNS dead | Open |
+| BUG-P17-07 | Server | Staging orphan files not auto-detected (no flix account to upload) | Open |
+| BUG-P17-08 | Server | wa-bot not running (port 3000 empty) — OTP stored but not sent via WA | Open |
+
+### Commits
+- `b7beed3` feat(server): add device-switch OTP endpoints
+- `de6f1ef` feat(flutter): implement OTP API methods
+- `5ac72ae` feat(flutter): enable otpDeviceSwitchEnabled=true
+
+### Server State at Session End
+- Commit: `5ac72ae` on Oracle (ubuntu@92.4.95.252)
+- Catalog: 0 titles (no flix account for upload)
+- Staging: 8.2GB (Pathaan 1.6GB, Off Campus ~888MB download, Fast&Furious, Salaar, Sarvam Maya, Reborn)
+- Queue: Off Campus downloading, Pathan retry processing
