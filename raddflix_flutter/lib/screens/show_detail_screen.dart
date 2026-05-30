@@ -27,6 +27,7 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
   int _selectedSeason = 1;
   List<int> _seasons = [];
   Map<String, double> _watchProgress = {};
+  int? _resumeEpisodeIndex;  // episode index (in _episodes) to resume
 
   @override
   void initState() {
@@ -63,12 +64,25 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
         .toList()
       ..sort();
 
+    // Find the episode most recently watched but not finished, to show Resume button
+    int? resumeIdx;
+    double resumeHighProg = 0;
+    for (int i = 0; i < eps.length; i++) {
+      final fid = eps[i]['file_id']?.toString() ?? '';
+      final p = prog[fid] ?? 0.0;
+      if (p > 0.03 && p < 0.95 && p > resumeHighProg) {
+        resumeHighProg = p;
+        resumeIdx = i;
+      }
+    }
+
     if (mounted) {
       setState(() {
         _episodes = eps;
         _seasons = seasonNums.isEmpty ? [1] : seasonNums;
         _selectedSeason = _seasons.first;
         _watchProgress = prog;
+        _resumeEpisodeIndex = resumeIdx;
         _loading = false;
         if (_seasons.length > 1) {
           _seasonTab = TabController(length: _seasons.length, vsync: this);
@@ -390,6 +404,57 @@ class _ShowDetailScreenState extends ConsumerState<ShowDetailScreen>
 
                   // ── SHOW: Season Tabs + Episodes ───────────────────────────
                   if (!isMovie) ...[
+                    // Resume button — only shown when a partially-watched episode exists
+                    if (_resumeEpisodeIndex != null && !_loading) ...[
+                      Builder(builder: (ctx) {
+                        final idx  = _resumeEpisodeIndex!;
+                        final ep   = idx < _episodes.length ? _episodes[idx] : null;
+                        if (ep == null) return const SizedBox.shrink();
+                        final epNum  = ep['episode'] as int? ?? (idx + 1);
+                        final season = ep['season']  as int? ?? 1;
+                        final fid    = ep['file_id']?.toString() ?? '';
+                        final prog   = _watchProgress[fid] ?? 0.0;
+                        final pct    = (prog * 100).round();
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () {
+                                // Find the index of this episode in _currentEpisodes
+                                final currentIdx = _currentEpisodes.indexWhere(
+                                  (e) => e['file_id']?.toString() == fid);
+                                if (currentIdx >= 0) {
+                                  _playEpisode(currentIdx);
+                                } else {
+                                  // Episode might be in another season — switch and play
+                                  setState(() => _selectedSeason = season);
+                                  Future.microtask(() {
+                                    final newIdx = _currentEpisodes.indexWhere(
+                                      (e) => e['file_id']?.toString() == fid);
+                                    if (newIdx >= 0) _playEpisode(newIdx);
+                                  });
+                                }
+                              },
+                              icon: const Icon(Icons.play_circle_outline_rounded, size: 20),
+                              label: Text(
+                                'Resume S${season.toString().padLeft(2,'0')}E${epNum.toString().padLeft(2,'0')} · $pct%',
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                elevation: 0,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
+                        );
+                      }),
+                    ],
+
                     // Season header
                     Row(
                       children: [
