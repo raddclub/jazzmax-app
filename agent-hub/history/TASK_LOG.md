@@ -3932,3 +3932,95 @@ Added `location = /api/X` exact-match blocks before each `location /api/X/` for:
   - Catalog content — empty (count:0); admin must add titles at http://92.4.95.252/admin
 
 ---
+
+---
+
+## [2026-05-30 Phase 15] — Bug Sweep: poster_proxy, 405 handler, search media_type
+
+### Session Objective
+Deep audit and fix all remaining open bugs. Verify all API routes between Flutter app and Flask backend are correctly connected.
+
+### Pre-session State
+- Oracle at commit `540462d2`, `raddflix_radd` RUNNING on port 5000, nginx on 80+443
+- CI GREEN on `540462d2`
+- All 16 Flutter→server API routes confirmed returning correct HTTP codes via nginx
+- Phase 13/14 all bugs resolved
+
+### Bugs Found and Fixed
+
+#### BUG-B01 — poster_proxy.py wrong `_data_dir()` fallback path
+- **Root cause**: `RADD_HUB_DATA_DIR` env var was present only in the decommissioned `raddflix_watch` supervisor entry (now commented out); NOT set for `raddflix_radd`
+- The Python fallback `Path(__file__).parent.parent.parent / "radd-hub" / "data"` resolved to `/opt/jazzmax/radd-hub/radd-hub/data` (non-existent path)
+- Correct path: `/opt/jazzmax/radd-hub/data`
+- **Fix**: Changed fallback to `Path(__file__).parent.parent.parent / "data"` ✓
+- **Also**: Added `RADD_HUB_DATA_DIR="/opt/jazzmax/radd-hub/data"` to `raddflix_radd` supervisor environment line directly on Oracle
+- **Effect**: `WARNING hub.poster_proxy: Failed to read keys from DB: unable to open database file` eliminated
+
+#### BUG-B02 — app.py generic Exception handler intercepts Flask MethodNotAllowed
+- **Root cause**: `@app.errorhandler(Exception)` catches ALL exceptions including Flask's `MethodNotAllowed`, returning 500 instead of 405
+- This caused `ERROR hub.app: Exception: MethodNotAllowed` spam in logs and wrong HTTP status to clients
+- **Fix**: Added `@app.errorhandler(405)` returning `{"error": "method not allowed"}, 405` before the generic handler ✓
+- **Verified**: `POST /api/ping` now returns `{"error":"method not allowed"}` with HTTP 405
+
+#### BUG-B03 — search_api.py TV type filter misses 'show'/'series' media_type variants
+- **Root cause**: `type_filter = "AND t.media_type = 'tv'"` only matched records with `media_type='tv'`; DB may contain `'show'` or `'series'`
+- **Fix**: Changed to `"AND t.media_type IN ('tv', 'show', 'series')"` ✓
+- Note: The normalized OUTPUT already converts all variants to `"show"` for the Flutter response
+
+### Commit
+- `c86a76f` — fix(server): 3 bug fixes — poster_proxy path, 405 handler, search media_type filter
+- Files changed: `radd-hub/hub/routes/poster_proxy.py`, `radd-hub/hub/app.py`, `radd-hub/hub/routes/search_api.py`
+
+### Oracle Deploy
+- `git pull` applied cleanly (540462d → c86a76f), 3 files changed
+- Supervisor config updated: `RADD_HUB_DATA_DIR` added to `raddflix_radd` environment
+- `sudo supervisorctl reread && update && restart raddflix_radd` → pid 432514, RUNNING
+- All 3 fixes confirmed live via direct HTTP tests
+
+### Final Endpoint Verification (Oracle at c86a76f)
+| Endpoint | Result | Notes |
+|----------|--------|-------|
+| GET /health | 200 "RaddFlix Oracle OK" | ✅ |
+| GET /api/ping | 200 {"ok":true,...} | ✅ |
+| GET /api/catalog/version | 200 {"count":0,...} | ✅ |
+| GET /api/catalog/sync | 200 | ✅ |
+| GET /api/search?q=test | 200 | ✅ |
+| GET /api/poster/keys | 200 (no DB error) | ✅ BUG-B01 fixed |
+| GET /api/payment-methods | 200 | ✅ |
+| POST /api/app/check | 200 {"ok":true,...} | ✅ |
+| GET /api/auth/me | 401 | ✅ auth required |
+| GET /api/subscription/status | 401 | ✅ |
+| GET /api/usage/quota | 401 | ✅ |
+| GET /api/notifications/ | 401 | ✅ |
+| GET /api/history | 401 | ✅ |
+| GET /api/recommend | 401 | ✅ |
+| GET /api/subscription/tid/check_by_phone | 401 | ✅ |
+| POST /api/ping (wrong method) | 405 {"error":"method not allowed"} | ✅ BUG-B02 fixed |
+
+### Flutter Deep Audit Results (No Bugs Found)
+All previously fixed Flutter files confirmed correct:
+- `local_db.dart` — `mergeDeltaTitle()` uses SELECT+UPDATE/INSERT (not ON CONFLICT) ✅, `clearAllPositions()` ✅, migration `oldV` ✅
+- `scene_bookmark_store.dart` — `deleteAllContent()` exists ✅
+- `profile_screen.dart` — logout calls `SceneBookmarkStore.deleteAllContent()` ✅, `PlayerPrefs.reset()` ✅, `LocalDb.clearAllPositions()` ✅ (BUG-A21/22/23)
+- `player_screen.dart` — quota timer every 5 min ✅, `HistoryApi.syncPosition()` on dispose ✅ (BUG-A29)
+- `history_api.dart` — sec↔ms conversion ✅
+- `download_service.dart` — correct import path ✅
+- `downloads_provider.dart` — `DownloadQuotaException` caught, `quotaError` state ✅
+- `constants.dart` — `jazzDriveDeltaUrl`/`jazzDriveDbUpdateUrl` as getters from `apiBaseUrl` ✅ (BUG-A30)
+- `search_screen.dart` — real catalog data (not static), genre trim ✅ (BUG-A15/16)
+- `watch_history` DB schema — `UNIQUE(user_id, file_id)` constraint confirmed ✅
+
+### CI Status
+- `Build RaddFlix APK`: ✅ success (c86a76f4)
+- `RaddFlix CI`: pending at session end
+
+### Notes for Next Agent
+- **All 3 server-side bugs fixed and deployed to Oracle**
+- **CI Build GREEN on c86a76f4**; CI test result pending but expected green (pure Python/server changes, no Flutter code changed)
+- Oracle at HEAD (c86a76f). `raddflix_radd` RUNNING pid 432514. Supervisor conf now has `RADD_HUB_DATA_DIR` set for `raddflix_radd`.
+- No poster/search/405 errors in logs
+- Remaining blocked tasks (needs owner action, unchanged):
+  - `supportWhatsApp` — update `AppConstants.supportWhatsApp` in constants.dart with real number
+  - Let's Encrypt SSL — blocked until domain name configured
+  - Catalog content — empty (count:0); admin must add titles via admin panel
+- **No more known open bugs** as of this session

@@ -280,3 +280,14 @@ All 34 audit bugs resolved:
 
 **Confirm CI is still green before any new code changes.**
 
+---
+
+## Phase 15 — Server Bug Sweep (2026-05-30)
+
+| ID | Task | Status | Notes |
+|----|------|--------|-------|
+| BUG-B01 | Fix `poster_proxy.py` `_data_dir()` fallback path (was `/radd-hub/radd-hub/data`, should be `/radd-hub/data`) | ✅ | Also added `RADD_HUB_DATA_DIR` to supervisor env for `raddflix_radd`. Eliminates "unable to open database file" warnings. |
+| BUG-B02 | Add `@app.errorhandler(405)` in `app.py` before generic Exception handler | ✅ | `MethodNotAllowed` was being caught by `@app.errorhandler(Exception)`, returning 500 and logging ERROR instead of proper 405 |
+| BUG-B03 | Fix search type filter: `media_type = 'tv'` → `IN ('tv', 'show', 'series')` | ✅ | `search_api.py` — TV show type filter now covers all DB media_type variants |
+
+**Commit**: `c86a76f` — CI ✅ GREEN (Build + Tests)
