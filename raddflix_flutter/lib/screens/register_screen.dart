@@ -98,7 +98,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         prefixIcon: Icons.phone_outlined,
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return 'Enter your phone number';
-                          if (v.trim().length < 11) return 'Enter 11-digit Jazz number (03XX-XXXXXXX)';
+                          final digits = v.trim().replaceAll(RegExp(r'[\s\-\(\)]'), '');
+                          if (digits.length != 11) return 'Enter 11-digit number (e.g. 03001234567)';
+                          if (!RegExp(r'^03\d{9}\$').hasMatch(digits)) return 'Must be a Pakistani mobile number (03XX-XXXXXXX)';
                           return null;
                         })
                         .animate(delay: 120.ms).fadeIn(duration: 350.ms)

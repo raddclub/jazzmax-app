@@ -132,6 +132,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   bool _showNextEpisode = false;
   int _nextCountdown = 7;
   Timer? _nextEpTimer;
+  Timer? _quotaTimer; // BUG-A29: periodic quota check every 5 min
   late int _currentEpIdx;
   bool get _hasNextEp =>
       widget.episodes != null && _currentEpIdx < widget.episodes!.length - 1;
@@ -273,6 +274,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
     _loadSmartIntro();
     _loadBookmarks();
     _checkQuota();
+    _quotaTimer = Timer.periodic(const Duration(minutes: 5), (_) => _checkQuota());
       HardwareKeyboard.instance.addHandler(_onHardwareKey);
     }
 
@@ -1508,6 +1510,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _hideTimer?.cancel();
+    _quotaTimer?.cancel();
     _skipIntroTimer?.cancel();
     _nextEpTimer?.cancel();
     _sleepTimer?.cancel();
