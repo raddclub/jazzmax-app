@@ -4,12 +4,35 @@ import 'package:path_provider/path_provider.dart';
 import '../db/local_db.dart';
 import '../services/jazzdrive_service.dart';
 import '../debug/debug_logger.dart';
+import '../constants.dart';   // BUG-A28: ApiPaths.quota
+import 'api_client.dart';     // BUG-A28: authenticated quota check
 
 /// Manages video file downloads using Dio.
 /// Files saved to app private storage — not accessible outside the app.
 /// Tracks progress in local_db.dart downloads table.
 class DownloadService {
   static final Dio _dio = Dio();
+
+  /// BUG-A28: Check server-side quota before starting any download.
+  /// Throws [DownloadQuotaException] when the user has hit their daily
+  /// or monthly data limit so the UI can surface a meaningful message.
+  static Future<void> _checkDownloadQuota() async {
+    try {
+      final res = await ApiClient.instance.get(ApiPaths.quota);
+      final quota = (res.data as Map<String, dynamic>?)?['quota']
+                    as Map<String, dynamic>?;
+      if (quota != null && quota['allowed'] == false) {
+        final reason = quota['reason'] as String? ?? 'quota_exceeded';
+        throw DownloadQuotaException(reason);
+      }
+    } on DownloadQuotaException {
+      rethrow;
+    } catch (e) {
+      // Network / parse error — allow download (fail open to avoid blocking
+      // downloads when the server is temporarily unreachable).
+      DebugLogger.logWarn('DOWNLOAD', 'Quota check failed (allowing): \$e');
+    }
+  }
 
   /// Download a video file and save to private app storage.
   /// Resolves the stream URL on-device via JazzDrive (zero-rated) if possible,
@@ -23,6 +46,9 @@ class DownloadService {
     String? shareUrl,
     required void Function(double progress) onProgress,
   }) async {
+    // BUG-A28: enforce server-side data quota before starting the download
+    await _checkDownloadQuota();
+
     // Try to get a fresh zero-rated JazzDrive URL if share_url is known
     String resolvedUrl = streamUrl;
     if (shareUrl != null && shareUrl.isNotEmpty) {
@@ -124,4 +150,23 @@ class DownloadService {
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
+}
+
+/// BUG-A28: thrown when /api/usage/quota returns allowed=false.
+/// [reason] is one of: 'no_subscription', 'daily_limit_reached', 'monthly_limit_reached'.
+class DownloadQuotaException implements Exception {
+  final String reason;
+  const DownloadQuotaException(this.reason);
+
+  String get userMessage {
+    switch (reason) {
+      case 'daily_limit_reached':   return 'Daily data limit reached. Resets at midnight.';
+      case 'monthly_limit_reached': return 'Monthly data limit reached. Upgrade your plan.';
+      case 'no_subscription':       return 'Active subscription required to download.';
+      default:                      return 'Download quota exceeded. Try again later.';
+    }
+  }
+
+  @override
+  String toString() => 'DownloadQuotaException($reason)';
 }
