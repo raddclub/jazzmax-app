@@ -458,7 +458,8 @@ def _do_download(job: dict, config: dict, url: str, log_fn):
     _set_progress(job, "downloading")
     
     import json as _json
-    watch_dir = Path(_db.setting("upload_watch_root") or "/home/runner/workspace/radd-hub/data/media")
+    from . import config as _hub_config  # config param shadows module; use alias
+    watch_dir = Path(_db.setting("upload_watch_root") or str(_hub_config.MEDIA_DIR))
     dest_dir = Path(config.get("download_dir") or downloader.DOWNLOAD_DIR).expanduser().resolve()
     
     # --- Parse Payload ---
