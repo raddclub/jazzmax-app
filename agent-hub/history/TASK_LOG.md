@@ -4319,3 +4319,48 @@ The previous agent used both paths. Episodes uploaded via path #2 ended up on Ja
 
 =======
 >>>>>>> 55d183a58bd7d32577f01003c55030e5e57cc7cb
+
+
+  ---
+
+  ## [2026-05-31] — ADDENDUM: BUG-10 found during double-check
+
+  ### Additional Bug Found During Verification
+
+  | ID | File | Description | Fix |
+  |---|---|---|---|
+  | BUG-10 | `jazzdrive.py` | `generate_direct_link()` used single-pass substring match for finding a file within a JazzDrive shared folder. When JazzDrive stored dirty scene-release filenames (dots, e.g. `Off.Campus.S01E04.The.Breakup.720p.mkv`) but DB had clean names (spaces, e.g. `Off Campus S01E04.mkv`), the match failed silently and fell back to `records[0]` — meaning E04, E07, E08 would all stream E01. | Replaced single-pass with **3-pass matching**: (1) exact substring, (2) normalised match (dots→spaces), (3) episode-code match (S01E04). |
+
+  ### Final API Verification (all endpoints)
+
+  | Endpoint | Result |
+  |---|---|
+  | GET /api/ping | ✅ ok=True |
+  | GET /api/catalog/version | ✅ count=6 |
+  | GET /api/catalog/sync | ✅ 6 titles |
+  | GET /api/catalog/delta | ✅ 6 titles |
+  | GET /api/search?q=pathaan | ✅ 1 result |
+  | GET /api/search?q=off+campus | ✅ 1 result |
+  | GET /api/auth/me | ✅ 401 (auth-required) |
+  | GET /api/usage/quota | ✅ 401 (auth-required) |
+  | GET /api/catalog/share_url?file_id=5 | ✅ share_url returned (E01) |
+  | GET /api/catalog/share_url?file_id=8 | ✅ share_url returned (E04) |
+  | GET /api/catalog/posters | ✅ 200 |
+  | GET /api/catalog/db_update | ✅ 10 episodes |
+  | POST /api/app/check | ✅ ok=True |
+  | POST /api/auth/guest | ✅ JWT issued |
+  | GET /api/payment-methods/ | ✅ jazzcash listed |
+  | GET /api/subscription/plans | ✅ 3 plans returned |
+  | POST /api/queue/batch (Pathaan dup) | ✅ auth-required redirect (admin route) |
+  | POST /api/queue/direct (admin) | ✅ auth-required redirect (admin route) |
+
+  ### All Syntax Checks Pass
+  uploader.py ✅ · db.py ✅ · stream.py ✅ · scan.py ✅ · upload.py ✅ · api.py ✅ · catalog_api.py ✅ · mobile_api.py ✅ · jazzdrive.py ✅
+
+  ### Commits in This Session
+  - `56b998e` — 5 code bugs + DB cleanup (uploader.py, db.py, stream.py, TASK_LOG.md)
+  - `644af9a` — BUG-10 fix (jazzdrive.py 3-pass filename matching)
+
+  ### Service Status at Close
+  raddflix_radd RUNNING pid 451236 ✅
+  
