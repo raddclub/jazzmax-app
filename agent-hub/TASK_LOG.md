@@ -151,3 +151,39 @@ MainActivity.openVideoWith → Intent.createChooser(ACTION_VIEW, video/*)
     ↓
 System chooser: MX Player / VLC / Google Photos / etc.
 ```
+
+---
+
+## 2026-05-31 — Phase 20: UI Polish (Home / Downloads / Profile)
+
+### Changes
+**home_screen.dart** (625 lines, commit 6aeb53e5e7)
+- Hero height 220→264px; 4-stop cinematic gradient (transparent→transparent→80%→96% black)
+- Top-left badges: MOVIE/SERIES type pill + star rating chip
+- CTA row: `Watch Now` (gradient button) + `My List` (frosted-glass button)
+- Page indicator dots: active width 22px (was 18px)
+- Category chips: `AppColors.primaryGradient` fill + `primary 0.4 opacity` glow shadow
+- Section headers: 3px red gradient accent bar + primary-tinted count badge + pill See-all
+
+**downloads_screen.dart** (712 lines, commit 8645b3af33)
+- AppBar: `AppColors.background` (dark) replaces `AppColors.surface`
+- Storage bar: full card — circle icon container, total size, completed count, active badge
+- Folder cards: `_folderColor()` maps Movies→#E8002D, TV Shows→#3B82F6, Dramas→#8B5CF6, Other→#64748B; each folder has coloured circle icon + count badge + glow shadow
+- Filter chips: gradient active + glow shadow matching home screen style
+- Empty state: circle icon container + gradient `Browse Content` button
+
+**profile_screen.dart** (588 lines, commit f25cb979ab)
+- Title: `My Profile` with primary-red 'Profile' word via RichText
+- Avatar: 96px inner ring inside 106px outer border circle, glow shadow blurRadius=28 spread=2
+- Plan badge: emoji prefix (👑 Premium, ⭐ Standard, 🎬 Free) + glow box-shadow
+- Subscription card: 3-stop gradient + glow shadow
+- Section label: 12px red accent dash + font-size 10 w800
+- Section tile icons: 38px circle with tinted border
+- Device section: Network tile — green 'Online' / red 'Offline' badge driven by `_hasInternet`
+- Version footer: pill container with `RaddFlix` branding + version number
+
+### Verification
+All 3 files verified on GitHub (grep checks passed):
+- `home_screen.dart`: height 264, My List, primaryGradient, MOVIE, accent bar, pill ✅
+- `downloads_screen.dart`: _folderColor, Online, AppColors.background, Browse Content ✅
+- `profile_screen.dart`: width 106, My Profile, Network, RaddFlix, emoji, glow ring ✅
