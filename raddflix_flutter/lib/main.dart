@@ -9,6 +9,13 @@ import 'core/services/jazzdrive_service.dart';
 import 'core/services/poster_service.dart';
 import 'core/db/local_db.dart';
 
+/// Global navigator key — used by intent handler to push PlayerScreen
+/// even when there's no BuildContext available (e.g. background notification tap).
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+/// Pending video URI from "Open with" intent — read by SplashScreen on start.
+String? pendingVideoUri;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -32,9 +39,33 @@ void main() async {
   await JazzDriveService.loadCacheFromDb();
   await LocalDb.cleanExpiredStreamCache();
 
+  // Check for initial video URI from "Open with" intent (cold start)
+  try {
+    const _ch = MethodChannel('com.raddflix.app/intent');
+    pendingVideoUri = await _ch.invokeMethod<String>('getPendingVideoUri');
+  } catch (_) {}
+
   runApp(
     const ProviderScope(
       child: RaddFlixApp(),
     ),
   );
+
+  // Listen for new "Open with" intents while app is running (warm start)
+  const MethodChannel('com.raddflix.app/intent')
+      .setMethodCallHandler((call) async {
+    if (call.method == 'onVideoUri') {
+      final uri = call.arguments as String?;
+      if (uri != null && uri.isNotEmpty) {
+        navigatorKey.currentState?.pushNamed(
+          '/player',
+          arguments: {
+            'file_id': '',
+            'title': uri.split('/').last.replaceAll(RegExp(r'%20'), ' '),
+            'local_path': uri.startsWith('file://') ? uri.replaceFirst('file://', '') : uri,
+          },
+        );
+      }
+    }
+  });
 }
