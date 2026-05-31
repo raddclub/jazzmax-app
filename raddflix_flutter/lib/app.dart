@@ -28,6 +28,14 @@ import 'screens/plan_expired_screen.dart';
 import 'core/services/app_update_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+/// Global navigator key — lets background intent handler push PlayerScreen
+/// without needing a BuildContext.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Pending video URI from a cold-start "Open with" ACTION_VIEW intent.
+/// Read once by SplashScreen._start() then cleared.
+String? pendingVideoUri;
+
 class RaddFlixApp extends ConsumerWidget {
   const RaddFlixApp({super.key});
 
@@ -36,6 +44,7 @@ class RaddFlixApp extends ConsumerWidget {
     final themeState = ref.watch(themeProvider);
     Animate.restartOnHotReload = true;
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: JazzThemeData.build(themeState.mode),
