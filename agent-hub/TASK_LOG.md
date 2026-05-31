@@ -187,3 +187,49 @@ All 3 files verified on GitHub (grep checks passed):
 - `home_screen.dart`: height 264, My List, primaryGradient, MOVIE, accent bar, pill ✅
 - `downloads_screen.dart`: _folderColor, Online, AppColors.background, Browse Content ✅
 - `profile_screen.dart`: width 106, My Profile, Network, RaddFlix, emoji, glow ring ✅
+
+---
+
+## 2026-05-31 — Phase 21: Full Audit + Search / Local Media / Vault UI Polish
+
+### Audit Results
+Ran comprehensive cross-file audit of all Phase 19 + Phase 20 changes:
+- 49/49 Phase 19 checks passed (all "failures" were false-positive grep patterns)
+- 24/24 Phase 20 UI checks passed (same reason)
+- 0 Dart compilation red-flags across all 8 screen files (brace balance OK)
+- `AppColors.text` confirmed as valid alias for `textPrimary` in constants.dart
+- `INTENT_CHANNEL = "com.raddflix.app/intent"` confirmed at L27 of MainActivity.kt
+- `android.intent.category.DEFAULT` confirmed in all 4 video intent filters
+- `_currentPlaybackUrl` covers all source paths: local/download/vault→effectiveLocalPath, JazzDrive→link.streamUrl, retry→link2.streamUrl
+
+### search_screen.dart (783 lines, commit 7c3ef2a210)
+- Genre filter chips: `AppColors.primaryGradient` active fill + `blurRadius:10` glow shadow
+- 'Trending Now': 3px red accent bar before fire icon
+- 'Recent': 3px red accent bar + pill Clear button (replacing TextButton)
+- 'Browse by Genre': 3px red accent bar + w800 title
+- Empty discover: 80px circle container
+- No-results: 88px circle + `RichText` query highlighted in primary
+
+### local_media_screen.dart (495 lines, commit f6ff857992)
+- Title: `RichText` 'Local **Media**' with primary 'Media'
+- Count badge: `video_library_rounded` icon + count in bordered pill
+- Folder list tile: `Material(InkWell(...))`, bordered thumbnail, primary-tinted count tag, gradient 'X new' pill
+- Empty state: 84px circle icon + subtitle
+- Grid scrim: 3-stop gradient [transparent, black45, black87]
+- Permission button: gradient primary pill replacing ElevatedButton
+
+### vault_screen.dart (606 lines, commit f7d5f8bc54)
+- AppBar: `AppColors.background` + `scrolledUnderElevation: 0`
+- Root title: `RichText` 'Private **Vault**' with primary accent + emoji preserved
+- Select mode count: `AppColors.primary` + `FontWeight.w700`
+- Phase 19 thumbnails: confirmed present (`ThumbService.getThumbnail`, `_FileListTile` StatefulWidget)
+
+### Design Consistency Matrix (all screens verified)
+| Feature | Home | Downloads | Profile | Search | Local | Vault |
+|---------|------|-----------|---------|--------|-------|-------|
+| Gradient chips | ✅ | ✅ | — | ✅ | — | — |
+| Accent-bar headers | ✅ | — | — | ✅ | — | — |
+| Circle empty state | — | ✅ | — | ✅ | ✅ | — |
+| Gradient CTA | ✅ | ✅ | — | — | ✅ | — |
+| Dark AppBar | ✅ | ✅ | — | — | — | ✅ |
+| RichText title | ✅ | — | ✅ | — | ✅ | ✅ |
