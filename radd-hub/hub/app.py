@@ -103,7 +103,7 @@ def create_app() -> Flask:
     app.register_blueprint(mobile_api.bp_notif,        url_prefix="/api/notifications")
     app.register_blueprint(mobile_api.bp_hist,         url_prefix="/api/history")
     app.register_blueprint(mobile_api.bp_app,          url_prefix="/api/app")
-    app.register_blueprint(mobile_api.bp_rec,          url_prefix="/api/recommend")  # BUG-A26
+    app.register_blueprint(mobile_api.bp_rec,          url_prefix="/api")  # BUG-A26: prefix changed from /api/recommend to /api to fix no-slash 401 redirect
     # ── Catalog / Search / Poster (migrated from _watch_prototype) ────────
     app.register_blueprint(catalog_api.bp)   # url_prefix in blueprint: /api/catalog
     app.register_blueprint(search_api.bp)    # url_prefix in blueprint: /api/search

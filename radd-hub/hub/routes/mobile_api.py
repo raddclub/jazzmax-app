@@ -835,7 +835,7 @@ def save_history(file_id, _user_id, _phone):
 # BUG-A26: radd_recommend.py had no API endpoint — Flutter could never call it.
 bp_rec = Blueprint("mobile_rec", __name__)
 
-@bp_rec.route("", methods=["GET"], strict_slashes=False)
+@bp_rec.route("/recommend", methods=["GET"], strict_slashes=False)
 @_require_auth
 def get_recommendations(_user_id, _phone):
     """GET /api/recommend

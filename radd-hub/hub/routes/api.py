@@ -1213,29 +1213,7 @@ def batch_queue():
                     "jobs": queued, "errors": skipped})
 
 
-# ---------------------------------------------------------------------------
-# Recommendations  (radd_recommend — ported from v2 radd_recommend.py)
-# ---------------------------------------------------------------------------
-
-@bp.route("/recommend")
-@auth.login_required
-def recommend():
-    """Return library-seeded TMDB recommendations.
-
-    Query params:
-      limit  — max results (default 24, max 100)
-    """
-    try:
-        limit = min(int(request.args.get("limit", 24)), 100)
-    except (TypeError, ValueError):
-        limit = 24
-    try:
-        from ..radd_recommend import get_recommendations
-        recs = get_recommendations(limit=limit)
-        return jsonify({"ok": True, "results": recs, "count": len(recs)})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e), "results": []}), 500
-
+# /api/recommend is now handled by mobile_api.bp_rec with JWT auth
 
 # ---------------------------------------------------------------------------
 # Quality upgrade subscriptions  (radd_quality_upgrade — ported from v2)
