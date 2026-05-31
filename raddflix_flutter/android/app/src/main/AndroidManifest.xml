@@ -54,6 +54,28 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- RaddFlix video player — register for system "Open with" chooser -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:mimeType="video/*"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="video/mp4"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="video/x-matroska"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="video/webm"/>
+            </intent-filter>
         </activity>
 
         <!-- media_kit background playback service -->
@@ -92,8 +114,13 @@
         android:value="com.raddflix.app.CastOptionsProvider" />
 </application>
 
-    <!-- url_launcher: allow opening http/https URLs on Android 11+ -->
+    <!-- url_launcher + android_intent_plus: external apps we may launch -->
     <queries>
+        <!-- Query for video player apps (MX Player, VLC, etc.) for "Open with" -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:mimeType="video/*"/>
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
