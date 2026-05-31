@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -6,6 +7,7 @@ import '../core/constants.dart';
 import '../services/vault_service.dart';
 import 'vault_settings_screen.dart';
 import 'package:file_picker/file_picker.dart';
+import '../services/thumb_service.dart';
 
 class VaultScreen extends StatefulWidget {
   final String? folderPath;
@@ -491,7 +493,7 @@ class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
   }
 }
 
-class _FileListTile extends StatelessWidget {
+class _FileListTile extends StatefulWidget {
   final VaultFile file;
   final bool selected;
   final bool selectMode;
@@ -501,49 +503,74 @@ class _FileListTile extends StatelessWidget {
   const _FileListTile({required this.file, required this.selected,
     required this.selectMode, required this.onTap,
     required this.onLongPress, required this.onMenuTap});
+  @override
+  State<_FileListTile> createState() => _FileListTileState();
+}
+
+class _FileListTileState extends State<_FileListTile> {
+  Uint8List? _thumb;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.file.isVideo && !widget.file.isFolder) {
+      _loadThumb();
+    }
+  }
+
+  Future<void> _loadThumb() async {
+    final t = await ThumbService.getThumbnail(widget.file.path, timeMs: 3000, maxWidth: 120);
+    if (mounted) setState(() => _thumb = t);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final iconWidget = (widget.file.isVideo && _thumb != null)
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(_thumb!, width: 44, height: 44, fit: BoxFit.cover),
+          )
+        : Container(
+            width: 44, height: 44,
+            decoration: BoxDecoration(
+              color: widget.file.isFolder
+                  ? AppColors.primary.withOpacity(0.15)
+                  : AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(widget.file.icon,
+                color: widget.file.isFolder ? AppColors.primary : AppColors.textSecondary,
+                size: 24),
+          );
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
         child: AnimatedContainer(
           duration: AppDurations.fast,
-          color: selected ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
+          color: widget.selected ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(children: [
             AnimatedSwitcher(
               duration: AppDurations.fast,
-              child: selected
+              child: widget.selected
                   ? const Icon(Icons.check_circle_rounded, color: Color(0xFF7C5CFF), size: 40, key: ValueKey('check'))
-                  : Container(
-                      key: const ValueKey('icon'),
-                      width: 44, height: 44,
-                      decoration: BoxDecoration(
-                        color: file.isFolder
-                            ? AppColors.primary.withOpacity(0.15)
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(file.icon,
-                          color: file.isFolder ? AppColors.primary : AppColors.textSecondary,
-                          size: 24),
-                    ),
+                  : SizedBox(key: const ValueKey('icon'), width: 44, height: 44, child: iconWidget),
             ),
             const SizedBox(width: 14),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              Text(widget.file.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: AppColors.text, fontSize: 14, fontWeight: FontWeight.w500)),
               const SizedBox(height: 3),
-              Text(file.displaySize,
+              Text(widget.file.displaySize,
                   style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
             ])),
-            if (!selectMode)
+            if (!widget.selectMode)
               IconButton(
                 icon: Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
-                onPressed: onMenuTap,
+                onPressed: widget.onMenuTap,
               ),
           ]),
         ),
