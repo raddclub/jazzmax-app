@@ -186,6 +186,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
   int _jazzRetryCount = 0;
   Timer? _jazzRetryTimer;
   String? _streamError;
+  String? _currentPlaybackUrl; // track current URL for "Open with" feature
 
   // Time display toggle (tap = elapsed/remaining)
   bool _showRemaining = false;
@@ -1032,6 +1033,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
         ? localPath
         : (_isLocalPath(fileId) ? fileId : null);
     if (effectiveLocalPath != null) {
+      _currentPlaybackUrl = effectiveLocalPath;
       await _player.open(Media(effectiveLocalPath));
       setState(() { _ended = false; _position = Duration.zero; });
       return;
@@ -1069,6 +1071,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
       final cacheKey = fileId.isNotEmpty ? fileId : 'share_\${shareUrl.hashCode}';
       try {
         final link = await JazzDriveService.getStreamLink(cacheKey, shareUrl);
+        _currentPlaybackUrl = link.streamUrl;
         await _player.open(Media(link.streamUrl));
         if (mounted) setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
         return;
@@ -1081,6 +1084,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             if (freshUrl != null && freshUrl.isNotEmpty) {
               await JazzDriveService.invalidate(fileId);
               final link2 = await JazzDriveService.getStreamLink(fileId, freshUrl);
+              _currentPlaybackUrl = link2.streamUrl;
               await _player.open(Media(link2.streamUrl));
               if (mounted) setState(() { _ended = false; _position = Duration.zero; _isLinkLoading = false; });
               return;
@@ -1100,6 +1104,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
             ? 'No stream link found. Please sync your library in Settings → Sync.'
             : 'Stream link expired. Tap Retry to refresh.';
       });
+    }
+  }
+
+
+  /// Launch the current video in an external player (MX Player, VLC, etc.)
+  Future<void> _openWithExternalPlayer() async {
+    final url = _currentPlaybackUrl;
+    if (url == null || url.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No video loaded yet'), duration: Duration(seconds: 2)),
+        );
+      }
+      return;
+    }
+    try {
+      const ch = MethodChannel('com.raddflix.app/intent');
+      await ch.invokeMethod('openVideoWith', {'uri': url});
+    } catch (e) {
+      // Fallback: use share_plus to share the URL/file with other apps
+      try {
+        await Share.shareUri(Uri.parse(url.startsWith('/') ? 'file://$url' : url));
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open external player'), duration: Duration(seconds: 2)),
+          );
+        }
+      }
     }
   }
 
@@ -2368,6 +2401,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen>
                     onPiP: () { setState(() => _showMorePanel = false); _enterPiP(); },
                     onRotation: () { setState(() => _showMorePanel = false); _cycleRotation(); },
                     onSettings: () { setState(() { _showMorePanel = false; _showQuickSettings = true; }); },
+                    onOpenWith: () { setState(() => _showMorePanel = false); _openWithExternalPlayer(); },
                   ),
               ),
   
@@ -3413,6 +3447,7 @@ class _NextEpisodeOverlay extends StatelessWidget {
       final VoidCallback onPiP;
       final VoidCallback onRotation;
       final VoidCallback onSettings;
+      final VoidCallback onOpenWith;
 
       const _MxMoreSheet({
         required this.cinematicMode,
@@ -3434,6 +3469,7 @@ class _NextEpisodeOverlay extends StatelessWidget {
         required this.onPiP,
         required this.onRotation,
         required this.onSettings,
+        required this.onOpenWith,
       });
 
       @override
@@ -3472,6 +3508,7 @@ class _NextEpisodeOverlay extends StatelessWidget {
                 _MoreBtn(icon: Icons.picture_in_picture_alt_rounded, label: 'PiP', active: false, onTap: onPiP),
                 _MoreBtn(icon: Icons.screen_rotation_outlined, label: 'Rotate', active: false, onTap: onRotation),
                 _MoreBtn(icon: Icons.tune_rounded, label: 'Settings', active: false, onTap: onSettings),
+                _MoreBtn(icon: Icons.open_in_new_rounded, label: 'Open With', active: false, activeColor: Colors.tealAccent, onTap: onOpenWith),
               ],
             ),
           ]),
