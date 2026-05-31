@@ -124,23 +124,32 @@ import 'dart:typed_data';
 
     Widget _buildTopBar() {
       return Container(
-        height: 56,
+        height: 60,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(children: [
-          const Text('Folders',
-              style: TextStyle(color: AppColors.textPrimary, fontSize: 22,
-                  fontWeight: FontWeight.w800)),
+          RichText(text: const TextSpan(
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+            children: [
+              TextSpan(text: 'Local ', style: TextStyle(color: AppColors.textPrimary)),
+              TextSpan(text: 'Media', style: TextStyle(color: AppColors.primary)),
+            ],
+          )),
           const Spacer(),
           // Total count badge
           if (!_loading && _folders.isNotEmpty)
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(AppRadius.round),
+                border: Border.all(color: AppColors.glassBorder),
               ),
-              child: Text('$_totalVideos videos',
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.video_library_rounded, size: 11, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Text('$_totalVideos',
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+              ]),
             ),
           const SizedBox(width: 8),
           // Search
@@ -292,18 +301,21 @@ import 'dart:typed_data';
               style: TextStyle(color: AppColors.textMuted, fontSize: 14, height: 1.6),
               textAlign: TextAlign.center),
           const SizedBox(height: 28),
-          ElevatedButton.icon(
-            icon: const Icon(Icons.settings_rounded, size: 18),
-            label: const Text('Open Settings'),
-            onPressed: () {
-              const MethodChannel('com.raddflix.app/media_store')
-                  .invokeMethod('openAppSettings');
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
+          GestureDetector(
+            onTap: () => const MethodChannel('com.raddflix.app/media_store').invokeMethod('openAppSettings'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 13),
+              decoration: BoxDecoration(
+                gradient: AppColors.primaryGradient,
+                borderRadius: BorderRadius.circular(AppRadius.round),
+                boxShadow: AppShadows.primary,
+              ),
+              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(Icons.settings_rounded, size: 18, color: Colors.white),
+                SizedBox(width: 8),
+                Text('Open Settings', style: TextStyle(color: Colors.white,
+                    fontWeight: FontWeight.w700, fontSize: 14)),
+              ]),
             ),
           ),
           const SizedBox(height: 12),
@@ -317,10 +329,18 @@ import 'dart:typed_data';
 
     Widget _buildEmpty() {
       return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.video_library_outlined, color: AppColors.textMuted, size: 56),
-        const SizedBox(height: 16),
+        Container(
+          width: 84, height: 84,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.surface,
+              border: Border.all(color: AppColors.glassBorder, width: 1.5)),
+          child: const Icon(Icons.video_library_outlined, color: AppColors.textMuted, size: 40),
+        ),
+        const SizedBox(height: 18),
         Text(_searchQuery.isNotEmpty ? 'No folders match "$_searchQuery"' : 'No videos found',
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 15)),
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        const Text('Videos on your device will appear here.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
       ]));
     }
 
@@ -349,23 +369,29 @@ import 'dart:typed_data';
 
     @override
     Widget build(BuildContext context) {
-      return InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-          child: SizedBox(
-            height: 72,
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             child: Row(children: [
               // Thumbnail / folder icon
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                child: SizedBox(
-                  width: 64, height: 56,
+              Container(
+                width: 68, height: 58,
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: AppColors.glassBorder, width: 0.5),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(AppRadius.sm - 0.5),
                   child: thumb != null
                       ? Image.memory(thumb!, fit: BoxFit.cover)
-                      : Container(color: AppColors.surface,
-                          child: const Icon(Icons.folder_rounded,
-                              color: AppColors.textMuted, size: 28)),
+                      : const Center(child: Icon(Icons.folder_rounded,
+                          color: AppColors.textMuted, size: 28)),
                 ),
               ),
               const SizedBox(width: 14),
@@ -376,23 +402,38 @@ import 'dart:typed_data';
                 children: [
                   Text(folder.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(color: AppColors.textPrimary,
-                          fontSize: 15, fontWeight: FontWeight.w600)),
+                          fontSize: 14, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 4),
-                  Text('${folder.videos.length} video${folder.videos.length == 1 ? '' : 's'}  •  ${folder.formattedTotalSize}',
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  Row(children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('${folder.videos.length} vid${folder.videos.length == 1 ? '' : 's'}',
+                          style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(folder.formattedTotalSize,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  ]),
                 ],
               )),
               // New badge
               if (folder.newCount > 0)
                 Container(
-                  width: 22, height: 22,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary),
-                  child: Center(child: Text(
-                    folder.newCount > 99 ? '99+' : '${folder.newCount}',
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  margin: const EdgeInsets.only(right: 4),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(AppRadius.round),
+                  ),
+                  child: Text(
+                    folder.newCount > 99 ? '99+' : '${folder.newCount} new',
                     style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800),
-                  )),
+                  ),
                 ),
-              const SizedBox(width: 4),
               const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 20),
             ]),
           ),
@@ -423,7 +464,8 @@ import 'dart:typed_data';
             DecoratedBox(decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Colors.black.withOpacity(0.8)],
+                stops: const [0.0, 0.45, 1.0],
+                colors: [Colors.transparent, Colors.black45, Colors.black87],
               ))),
             // Labels
             Positioned(bottom: 8, left: 10, right: 10, child: Column(
