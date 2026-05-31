@@ -325,3 +325,17 @@ All 34 audit bugs resolved:
 - [ ] T010: Fix Pathaan vegamovies search — title variant "Pathaan"/"Pathan"/"Pathan 2023"
 - [ ] T011: Add subscription plans to DB — admin panel → plans section
 - [ ] T012: Publish Off Campus Season 1 after upload to JazzDrive
+
+
+### T010: Vegamovies Scorer Fix ✅ COMPLETED 2026-05-30
+- Fixed wrong-match bug: "Salaar Part 1 2023" was matching "The Flash 2023"
+- Root cause: leniency branch skipped title veto for 1-word queries when year matched
+- Fix: always veto when no title word appears in slug — no leniency
+- Unit tested: Flash score=-999999, Salaar score=+87 ✅
+- Commit: cd8707bee27bf06225f876f0beaf959e8b709cec
+
+### T011: Catalog Notes ✅ DOCUMENTED 2026-05-30
+- Titles table has 0 rows — requires TMDB or OMDB API key in keys table
+- Keys table: provider, label, value_enc, is_active (0 rows currently)
+- Titles auto-enrich and populate after upload once keys are set
+- Add via admin UI (/settings/api/keys) or direct DB insert

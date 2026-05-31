@@ -4238,81 +4238,107 @@ Start via: POST /bots/api/whatsapp/start (admin auth required)
 Columns: id, provider, label, value_enc, is_active, exhausted_until, failure_count,
          total_uses, last_used_at, last_status, created_at, updated_at
 Currently 0 rows. Add via admin UI or direct DB insert.
+=======
 
----
 
-## [2026-05-31] — Agent: Replit Agent (Bug Audit + Fix Session)
+  ---
 
-### Task
-Deep audit of Stream Downloader, Flix Uploader, Scan Indexer pipeline. Find and fix all bugs found after the previous agent's work. Verify every API endpoint, DB structure, duplicate-prevention logic, and filename cleaning. Write full report.
+  ## [2026-05-31] — ADDENDUM: BUG-10 found during double-check
 
-### Pre-Session State
-- Oracle at commit  / ,  RUNNING pid 446622
-- DB: 7 titles, 20 files (18 usable), 5 queue jobs (all done), 1 account (flix)
-- JazzDrive screenshot showed mixed clean/dirty episode filenames on JazzDrive
-- Previous agent uploaded Off Campus S01 (8 eps) + Pathaan + Salaar + others
+  ### Additional Bug Found During Verification
 
-### Bugs Found and Fixed
+  | ID | File | Description | Fix |
+  |---|---|---|---|
+  | BUG-10 | `jazzdrive.py` | `generate_direct_link()` used single-pass substring match for finding a file within a JazzDrive shared folder. When JazzDrive stored dirty scene-release filenames (dots, e.g. `Off.Campus.S01E04.The.Breakup.720p.mkv`) but DB had clean names (spaces, e.g. `Off Campus S01E04.mkv`), the match failed silently and fell back to `records[0]` — meaning E04, E07, E08 would all stream E01. | Replaced single-pass with **3-pass matching**: (1) exact substring, (2) normalised match (dots→spaces), (3) episode-code match (S01E04). |
 
-| ID | File | Description | Fix |
-|---|---|---|---|
-| BUG-01 |  L1547 |  (watcher auto-upload path) did NOT pass  to  → dirty scene-release names uploaded to JazzDrive | Added  |
-| BUG-02 |  L1280 |  stored raw  (dirty) as  in DB instead of  (clean) | Changed to  |
-| BUG-03 |  |  had NO duplicate check — same movie could be queued via direct URL even if already in library/queue | Added  call |
-| BUG-04 |  |  had NO duplicate check — batch-queuing same movie multiple times was silently allowed | Added  per movie |
-| BUG-05 |  L1584 |  only checked  — paused jobs could be re-queued for the same content | Added  to status IN clause |
-| BUG-06 | DB data | File id=1 had corrupted filename  — clearly garbage/encode error | Deleted from files table |
-| BUG-07 | DB data | File id=4  had no share_url — orphaned placeholder from zip-extract | Deleted from files table |
-| BUG-08 | DB data | Title id=6 was duplicate  (season in title name) vs correct title id=7 | Migrated 1 file reference to id=7, deleted title id=6 |
-| BUG-09 | DB data | Files 2,3,6-12 had dirty scene-release filenames in DB (e.g. ) — prior uploads used watcher path (BUG-01/02) | Retroactively cleaned all 9 entries using . Also updated season+episode columns for TV eps. |
+  ### Final API Verification (all endpoints)
 
-### Root Cause of Dirty JazzDrive Filenames (Screenshot)
-Two upload code paths exist:
-1.  — manual/triggered path — correctly passed  ✅  
-2.  — watcher auto-upload path — did NOT pass override_name ❌  
+  | Endpoint | Result |
+  |---|---|
+  | GET /api/ping | ✅ ok=True |
+  | GET /api/catalog/version | ✅ count=6 |
+  | GET /api/catalog/sync | ✅ 6 titles |
+  | GET /api/catalog/delta | ✅ 6 titles |
+  | GET /api/search?q=pathaan | ✅ 1 result |
+  | GET /api/search?q=off+campus | ✅ 1 result |
+  | GET /api/auth/me | ✅ 401 (auth-required) |
+  | GET /api/usage/quota | ✅ 401 (auth-required) |
+  | GET /api/catalog/share_url?file_id=5 | ✅ share_url returned (E01) |
+  | GET /api/catalog/share_url?file_id=8 | ✅ share_url returned (E04) |
+  | GET /api/catalog/posters | ✅ 200 |
+  | GET /api/catalog/db_update | ✅ 10 episodes |
+  | POST /api/app/check | ✅ ok=True |
+  | POST /api/auth/guest | ✅ JWT issued |
+  | GET /api/payment-methods/ | ✅ jazzcash listed |
+  | GET /api/subscription/plans | ✅ 3 plans returned |
+  | POST /api/queue/batch (Pathaan dup) | ✅ auth-required redirect (admin route) |
+  | POST /api/queue/direct (admin) | ✅ auth-required redirect (admin route) |
 
-The previous agent used both paths. Episodes uploaded via path #2 ended up on JazzDrive with dirty names. BUG-01 and BUG-02 fix both paths to always use clean names going forward.
+  ### All Syntax Checks Pass
+  uploader.py ✅ · db.py ✅ · stream.py ✅ · scan.py ✅ · upload.py ✅ · api.py ✅ · catalog_api.py ✅ · mobile_api.py ✅ · jazzdrive.py ✅
 
-### API Verification (all tests passed)
+  ### Commits in This Session
+  - `56b998e` — 5 code bugs + DB cleanup (uploader.py, db.py, stream.py, TASK_LOG.md)
+  - `644af9a` — BUG-10 fix (jazzdrive.py 3-pass filename matching)
 
-| Endpoint | Result |
-|---|---|
-| GET /health | 200 ✅ |
-| GET /api/ping | 200 ok=true ✅ |
-| GET /api/catalog/version | 200 count=6 ✅ |
-| GET /api/catalog/sync | 200 6 titles returned ✅ |
-| GET /api/catalog/delta | 200 6 titles returned ✅ |
-| GET /api/search?q=pathaan | 200 1 result ✅ |
-| GET /api/auth/me | 401 ✅ |
-| GET /api/usage/quota | 401 ✅ |
-| POST /api/app/check | 200 ok=true ✅ |
-| GET /stream/api/queue (no auth) | 302 (redirect to login) ✅ |
-| GET /upload/api/jobs (no auth) | 302 (redirect to login) ✅ |
+  ### Service Status at Close
+  raddflix_radd RUNNING pid 451236 ✅
+  
+  ## Session: 2026-05-30 (Part 3 — IMDb-first metadata + JazzDrive renames)
 
-### DB Final State
-- Titles: 6 (Pathaan, Off Campus, Salaar, Fast&Furious, Sarvam Maya, Reborn)
-- Files: 18 (all clean filenames — dirty names retroactively fixed)
-- Queue: 5 jobs (all 'done')
-- Accounts: 1 (id=2, 03029688227, role='flix')
+  ### Changes in this session
 
-### Files Changed
--  — BUG-01: added override_name; BUG-02: store plan.filename in DB
--  — BUG-05: add 'paused' to check_duplicate queue status check
--  — BUG-03: duplicate check in queue_direct; BUG-04: duplicate check in queue_batch
+  #### BUG-11: imdbapi.dev API endpoint changed (was /api/v1/titles/search, now api.imdbapi.dev/search/titles)
+  - Old host `imdbapi.dev/api/v1/...` returns HTTP 404 — API migrated to v2.7+
+  - New host: `api.imdbapi.dev`
+  - Search: `GET /search/titles?query=...&limit=5`  
+  - Detail: `GET /titles/{imdb_id}` — returns plot, genres, stars, directors, originCountries, spokenLanguages, runtimeSeconds, rating
+  - Fixed `fetch_imdbapi()` in `metadata.py` to use new endpoints with search+detail two-step
+  - File: `radd-hub/hub/metadata.py`
 
-### Tests NOT Possible Without Manual Access
-- **Actual JazzDrive scan**: Requires a logged-in scan account (currently only flix account exists). To create one: go to Scan tab → Add Account → enter a Jazz MSISDN → Send OTP → Verify. Then trigger scan.
-- **Live download test**: New download job (e.g. Pathan 2023) requires working scraper sites and download links from outside this environment.
-- **Rename already-uploaded JazzDrive files**: Files already on JazzDrive with dirty names (E04/E07/E08) cannot be renamed via the JazzDrive API — the name is fixed at upload time. DB filenames have been cleaned; JazzDrive side remains dirty for already-uploaded files.
-- **WhatsApp OTP delivery**: wa-bot process is not running. OTP is stored in DB but not delivered.
-- **Flutter APK test**: Requires Android device.
+  #### BUG-12: TMDB is unreachable from Oracle server (connection timeout)
+  - Oracle server cannot reach `api.themoviedb.org` — all TMDB calls time out
+  - This was silently causing all enrichment to fall through to AI/YouTube
+  - Fix: moved IMDbAPI.dev to PRIMARY (step 1) in `enrich_title()`, TMDB demoted to step 3 (optional supplement)
+  - TMDB calls are now wrapped as non-fatal; logged at DEBUG not WARNING
+  - File: `radd-hub/hub/metadata.py`
 
-### Notes for Next Agent
-- Oracle at HEAD after this commit.  RUNNING pid 449249.
-- BUG-01/02 are fixed: all future uploads (via watcher or manual) now store and upload clean filenames.
-- No scan account exists — only flix account (03029688227). To scan JazzDrive, add a scan account via /scan page.
-- Catalog has 6 titles with real uploaded content (18 files) and valid JazzDrive share URLs.
-- Duplicate Pathaan entries (files 2,3,20) and duplicate Salaar entries (files 13,14) are intentional — different quality versions. They all point to the same title_id so the app deduplicates at title level.
--  now correctly blocks re-queuing for 'queued', 'processing', AND 'paused' jobs.
-- Direct-URL and batch-queue routes now both check for library/queue duplicates.
+  #### enrich_title() priority reordered — IMDb first
+  New chain: **IMDbAPI.dev → OMDB → TMDB → AI → YouTube → Google KG**  
+  Previously: TMDB → OMDB → IMDbAPI.dev → AI → YouTube → Google KG  
+  Rationale: IMDb is free, no API key, covers full catalogue, always reachable
 
+  #### Post-upload JazzDrive rename — defense in depth (committed fbcab1e1b6)
+  - Both `upload_to_jazzdrive` and `upload_pending` now call `jazzdrive.rename_video()` 
+    immediately after upload + folder assignment
+  - Ensures JazzDrive filename matches clean name even if async upload ignores multipart name
+  - File: `radd-hub/hub/uploader.py`
+
+  #### JazzDrive file renames applied (live)
+  Renamed 5 files on JazzDrive that had dirty/wrong names:
+  | fid | remote_id | Old name on JD | New name |
+  |-----|-----------|---------------|----------|
+  | 8   | 242464982 | (dirty)       | Off Campus S01E04.mkv |
+  | 6   | 242464968 | (dirty)       | Off Campus S01E07.mkv |
+  | 7   | 242464981 | (dirty)       | Off Campus S01E08.mkv |
+  | 18  | 242464979 | ...S03E02.mkv | Reborn...S01E02.mkv |
+  | 19  | 242464977 | ...S03E01.mkv | Reborn...S01E01.mkv |
+  All returned HTTP 200.
+
+  #### DB metadata enrichment (all titles)
+  - `Pathaan`: imdb_id=tt12844910, rating=5.8, plot, cast, genres, language=Hindi, country=IN
+  - `Salaar`: imdb_id=tt13927994, rating=6.7, plot, cast, genres, language=Telugu, country=IN
+  - `Fast And Furious Spy Racers`: imdb_id=tt8322592, rating=5.9, plot, cast, genres, language=English
+  - `Reborn`: year=2023, season_count=1, episode_count=12, language=Japanese, country=JP; S03E01/E02 files corrected to S01E01/E02 in DB and on JazzDrive
+  - `Off Campus`: season_count=1, episode_count=8, language=Tamil, country=India
+  - `Sarvam Maya`: rating=7.7, plot, poster enriched via TMDB (earlier session)
+
+  ### GitHub commits this session
+  - `fbcab1e1b6` — uploader.py post-upload JazzDrive rename  
+  - (this commit) — metadata.py IMDb-first enrichment chain  
+
+  ### Service status
+  - raddflix_radd: RUNNING — service restarted successfully after each change
+  - /api/ping: {"ok":true}
+  
+>>>>>>> c2c84f99fcd2ecb333ea5ccf25541ef41ce02f34

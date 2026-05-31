@@ -161,10 +161,8 @@ def _rank_candidate(candidate: Dict[str, Any], query_keywords: List[str], year_h
         has_any_match = any(slug_contains(qk, slug) for qk in core_query_sig)
         if title_core_sig:
             title_matched = any(slug_contains(qk, slug) for qk in title_core_sig)
-            # Leniency: if it's a short title (1-2 core words), don't veto if at least one matches
-            if not title_matched and len(title_core_sig) > 1:
-                return -999999.0
-            elif not title_matched and not has_any_match:
+            # Strict: if no title word matches the slug, veto unconditionally
+            if not title_matched:
                 return -999999.0
         elif not has_any_match:
             return -999999.0

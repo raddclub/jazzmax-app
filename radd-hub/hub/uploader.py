@@ -1224,6 +1224,16 @@ def upload_to_jazzdrive(
     if remote_id and remote_id != 0:
         _set_file_folder(vk, jsid, remote_id, folder_id, account_id=aid)
 
+    # Defense in depth: explicitly rename to clean name on JazzDrive.
+    # JazzDrive async uploads can ignore the multipart filename; this guarantees
+    # the file is stored with the clean name regardless of upload path used.
+    if remote_id and remote_id != 0 and target_filename:
+        try:
+            jazzdrive.rename_video(aid, remote_id, target_filename, folder_id=folder_id)
+            _log(f"JD rename OK: {target_filename}")
+        except Exception as _rn_err:
+            log.warning("JD post-upload rename failed (non-fatal): %s", _rn_err)
+
     # Share link — pass the folder we uploaded into so Jazz Drive can share it
     _log("Creating public share link…")
     upload_folder_id = up.get("parent_id") or folder_id or None
@@ -1558,6 +1568,15 @@ def _upload_pending() -> None:
         # Force folder association
         if confirmed_remote_id and confirmed_remote_id != 0:
             _set_file_folder(vk, jsid, confirmed_remote_id, folder_id, account_id=acct["id"])
+
+        # Defense in depth: explicitly rename to clean name on JazzDrive.
+        # Matches upload_to_jazzdrive path — ensures both upload paths produce clean JD names.
+        if confirmed_remote_id and confirmed_remote_id != 0 and plan.filename:
+            try:
+                jazzdrive.rename_video(acct["id"], confirmed_remote_id, plan.filename, folder_id=folder_id)
+                log.info("upload_pending: JD rename OK → %s", plan.filename)
+            except Exception as _rn_err:
+                log.warning("upload_pending: JD rename failed (non-fatal): %s", _rn_err)
 
         share_url = _create_share_link(sess, vk, jsid, confirmed_remote_id or 0, folder_id=folder_id)
 
