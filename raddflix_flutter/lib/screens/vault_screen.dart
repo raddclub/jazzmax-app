@@ -194,8 +194,9 @@ class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.background,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: _selectMode
             ? IconButton(
                 icon: const Icon(Icons.close),
@@ -213,18 +214,26 @@ class _VaultScreenState extends State<VaultScreen> with WidgetsBindingObserver {
                 : null),
         title: _selectMode
             ? Text('${_selected.length} selected',
-                style: TextStyle(color: AppColors.text, fontSize: 16))
+                style: const TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w700))
             : Row(children: [
                 if (!isRoot) ...[
                   Icon(Icons.folder_rounded, color: AppColors.primary, size: 20),
                   const SizedBox(width: 8),
                 ],
-                Text(
-                  isRoot
-                      ? (_isFake ? '📁 Private Vault' : '🔒 Private Vault')
-                      : (widget.folderName ?? 'Folder'),
-                  style: TextStyle(color: AppColors.text, fontSize: 17, fontWeight: FontWeight.w600),
-                ),
+                if (isRoot)
+                  RichText(text: TextSpan(
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                    children: [
+                      TextSpan(text: _isFake ? '📁 ' : '🔒 ', style: const TextStyle(fontSize: 16)),
+                      const TextSpan(text: 'Private ', style: TextStyle(color: Colors.white)),
+                      const TextSpan(text: 'Vault', style: TextStyle(color: AppColors.primary)),
+                    ],
+                  ))
+                else
+                  Text(
+                    widget.folderName ?? 'Folder',
+                    style: const TextStyle(color: AppColors.text, fontSize: 17, fontWeight: FontWeight.w700),
+                  ),
               ]),
         actions: _selectMode
             ? [
