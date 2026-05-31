@@ -21,9 +21,13 @@ import org.json.JSONObject
 
 class MainActivity : FlutterActivity() {
 
-    private val PIP_CHANNEL   = "com.raddflix.app/pip"
-    private val MEDIA_CHANNEL = "com.raddflix.app/media"
-    private val CAST_CHANNEL = "com.raddflix.app/cast"
+    private val PIP_CHANNEL    = "com.raddflix.app/pip"
+    private val MEDIA_CHANNEL  = "com.raddflix.app/media"
+    private val CAST_CHANNEL   = "com.raddflix.app/cast"
+    private val INTENT_CHANNEL = "com.raddflix.app/intent"
+
+    private var pendingVideoUri: String? = null
+    private var intentMethodChannel: MethodChannel? = null
 
     private var castContext: CastContext? = null
     private var castSession: CastSession? = null
@@ -33,6 +37,57 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         // ── MediaStore Plugin (local video browser) ──────────────────────
         flutterEngine.plugins.add(MediaStorePlugin())
+
+        // ── Intent Channel: incoming video "Open with" from file managers ─
+        intentMethodChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, INTENT_CHANNEL)
+        intentMethodChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getPendingVideoUri" -> {
+                    result.success(pendingVideoUri)
+                    pendingVideoUri = null
+                
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        extractVideoUri(intent)
+        val uri = pendingVideoUri
+        if (uri != null) {
+            intentMethodChannel?.invokeMethod("onVideoUri", uri)
+            pendingVideoUri = null
+        }
+    }
+
+    private fun extractVideoUri(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW) {
+            val uri = intent.data?.toString()
+            if (uri != null && uri.isNotEmpty()) {
+                pendingVideoUri = uri
+            }
+        }
+    }
+}
+                "openVideoWith" -> {
+                    val uri = call.argument<String>("uri") ?: ""
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(
+                                android.net.Uri.parse(uri),
+                                "video/*"
+                            )
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        val chooser = Intent.createChooser(intent, "Open with")
+                        startActivity(chooser)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        result.error("OPEN_WITH_FAILED", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        // Extract video URI from the intent that launched the activity
+        extractVideoUri(intent)
 
         // ── PiP Channel ──────────────────────────────────────────────────
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)
