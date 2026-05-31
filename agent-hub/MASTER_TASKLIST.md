@@ -396,3 +396,46 @@ All 34 audit bugs resolved:
 - [ ] T009: rogmovies.blog DNS dead — requires domain owner action
 - [ ] AVATAR: "Avatar Fire And Ash" + "The Wonderfools" + "Mithde" TMDB miss — manual title mapping needed
 - [ ] DARK_KNIGHT: "The Dark Knight" TMDB miss during scan — possibly filename mismatch
+
+---
+
+## Phase 19 — Flutter: Video Player Fixes, External Player, System "Open With", Vault Thumbnails (2026-05-31)
+
+### Completed ✅
+- [x] **AndroidManifest.xml**: Added `ACTION_VIEW` intent filters for `video/*`, `video/mp4`, `video/x-matroska`, `video/webm` — RaddFlix now appears in Android "Open with" picker when user long-taps a video in file manager/gallery
+- [x] **pubspec.yaml**: Added `android_intent_plus: ^4.0.0` for launching external video players with system chooser
+- [x] **player_screen.dart**: 
+  - Added `_currentPlaybackUrl` field — tracks active CDN URL or local path after each `_player.open()` call
+  - Added `_openWithExternalPlayer()` — sends current video to MX Player/VLC via `com.raddflix.app/intent` MethodChannel with fallback to `share_plus`
+  - Added "Open With" button (13th button) to `_MxMoreSheet` — `onOpenWith` callback wired to all 4 source types (local, downloads, JazzDrive, vault)
+- [x] **vault_screen.dart**: `_FileListTile` converted from `StatelessWidget` → `StatefulWidget` with async video thumbnail loading via `ThumbService.getThumbnail()`. Shows 44×44 thumbnail rounded corners; falls back to icon while loading.
+- [x] **main.dart**: 
+  - Checks `getPendingVideoUri` from intent channel on cold start
+  - Sets `pendingVideoUri` for SplashScreen to consume
+  - Listens for `onVideoUri` warm-start events, navigates directly to PlayerScreen
+- [x] **app.dart**: 
+  - Defined global `appNavigatorKey` (GlobalKey<NavigatorState>) and `pendingVideoUri`
+  - Passed `navigatorKey: appNavigatorKey` to MaterialApp
+- [x] **splash_screen.dart**: After successful auth→home, checks `pendingVideoUri` and pushes PlayerScreen with 400ms delay (lets HomeScreen load first)
+- [x] **MainActivity.kt**:
+  - Added `INTENT_CHANNEL = "com.raddflix.app/intent"`
+  - `getPendingVideoUri`: returns cold-start video URI, then clears it
+  - `openVideoWith(uri)`: fires `Intent.ACTION_VIEW` with chooser — shows MX Player, VLC, etc.
+  - `onNewIntent`: captures warm-start video intents and sends `onVideoUri` to Flutter
+  - `extractVideoUri()`: helper to parse `Intent.ACTION_VIEW` data URI
+
+### Commit SHAs (raddclub/raddflix-app)
+- player_screen.dart: 8c82499c5d
+- vault_screen.dart: 0373da1644
+- AndroidManifest.xml: 90fc3105bb
+- pubspec.yaml: f393f3fa43
+- main.dart: 5caa77b422
+- app.dart: da525c1aab
+- splash_screen.dart: 56a709fa76
+- MainActivity.kt: aeac092a8c
+
+### Open / Next
+- [ ] UI polish pass: 2026-era modern design for Home, Downloads, Profile screens
+- [ ] Video player source fix: verify all 4 sources (local, downloads, JazzDrive, vault) correctly load after flutter clean + pub get
+- [ ] Test "Open with RaddFlix" from Files app — ensure MainActivity→Flutter intent flow works E2E
+- [ ] Test "Open with external player" from player _MxMoreSheet — confirm MX Player/VLC chooser appears
