@@ -13,19 +13,32 @@ Endpoints:
   POST /api/catalog/share_url/batch      batch share URL lookup (up to 50 file_ids)
   GET  /api/catalog/share_url/batch      same via ?ids=1,2,3 query param
   GET  /api/catalog/play                 generate/return cached direct streaming URL
+  GET  /api/catalog/poster/<id>          public poster proxy (redirect to JD or TMDB)
+  GET  /api/catalog/poster-push/status   coverage report: which titles need JD posters
+  POST /api/catalog/poster-push/bulk     bulk-upload all missing posters to JazzDrive
+  GET  /api/catalog/poster-push/job/<id> check background push job status
 """
 from __future__ import annotations
+import base64
 import json
+import os
+import threading
 import time
 import datetime
 import logging
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect
 from hub import db
 
 log = logging.getLogger("hub.catalog_api")
 
 bp = Blueprint("catalog_api", __name__, url_prefix="/api/catalog")
 
+_poster_push_jobs: dict = {}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
 
 def _watch_base() -> str:
     try:
@@ -50,6 +63,38 @@ def _count_published() -> int:
         ).fetchone()
         return int(row["n"] or 0)
 
+
+def _poster_jd_url(title_id: int, poster_share_url: str) -> str:
+    """Return the best poster URL for the Flutter app.
+
+    Priority:
+      1. poster_share_url — direct JazzDrive file share URL (zero-rated, permanent)
+      2. Oracle public proxy  /api/catalog/poster/<id>  (requires internet)
+    """
+    if poster_share_url:
+        return poster_share_url
+    return _watch_base() + "/api/catalog/poster/" + str(title_id)
+
+
+def _check_admin_auth() -> bool:
+    """Check Basic auth against RADD_ADMIN_USER / RADD_ADMIN_PASS env vars."""
+    admin_user = os.environ.get("RADD_ADMIN_USER", "admin")
+    admin_pass = os.environ.get("RADD_ADMIN_PASS", "")
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth[6:]).decode()
+            u, _, p = decoded.partition(":")
+            if u == admin_user and p == admin_pass:
+                return True
+        except Exception:
+            pass
+    return False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core catalog endpoints
+# ─────────────────────────────────────────────────────────────────────────────
 
 @bp.route("/version")
 def version():
@@ -103,25 +148,27 @@ def sync():
                 genres = [str(genres)]
         except Exception:
             pass
+        psu = r["poster_share_url"] or ""
         titles.append({
-            "id":           r["id"],
-            "title":        r["title"] or "",
-            "year":         (int(r["year"]) if r["year"] and str(r["year"]).isdigit() else None),
-            "media_type":   ("show" if (r["media_type"] or "movie") in ("tv", "series") else (r["media_type"] or "movie")),
-            "description":  r["plot"] or r["overview"] or "",
-            "rating":       r["rating"],
-            "genres":       genres,
-            "language":     r["language"] or "",
-            "is_free":      1 if r["is_free"] else 0,
-            "runtime":      r["runtime"],
-            "season_count": r["season_count"],
-            "episode_count": r["episode_count"],
-            "poster_key":   "title_" + str(r["id"]),
-            "poster_url":   r["poster"] or "",
-            "poster_jd_url": (_watch_base() + "/api/poster/" + str(r["id"])) if r["id"] else "",
-            "db_version":   int(r["updated_at"] or 0),
-            "file_id":      r["file_id"],
-            "share_url":    r["file_share_url"] or "",
+            "id":              r["id"],
+            "title":           r["title"] or "",
+            "year":            (int(r["year"]) if r["year"] and str(r["year"]).isdigit() else None),
+            "media_type":      ("show" if (r["media_type"] or "movie") in ("tv", "series") else (r["media_type"] or "movie")),
+            "description":     r["plot"] or r["overview"] or "",
+            "rating":          r["rating"],
+            "genres":          genres,
+            "language":        r["language"] or "",
+            "is_free":         1 if r["is_free"] else 0,
+            "runtime":         r["runtime"],
+            "season_count":    r["season_count"],
+            "episode_count":   r["episode_count"],
+            "poster_key":      "title_" + str(r["id"]),
+            "poster_url":      r["poster"] or "",
+            "poster_jd_url":   _poster_jd_url(r["id"], psu),
+            "poster_share_url": psu,
+            "db_version":      int(r["updated_at"] or 0),
+            "file_id":         r["file_id"],
+            "share_url":       r["file_share_url"] or "",
         })
 
     episodes = []
@@ -154,12 +201,7 @@ def sync():
 
 @bp.route("/share_url")
 def get_share_url():
-    """GET /api/catalog/share_url?file_id=<id>
-    Returns the JazzDrive share_url for a specific file.
-    Called by the Flutter player as a fallback when the local SQLite DB
-    does not have the share_url (fresh install, DB corruption, or new content).
-    Public endpoint.
-    """
+    """GET /api/catalog/share_url?file_id=<id>  — single file share URL lookup."""
     file_id = request.args.get("file_id", "").strip()
     if not file_id:
         return jsonify({"error": "file_id required"}), 400
@@ -183,18 +225,8 @@ def get_share_url():
 def batch_share_url():
     """Resolve JazzDrive share_urls for multiple files in one request.
 
-    POST /api/catalog/share_url/batch
-      Body: {"file_ids": [1, 2, 3, ...]}   (max 50)
-
+    POST /api/catalog/share_url/batch   body: {"file_ids": [1, 2, 3]}  (max 50)
     GET  /api/catalog/share_url/batch?ids=1,2,3
-      Comma-separated file IDs (max 50)
-
-    Response:
-      {"ok": true, "results": {"1": "https://...", "2": null, ...},
-       "found": N, "requested": M}
-
-    Used by Flutter player queue to resolve share_urls for multiple episodes
-    in a single round-trip instead of N individual /share_url calls.
     """
     if request.method == "GET":
         ids_raw = request.args.get("ids", "")
@@ -237,17 +269,7 @@ def batch_share_url():
 
 @bp.route("/play")
 def play():
-    """GET /api/catalog/play?file_id=<id>
-    Returns a direct streamable URL for the given file.
-
-    Checks the stream_links cache first (8-hour TTL). Generates a fresh
-    direct link via JazzDrive API on cache miss or expiry.
-
-    Response:
-      {"ok": true, "file_id": 5, "direct_url": "https://...",
-       "expires_at": 1234, "cached": true|false,
-       "title": "Off Campus", "label": "S01E01", "size_bytes": N}
-    """
+    """GET /api/catalog/play?file_id=<id>  — generate/return cached streaming URL."""
     file_id_str = request.args.get("file_id", "").strip()
     if not file_id_str:
         return jsonify({"error": "file_id required"}), 400
@@ -315,12 +337,21 @@ def play():
 
 @bp.route("/posters")
 def posters():
+    """GET /api/catalog/posters  — poster list for pre-caching."""
     with db.conn() as c:
         rows = c.execute(
-            "SELECT id, poster FROM titles WHERE is_published=1 AND poster IS NOT NULL"
+            "SELECT id, poster, poster_share_url "
+            "FROM titles WHERE is_published=1 AND poster IS NOT NULL"
         ).fetchall()
-    return jsonify({"posters": [{"key": "title_" + str(r["id"]), "url": r["poster"]}
-                                for r in rows if r["poster"]]})
+    return jsonify({"posters": [
+        {
+            "key":         "title_" + str(r["id"]),
+            "url":         r["poster"],
+            "jd_url":      r["poster_share_url"] or "",
+            "poster_jd_url": _poster_jd_url(r["id"], r["poster_share_url"] or ""),
+        }
+        for r in rows if r["poster"]
+    ]})
 
 
 @bp.route("/db_update")
@@ -349,21 +380,24 @@ def db_update():
                 genres = [str(genres)]
         except Exception:
             pass
+        psu = r["poster_share_url"] or ""
         titles_out.append({
-            "id":          r["id"],
-            "title":       r["title"] or "",
-            "year":        (int(r["year"]) if r["year"] and str(r["year"]).isdigit() else None),
-            "media_type":  ("show" if (r["media_type"] or "movie") in ("tv", "series") else (r["media_type"] or "movie")),
-            "description": r["plot"] or r["overview"] or "",
-            "rating":      r["rating"],
-            "genres":      genres,
-            "language":    r["language"] or "",
-            "is_free":     1 if r["is_free"] else 0,
-            "runtime":     r["runtime"],
-            "poster_url":  r["poster"] or "",
-            "db_version":  int(r["updated_at"] or 0),
-            "file_id":     str(r["file_id"]) if r["file_id"] is not None else None,
-            "share_url":   r["file_share_url"] or "",
+            "id":              r["id"],
+            "title":           r["title"] or "",
+            "year":            (int(r["year"]) if r["year"] and str(r["year"]).isdigit() else None),
+            "media_type":      ("show" if (r["media_type"] or "movie") in ("tv", "series") else (r["media_type"] or "movie")),
+            "description":     r["plot"] or r["overview"] or "",
+            "rating":          r["rating"],
+            "genres":          genres,
+            "language":        r["language"] or "",
+            "is_free":         1 if r["is_free"] else 0,
+            "runtime":         r["runtime"],
+            "poster_url":      r["poster"] or "",
+            "poster_jd_url":   _poster_jd_url(r["id"], psu),
+            "poster_share_url": psu,
+            "db_version":      int(r["updated_at"] or 0),
+            "file_id":         str(r["file_id"]) if r["file_id"] is not None else None,
+            "share_url":       r["file_share_url"] or "",
         })
 
     episodes_out = []
@@ -404,17 +438,13 @@ def db_update():
 
 @bp.route("/delta")
 def delta():
-    """GET /api/catalog/delta
-    Oracle fallback endpoint consumed by Flutter SyncService._syncFromJazzDriveDelta().
-    Returns the full published catalog in db_update JSON shape,
-    without Content-Disposition header so Dio parses it as JSON directly.
-    """
+    """GET /api/catalog/delta — Oracle fallback for Flutter SyncService._syncFromJazzDriveDelta()."""
     now = int(time.time())
     with db.conn() as c:
         title_rows = c.execute(
             "SELECT t.id, t.title, t.year, t.media_type, t.plot, t.overview, "
             "       t.rating, t.genres, t.language, t.is_free, t.updated_at, "
-            "       t.poster, t.runtime, t.season_count, t.episode_count, "
+            "       t.poster, t.poster_share_url, t.runtime, t.season_count, t.episode_count, "
             "       f.id AS file_id, f.share_url AS file_share_url "
             "FROM titles t "
             "LEFT JOIN files f ON f.title_id = t.id "
@@ -433,21 +463,24 @@ def delta():
                 genres = [str(genres)]
         except Exception:
             pass
+        psu = r["poster_share_url"] or ""
         titles_out.append({
-            "id":          r["id"],
-            "title":       r["title"] or "",
-            "year":        (int(r["year"]) if r["year"] and str(r["year"]).isdigit() else None),
-            "media_type":  ("show" if (r["media_type"] or "movie") in ("tv", "series") else (r["media_type"] or "movie")),
-            "description": r["plot"] or r["overview"] or "",
-            "rating":      r["rating"],
-            "genres":      genres,
-            "language":    r["language"] or "",
-            "is_free":     1 if r["is_free"] else 0,
-            "runtime":     r["runtime"],
-            "poster_url":  r["poster"] or "",
-            "db_version":  int(r["updated_at"] or 0),
-            "file_id":     str(r["file_id"]) if r["file_id"] is not None else None,
-            "share_url":   r["file_share_url"] or "",
+            "id":              r["id"],
+            "title":           r["title"] or "",
+            "year":            (int(r["year"]) if r["year"] and str(r["year"]).isdigit() else None),
+            "media_type":      ("show" if (r["media_type"] or "movie") in ("tv", "series") else (r["media_type"] or "movie")),
+            "description":     r["plot"] or r["overview"] or "",
+            "rating":          r["rating"],
+            "genres":          genres,
+            "language":        r["language"] or "",
+            "is_free":         1 if r["is_free"] else 0,
+            "runtime":         r["runtime"],
+            "poster_url":      r["poster"] or "",
+            "poster_jd_url":   _poster_jd_url(r["id"], psu),
+            "poster_share_url": psu,
+            "db_version":      int(r["updated_at"] or 0),
+            "file_id":         str(r["file_id"]) if r["file_id"] is not None else None,
+            "share_url":       r["file_share_url"] or "",
         })
 
     episodes_out = []
@@ -481,3 +514,214 @@ def delta():
         "titles":       titles_out,
         "episodes":     episodes_out,
     })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Public poster proxy  (no auth — poster images are not streaming secrets)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@bp.route("/poster/<int:title_id>")
+def public_poster(title_id: int):
+    """GET /api/catalog/poster/<id>
+    Public poster proxy — no auth required.
+
+    Resolution order:
+      1. poster_share_url → calls JazzDrive generate_direct_link → 302 redirect
+         (This gives a time-limited but zero-rated direct JD image URL)
+      2. poster (TMDB URL)   → 302 redirect  (needs internet bundle)
+      3. 404
+    """
+    try:
+        with db.conn() as c:
+            row = c.execute(
+                "SELECT id, poster, poster_share_url FROM titles WHERE id=? AND is_published=1",
+                (title_id,)
+            ).fetchone()
+    except Exception:
+        log.exception("poster lookup error for title %d", title_id)
+        return jsonify({"error": "server error"}), 500
+
+    if not row:
+        return jsonify({"error": "title not found"}), 404
+
+    psu = row["poster_share_url"] or ""
+    if psu:
+        try:
+            from hub import jazzdrive
+            res = jazzdrive.generate_folder_image_link(psu, filename_hint="poster")
+            if res.get("ok") and res.get("url"):
+                return redirect(res["url"], code=302)
+        except Exception as e:
+            log.warning("poster proxy JD link error for title %d: %s", title_id, e)
+
+    if row["poster"]:
+        return redirect(row["poster"], code=302)
+
+    return jsonify({"error": "no poster available"}), 404
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Poster Push — bulk upload title posters to JazzDrive
+# ─────────────────────────────────────────────────────────────────────────────
+
+@bp.route("/poster-push/status")
+def poster_push_status():
+    """GET /api/catalog/poster-push/status
+    Coverage report: which published titles have JD-hosted posters.
+    Public (no auth) — just shows upload coverage, no secrets.
+    """
+    with db.conn() as c:
+        rows = c.execute(
+            "SELECT id, title, poster, poster_share_url "
+            "FROM titles WHERE is_published=1 ORDER BY id"
+        ).fetchall()
+
+    result = []
+    for r in rows:
+        psu = r["poster_share_url"] or ""
+        result.append({
+            "id":              r["id"],
+            "title":           r["title"],
+            "has_tmdb_poster": bool(r["poster"]),
+            "has_jd_poster":   bool(psu),
+            "poster_share_url": psu or None,
+        })
+
+    needs = sum(1 for r in result if r["has_tmdb_poster"] and not r["has_jd_poster"])
+    running_jobs = {jid: j for jid, j in _poster_push_jobs.items() if j["status"] == "running"}
+
+    return jsonify({
+        "ok":           True,
+        "total":        len(result),
+        "has_jd_poster": sum(1 for r in result if r["has_jd_poster"]),
+        "needs_upload": needs,
+        "active_jobs":  len(running_jobs),
+        "titles":       result,
+    })
+
+
+@bp.route("/poster-push/bulk", methods=["POST"])
+def poster_push_bulk():
+    """POST /api/catalog/poster-push/bulk  (admin Basic auth required)
+    Bulk-upload posters for all published titles that have a TMDB poster_url
+    but are missing poster_share_url on JazzDrive.
+
+    Runs in a background thread.  Returns a job_id to poll via
+    GET /api/catalog/poster-push/job/<job_id>
+
+    Optional body: {"force": true}  to re-upload even if poster_share_url exists.
+    """
+    if not _check_admin_auth():
+        return jsonify({"error": "admin auth required (Basic)"}), 401
+
+    data = request.get_json(force=True, silent=True) or {}
+    force = bool(data.get("force", False))
+
+    if force:
+        with db.conn() as c:
+            rows = c.execute(
+                "SELECT id, title, poster, year, media_type FROM titles "
+                "WHERE is_published=1 AND poster IS NOT NULL"
+            ).fetchall()
+    else:
+        with db.conn() as c:
+            rows = c.execute(
+                "SELECT id, title, poster, year, media_type FROM titles "
+                "WHERE is_published=1 AND poster IS NOT NULL "
+                "AND (poster_share_url IS NULL OR poster_share_url='')"
+            ).fetchall()
+
+    if not rows:
+        return jsonify({"ok": True, "message": "All published titles already have JD posters", "pushed": 0})
+
+    from hub import uploader as _up
+    acct = _up.get_active_account()
+    if not acct:
+        return jsonify({"error": "No active JazzDrive account — add one in Scanner"}), 503
+
+    account_id = acct["id"]
+    job_id = str(int(time.time()))
+    _poster_push_jobs[job_id] = {
+        "status":     "running",
+        "total":      len(rows),
+        "done":       0,
+        "failed":     0,
+        "errors":     [],
+        "started_at": int(time.time()),
+        "finished_at": None,
+    }
+
+    def _worker(rows, account_id, job_id):
+        from hub import assets
+        job = _poster_push_jobs[job_id]
+        for r in rows:
+            if job.get("stop_requested"):
+                break
+            try:
+                result = assets.process_title_poster(r["id"], r["poster"], account_id)
+                if result:
+                    job["done"] += 1
+                    log.info("poster-push: %s → JD ok (%s…)", r["title"], str(result)[:50])
+                else:
+                    job["failed"] += 1
+                    job["errors"].append({
+                        "title_id": r["id"], "title": r["title"],
+                        "error": "process_title_poster returned None"
+                    })
+            except Exception as e:
+                job["failed"] += 1
+                job["errors"].append({"title_id": r["id"], "title": r["title"], "error": str(e)})
+                log.exception("poster-push failed for title %d (%s)", r["id"], r["title"])
+        job["status"] = "done"
+        job["finished_at"] = int(time.time())
+        elapsed = job["finished_at"] - job["started_at"]
+        log.info("poster-push job %s complete: %d ok / %d failed in %ds",
+                 job_id, job["done"], job["failed"], elapsed)
+
+    t = threading.Thread(
+        target=_worker,
+        args=([dict(r) for r in rows], account_id, job_id),
+        daemon=True,
+        name="poster-push-" + job_id,
+    )
+    t.start()
+
+    return jsonify({
+        "ok":      True,
+        "job_id":  job_id,
+        "total":   len(rows),
+        "message": "Uploading {} poster{} to JazzDrive in background".format(
+            len(rows), "s" if len(rows) != 1 else ""
+        ),
+    })
+
+
+@bp.route("/poster-push/job/<job_id>")
+def poster_push_job(job_id: str):
+    """GET /api/catalog/poster-push/job/<job_id>  — poll background push job."""
+    job = _poster_push_jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "job not found — may have expired after server restart"}), 404
+    pct = round(100 * job["done"] / max(job["total"], 1))
+    return jsonify({
+        "ok":         True,
+        "job_id":     job_id,
+        "status":     job["status"],
+        "total":      job["total"],
+        "done":       job["done"],
+        "failed":     job["failed"],
+        "pct":        pct,
+        "errors":     job["errors"][-10:],
+        "started_at": job["started_at"],
+        "finished_at": job["finished_at"],
+    })
+
+
+@bp.route("/poster-push/job/<job_id>/stop", methods=["POST"])
+def poster_push_stop(job_id: str):
+    """POST /api/catalog/poster-push/job/<job_id>/stop  — gracefully stop a running job."""
+    job = _poster_push_jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "job not found"}), 404
+    job["stop_requested"] = True
+    return jsonify({"ok": True, "message": "Stop requested"})
