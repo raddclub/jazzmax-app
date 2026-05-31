@@ -439,3 +439,22 @@ All 34 audit bugs resolved:
 - [ ] Video player source fix: verify all 4 sources (local, downloads, JazzDrive, vault) correctly load after flutter clean + pub get
 - [ ] Test "Open with RaddFlix" from Files app — ensure MainActivity→Flutter intent flow works E2E
 - [ ] Test "Open with external player" from player _MxMoreSheet — confirm MX Player/VLC chooser appears
+
+
+## Phase 20 — 2026 UI Polish (Home / Downloads / Profile)
+**Status**: ✅ COMPLETE  
+**Branch**: main  
+**Commits**: 6aeb53e5e7, 8645b3af33, f25cb979ab
+
+### Files modified:
+| File | Changes |
+|------|---------|
+| `home_screen.dart` | Hero 264px, 4-stop cinematic gradient, MOVIE/SERIES + rating badges, Watch Now + My List buttons, wider page dots, gradient category chips with glow, red accent-bar section headers, pill-style count/See-all |
+| `downloads_screen.dart` | Visual storage card with circle icon, category-colored folder cards (Movies=red, TV=blue, Dramas=purple, Other=gray), gradient filter chips, improved empty state, _folderColor() helper |
+| `profile_screen.dart` | 96px avatar with 106px outer glow ring, emoji plan badge (👑⭐🎬), 'My Profile' header with red accent, Network tile in Device section, stronger subscription gradient, branded version footer pill |
+
+### Design Principles Applied:
+- All changes use existing `AppColors.*` / `AppShadows.*` / `AppRadius.*` — zero new packages
+- `flutter_animate` used for entry animations on all upgraded components
+- Color-coded folder system consistent with content categories throughout app
+- Network status visible on Profile → Device section (green Online / red Offline badge)
