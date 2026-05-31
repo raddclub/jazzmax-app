@@ -15,7 +15,7 @@ def _load() -> dict:
     global _data
     if _data is not None:
         return _data
-    print(f"DEBUG: Loading search cache from {_CACHE_FILE}")
+
     try:
         if _CACHE_FILE.exists():
             _data = json.loads(_CACHE_FILE.read_text())

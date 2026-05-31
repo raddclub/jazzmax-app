@@ -79,7 +79,7 @@ def _regen_db_update_bg():
                     "id": r["id"], "title_id": r["title_id"],
                     "file_id": str(r["id"]),
                     "season": r["season"], "episode": r["episode"],
-                    "label": "S{:02d}E{:02d}".format(r["season"], r["episode"]),
+                    "label": "S{:02d}E{:02d}".format(r["season"] or 0, r["episode"] or 0),
                     "quality": None, "is_free": 0,
                     "share_url": r.get("share_url") or "",  # BUG-SHARE: episode-level JazzDrive share_url
                 })

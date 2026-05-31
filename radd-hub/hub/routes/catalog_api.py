@@ -243,7 +243,7 @@ def db_update():
             episodes_out.append({
                 "id": r["id"], "title_id": r["title_id"], "file_id": str(r["id"]),
                 "season": r["season"], "episode": r["episode"],
-                "label": f"S{r['season']:02d}E{r['episode']:02d}",
+                "label": f"S{(r['season'] or 0):02d}E{(r['episode'] or 0):02d}",
                 "share_url": r["share_url"] or "", "quality": None, "is_free": 0,
             })
 
@@ -327,7 +327,7 @@ def delta():
             episodes_out.append({
                 "id": r["id"], "title_id": r["title_id"], "file_id": str(r["id"]),
                 "season": r["season"], "episode": r["episode"],
-                "label": f"S{r['season']:02d}E{r['episode']:02d}",
+                "label": f"S{(r['season'] or 0):02d}E{(r['episode'] or 0):02d}",
                 "share_url": r["share_url"] or "", "quality": None, "is_free": 0,
             })
 
