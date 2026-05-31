@@ -123,8 +123,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   child: Row(children: [
-                    const Text('Profile', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary, letterSpacing: -0.5)),
+                    RichText(text: const TextSpan(
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                      children: [
+                        TextSpan(text: 'My ', style: TextStyle(color: AppColors.textPrimary)),
+                        TextSpan(text: 'Profile', style: TextStyle(color: AppColors.primary)),
+                      ],
+                    )),
                     const Spacer(),
                     IconButton(onPressed: () => Navigator.of(context).pop(),
                         icon: const Icon(Icons.close_rounded, color: AppColors.textMuted)),
@@ -138,17 +143,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
                 child: Column(children: [
-                  // Avatar
-                  Container(
-                    width: 86, height: 86,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: AppColors.primaryGradient,
-                      boxShadow: AppShadows.glow,
+                  // Avatar with glow ring
+                  Stack(alignment: Alignment.center, children: [
+                    // Outer glow ring
+                    Container(
+                      width: 106, height: 106,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
+                      ),
                     ),
-                    child: Center(child: Text(initial, style: const TextStyle(
-                        color: Colors.white, fontSize: 36, fontWeight: FontWeight.w900))),
-                  ).animate().scale(begin: const Offset(0.6, 0.6), end: const Offset(1, 1),
+                    Container(
+                      width: 96, height: 96,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: AppColors.primaryGradient,
+                        boxShadow: [
+                          BoxShadow(color: AppColors.primary.withOpacity(0.45), blurRadius: 28, spreadRadius: 2),
+                        ],
+                      ),
+                      child: Center(child: Text(initial, style: const TextStyle(
+                          color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900))),
+                    ),
+                  ]).animate().scale(begin: const Offset(0.6, 0.6), end: const Offset(1, 1),
                       duration: 400.ms, curve: AppCurves.enter),
                   const SizedBox(height: 14),
                   Text(user?.phone ?? '—', style: const TextStyle(
@@ -156,18 +173,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       letterSpacing: -0.3))
                       .animate(delay: 100.ms).fadeIn(duration: 300.ms),
                   const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(AppRadius.round),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      (user?.planName ?? 'FREE').toUpperCase(),
-                      style: const TextStyle(color: AppColors.primary, fontSize: 11,
-                          fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-                  ).animate(delay: 150.ms).fadeIn(duration: 300.ms),
+                  Builder(builder: (ctx) {
+                    final plan = (user?.planName ?? 'FREE').toUpperCase();
+                    final isPremium = plan.contains('PREMIUM') || plan.contains('GOLD');
+                    final isStandard = plan.contains('STANDARD') || plan.contains('SILVER');
+                    final emoji = isPremium ? '👑' : isStandard ? '⭐' : '🎬';
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(AppRadius.round),
+                        border: Border.all(color: AppColors.primary.withOpacity(0.35)),
+                        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.1), blurRadius: 12)],
+                      ),
+                      child: Row(mainAxisSize: MainAxisSize.min, children: [
+                        Text(emoji, style: const TextStyle(fontSize: 13)),
+                        const SizedBox(width: 5),
+                        Text(plan, style: const TextStyle(color: AppColors.primary, fontSize: 11,
+                            fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                      ]),
+                    );
+                  }).animate(delay: 150.ms).fadeIn(duration: 300.ms),
                 ]),
               ),
             ),
@@ -181,10 +207,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [AppColors.primary.withOpacity(0.15), AppColors.primary.withOpacity(0.05)],
-                        begin: Alignment.topLeft, end: Alignment.bottomRight),
+                        colors: [AppColors.primary.withOpacity(0.18), const Color(0x0A8B002D), AppColors.primary.withOpacity(0.08)],
+                        begin: Alignment.topLeft, end: Alignment.bottomRight,
+                        stops: const [0.0, 0.5, 1.0]),
                       borderRadius: BorderRadius.circular(AppRadius.md),
-                      border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                      border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                      boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.07), blurRadius: 20)],
                     ),
                     child: Row(children: [
                       const Icon(Icons.star_rounded, color: AppColors.primary, size: 24),
@@ -302,6 +330,24 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       trailing: Text(_deviceName ?? '…',
                           style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
                     ),
+                    _divider(),
+                    _SectionTile(
+                      icon: _hasInternet ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+                      iconColor: _hasInternet ? const Color(0xFF22C55E) : AppColors.error,
+                      label: 'Network',
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (_hasInternet ? const Color(0xFF22C55E) : AppColors.error).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(_hasInternet ? 'Online' : 'Offline',
+                            style: TextStyle(
+                              color: _hasInternet ? const Color(0xFF22C55E) : AppColors.error,
+                              fontSize: 11, fontWeight: FontWeight.w700,
+                            )),
+                      ),
+                    ),
                   ]),
                   const SizedBox(height: 12),
                   // Account
@@ -375,9 +421,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     ),
                   ]),
                   const SizedBox(height: 32),
-                  Text('$_appVersion · Pakistan ka entertainment, data-free',
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.round),
+                      border: Border.all(color: AppColors.glassBorder),
+                    ),
+                    child: RichText(
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                      text: TextSpan(
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                        children: [
+                          TextSpan(text: 'Radd', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w700)),
+                          const TextSpan(text: 'Flix', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800)),
+                          TextSpan(text: ' $_appVersion · Pakistan ka entertainment, data-free'),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 40),
                 ]),
               ).animate(delay: 250.ms).fadeIn(duration: 400.ms),
@@ -477,8 +539,13 @@ class _Section extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(padding: const EdgeInsets.only(left: 4, bottom: 8),
-        child: Text(title.toUpperCase(), style: const TextStyle(
-            color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 1))),
+        child: Row(children: [
+          Container(width: 12, height: 1.5,
+              margin: const EdgeInsets.only(right: 6),
+              color: AppColors.primary.withOpacity(0.6)),
+          Text(title.toUpperCase(), style: const TextStyle(
+              color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+        ])),
       Container(
         decoration: BoxDecoration(color: AppColors.surface,
             borderRadius: BorderRadius.circular(AppRadius.md),
@@ -502,9 +569,12 @@ class _SectionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      leading: Container(width: 36, height: 36,
-        decoration: BoxDecoration(shape: BoxShape.circle,
-            color: (iconColor ?? AppColors.textMuted).withOpacity(0.12)),
+      leading: Container(width: 38, height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: (iconColor ?? AppColors.textMuted).withOpacity(0.12),
+          border: Border.all(color: (iconColor ?? AppColors.textMuted).withOpacity(0.15)),
+        ),
         child: Icon(icon, size: 18, color: iconColor ?? AppColors.textMuted)),
       title: Text(label, style: TextStyle(
           color: labelColor ?? AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w500)),
