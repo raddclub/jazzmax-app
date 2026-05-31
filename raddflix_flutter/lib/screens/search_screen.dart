@@ -351,17 +351,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
-                    color: active ? AppColors.primary.withOpacity(0.15) : AppColors.surface,
+                    gradient: active ? AppColors.primaryGradient : null,
+                    color: active ? null : AppColors.surface,
                     borderRadius: BorderRadius.circular(AppRadius.round),
-                    border: Border.all(
-                      color: active ? AppColors.primary : AppColors.glassBorder,
-                      width: active ? 1.5 : 1),
+                    border: Border.all(color: active ? Colors.transparent : AppColors.glassBorder),
+                    boxShadow: active ? [BoxShadow(color: AppColors.primary.withOpacity(0.35), blurRadius: 10, offset: const Offset(0,3))] : null,
                   ),
                   child: Text(g, style: TextStyle(
-                    color: active ? AppColors.primary : AppColors.textMuted,
-                    fontSize: 12, fontWeight: active ? FontWeight.w700 : FontWeight.normal)),
+                    color: active ? Colors.white : AppColors.textMuted,
+                    fontSize: 12, fontWeight: active ? FontWeight.w800 : FontWeight.w500)),
                 ),
               );
             }),
@@ -434,24 +434,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
     if (_results!.isEmpty) {
       return Center(
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.search_off_rounded, color: AppColors.textMuted, size: 64),
-          const SizedBox(height: 16),
-          Text('"${_ctrl.text}"',
-              style: const TextStyle(color: AppColors.textPrimary,
-                  fontSize: 18, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 6),
-          const Text('No results found. Try different keywords.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 14),
+          Container(width: 88, height: 88,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.surface,
+                border: Border.all(color: AppColors.glassBorder, width: 1.5)),
+            child: const Icon(Icons.search_off_rounded, color: AppColors.textMuted, size: 40)),
+          const SizedBox(height: 20),
+          RichText(text: TextSpan(
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+            children: [
+              const TextSpan(text: 'No results for '),
+              TextSpan(text: '"${_ctrl.text}"',
+                  style: const TextStyle(color: AppColors.primary)),
+            ],
+          )),
+          const SizedBox(height: 8),
+          const Text('Try different keywords or clear filters.',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
               textAlign: TextAlign.center),
           if (hasActiveFilter) ...[
             const SizedBox(height: 20),
-            OutlinedButton.icon(
-              icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
-              label: const Text('Clear filters'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary)),
-              onPressed: _clearFilters,
+            GestureDetector(
+              onTap: _clearFilters,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.round),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(Icons.filter_alt_off_rounded, size: 15, color: AppColors.primary),
+                  SizedBox(width: 6),
+                  Text('Clear filters', style: TextStyle(color: AppColors.primary,
+                      fontSize: 13, fontWeight: FontWeight.w700)),
+                ]),
+              ),
             ),
           ],
         ]).animate().fadeIn(duration: 300.ms),
@@ -526,16 +543,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         // ── Recent searches ────────────────────────────────────────────────
         if (_history.isNotEmpty) ...[
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            const Row(children: [
-              Icon(Icons.history_rounded, color: AppColors.textMuted, size: 16),
-              SizedBox(width: 8),
-              Text('Recent Searches', style: TextStyle(
-                  color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+            Row(children: [
+              Container(width: 3, height: 16, margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(gradient: AppColors.primaryGradient,
+                      borderRadius: BorderRadius.circular(2))),
+              const Icon(Icons.history_rounded, color: AppColors.textMuted, size: 15),
+              const SizedBox(width: 6),
+              const Text('Recent', style: TextStyle(
+                  color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
             ]),
-            TextButton(
-              onPressed: _clearHistory,
-              style: TextButton.styleFrom(foregroundColor: AppColors.textMuted),
-              child: const Text('Clear all', style: TextStyle(fontSize: 13))),
+            GestureDetector(
+              onTap: _clearHistory,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.surface, borderRadius: BorderRadius.circular(AppRadius.round),
+                  border: Border.all(color: AppColors.glassBorder),
+                ),
+                child: const Text('Clear', style: TextStyle(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w600)),
+              ),
+            ),
           ]),
           const SizedBox(height: 10),
           Wrap(
@@ -550,10 +577,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
         // ── Trending ───────────────────────────────────────────────────────
         Row(children: [
-          Icon(Icons.local_fire_department_rounded, color: AppColors.primary, size: 18),
-          const SizedBox(width: 8),
-          const Text('Trending', style: TextStyle(
-              color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+          Container(width: 3, height: 18, margin: const EdgeInsets.only(right: 10),
+              decoration: BoxDecoration(gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(2))),
+          const Icon(Icons.local_fire_department_rounded, color: AppColors.primary, size: 17),
+          const SizedBox(width: 6),
+          const Text('Trending Now', style: TextStyle(
+              color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
         ]),
         const SizedBox(height: 10),
           Builder(builder: (context) {
@@ -593,12 +623,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
         if (byGenre.isNotEmpty) ...[
           const SizedBox(height: 28),
           Row(children: [
-            Icon(Icons.grid_view_rounded, color: AppColors.primary, size: 18),
-            const SizedBox(width: 8),
+            Container(width: 3, height: 18, margin: const EdgeInsets.only(right: 10),
+                decoration: BoxDecoration(gradient: AppColors.primaryGradient,
+                    borderRadius: BorderRadius.circular(2))),
+            const Icon(Icons.grid_view_rounded, color: AppColors.primary, size: 17),
+            const SizedBox(width: 6),
             Text(
               _typeFilter != null ? 'Browse $_typeFilter' : 'Browse by Genre',
               style: const TextStyle(
-                  color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+                  color: AppColors.textPrimary, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
           ]),
           const SizedBox(height: 14),
           ...byGenre.entries.toList().asMap().entries.map((outer) {
@@ -613,11 +646,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen>
 
         // Empty discover state (catalog still loading)
         if (allItems.isEmpty) ...[
-          const SizedBox(height: 40),
-          Center(child: Column(children: [
-            const Icon(Icons.search_rounded, color: AppColors.textMuted, size: 48),
-            const SizedBox(height: 12),
-            const Text('Start typing to search', style: TextStyle(color: AppColors.textMuted)),
+          const SizedBox(height: 48),
+          Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Container(width: 80, height: 80,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: AppColors.surface,
+                  border: Border.all(color: AppColors.glassBorder, width: 1.5)),
+              child: const Icon(Icons.search_rounded, color: AppColors.textMuted, size: 36)),
+            const SizedBox(height: 16),
+            const Text('Start typing to search', style: TextStyle(
+                color: AppColors.textMuted, fontSize: 14)),
           ])),
         ],
       ]),
