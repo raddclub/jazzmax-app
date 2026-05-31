@@ -339,3 +339,60 @@ All 34 audit bugs resolved:
 - Keys table: provider, label, value_enc, is_active (0 rows currently)
 - Titles auto-enrich and populate after upload once keys are set
 - Add via admin UI (/settings/api/keys) or direct DB insert
+
+---
+
+## Phase 18 — Full System Verification (2026-05-31)
+
+### Completed ✅
+- [x] BUG-C01: `delta()` endpoint `poster_jd_url` returned empty string when `poster_share_url` was NULL — fixed to call `_poster_jd_url(r["id"], psu)` (same as sync). Oracle server patched.
+- [x] BUG-C02: Plans DB table empty — 3 default plans (Basic Rs.149, Standard Rs.249, Premium Rs.399) seeded into `plans` table. API `/api/subscription/plans` now reads from DB with fallback.
+- [x] BUG-C03: `poster-push/bulk` — triggered bulk JazzDrive poster upload for all 6 published titles. All 6 now have `poster_share_url` populated.
+- [x] T006 (Phase 17): flix JazzDrive account already exists (id=2, msisdn=03029688227, role='flix') — verified ✅
+- [x] T007 (Phase 17): Re-scan of account 2 triggered — discovered **15 new titles** (8 unpublished, 59 total files) including Interstellar, Dune: Part Two, Inception, Oppenheimer, Animal, etc.
+- [x] T010 (Phase 17): Pathaan vegamovies scorer fix — confirmed deployed (commit cd8707b).
+- [x] T011 (Phase 17): Subscription plans — 3 plans now in DB; T011 previously documented "titles need TMDB key" (different table).
+- [x] T012 (Phase 17): Off Campus S01 already is_published=1 ✅
+
+### API Endpoint Full Verification (16 endpoints)
+| Endpoint | Method | Status | Notes |
+|----------|--------|--------|-------|
+| `/healthz` | GET | ✅ 200 | `{"ok":true,"version":"3.0.0"}` |
+| `/api/ping` | GET | ✅ 200 | Alive |
+| `/api/catalog/version` | GET | ✅ 200 | |
+| `/api/catalog/sync` | GET | ✅ 200 | 6 published titles, all with `poster_jd_url` |
+| `/api/catalog/delta` | GET | ✅ 200 | `poster_jd_url` bug fixed (BUG-C01) |
+| `/api/catalog/posters` | GET | ✅ 200 | 6/6 JD poster URLs present |
+| `/api/catalog/poster-push/status` | GET | ✅ 200 | `6/6 has_jd_poster` |
+| `/api/catalog/play` | GET | ✅ 200 | JazzDrive direct link generated |
+| `/api/catalog/share_url` | GET | ✅ 200 | Share URL returned |
+| `/api/catalog/poster/<id>` | GET | ✅ 302 | Redirect to TMDB/JD poster |
+| `/api/search?q=pathaan` | GET | ✅ 200 | |
+| `/api/auth/guest` | GET | ✅ 200 | JWT token returned |
+| `/api/subscription/plans` | GET | ✅ 200 | 3 plans (Basic/Standard/Premium) |
+| `/api/app/check` | GET | ✅ 200 | |
+| `/api/payment-methods/` | GET | ✅ 200 | |
+| `/api/recommend` | GET | ✅ 200 | Requires Bearer token (401 without — correct) |
+| `/api/usage` | POST | ✅ 405 on GET | POST-only (correct — Flutter sends POST) |
+| `/api/usage/quota` | GET | ✅ 200 | |
+| `/api/history` | GET | ✅ 200 | |
+| `/api/notifications` | GET | ✅ 200 | |
+
+### Scanner Integration Test ✅
+- Triggered `POST /scan/api/accounts/2/scan` — 200 OK
+- Discovered 59 files across 15 titles from JazzDrive account 2
+- New unpublished titles (is_ready=1, is_published=NULL): Interstellar, Dune: Part Two, Animal, The Ninth Gate, Inuyashiki, The Super Mario Galaxy Movie, Inception, Oppenheimer
+- Stream link generation verified for Off Campus S01E01 and Salaar ✅
+
+### Stream/Uploader Verification ✅
+- Upload watcher: 15 files, 6 titles, 8.8GB, 15 jobs "done"
+- Organizer magic root ID for account 2: 1719700 ✅
+- JazzDrive direct link generation: ✅ (stream_links table populated)
+- `uploader.get_active_account()`: returns account 2 ✅
+
+### Open / Pending
+- [ ] T005: wa-bot delivery (blocked — WA number not in active session)
+- [ ] REVIEW: 9 new JazzDrive titles discovered — admin to review and publish (IDs 8-16)
+- [ ] T009: rogmovies.blog DNS dead — requires domain owner action
+- [ ] AVATAR: "Avatar Fire And Ash" + "The Wonderfools" + "Mithde" TMDB miss — manual title mapping needed
+- [ ] DARK_KNIGHT: "The Dark Knight" TMDB miss during scan — possibly filename mismatch
