@@ -286,7 +286,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       // Hero shimmer
       Shimmer.fromColors(
         baseColor: AppColors.surface, highlightColor: AppColors.surfaceHigh,
-        child: Container(height: 220, margin: const EdgeInsets.symmetric(horizontal: 16),
+        child: Container(height: 264, margin: const EdgeInsets.symmetric(horizontal: 16),
             decoration: BoxDecoration(color: AppColors.surface,
                 borderRadius: BorderRadius.circular(AppRadius.lg)))),
       const SizedBox(height: 16),
@@ -337,7 +337,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight> {
   Widget build(BuildContext context) {
     return Column(children: [
       SizedBox(
-        height: 220,
+        height: 264,
         child: PageView.builder(
           controller: _ctrl,
           itemCount: widget.items.length,
