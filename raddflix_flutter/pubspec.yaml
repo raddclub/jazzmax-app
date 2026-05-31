@@ -88,6 +88,9 @@ dependencies:
   # Share files and text (used in debug_logger.dart)
   share_plus: ^10.0.2
 
+  # Launch external apps with intents ("Open with" external video player)
+  android_intent_plus: ^4.0.0
+
   # Disk space info for downloads screen
   disk_space_plus: ^0.2.0
 
