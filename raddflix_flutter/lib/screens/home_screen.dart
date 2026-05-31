@@ -168,21 +168,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         // Sync banner
         if (catalog.status == CatalogStatus.syncing)
           SliverToBoxAdapter(
-            child: Container(
-              margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+            child: Center(
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.round),
+                  border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                  boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.08), blurRadius: 12)],
+                ),
+                child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  SizedBox(width: 10, height: 10,
+                    child: CircularProgressIndicator(strokeWidth: 1.5,
+                        valueColor: AlwaysStoppedAnimation(AppColors.primary))),
+                  SizedBox(width: 8),
+                  Text('Syncing catalog…', style: TextStyle(color: AppColors.primary,
+                      fontSize: 11, fontWeight: FontWeight.w600)),
+                ]),
               ),
-              child: const Row(mainAxisSize: MainAxisSize.min, children: [
-                SizedBox(width: 12, height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.5,
-                      valueColor: AlwaysStoppedAnimation(AppColors.primary))),
-                SizedBox(width: 10),
-                Text('Syncing catalog…', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-              ]),
             ),
           ),
 
@@ -347,7 +351,7 @@ class _HeroSpotlightState extends State<_HeroSpotlight> {
         (i) => AnimatedContainer(
           duration: const Duration(milliseconds: 300),
           margin: const EdgeInsets.symmetric(horizontal: 3),
-          width: _current == i ? 18 : 5,
+          width: _current == i ? 22 : 5,
           height: 5,
           decoration: BoxDecoration(
             color: _current == i ? AppColors.primary : AppColors.textMuted.withOpacity(0.3),
@@ -379,43 +383,86 @@ class _HeroCard extends StatelessWidget {
           child: Stack(fit: StackFit.expand, children: [
             // Task 3.5: prefer local cached poster file; fallback to network URL
             _buildPosterImage(),
-            // Gradient
-            Builder(builder: (ctx) => DecoratedBox(decoration: BoxDecoration(gradient: ctx.raddHeroGradient))),
+            // Cinematic gradient overlay — bottom 70% fade
+            Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter, end: Alignment.bottomCenter,
+                  stops: [0.0, 0.35, 0.7, 1.0],
+                  colors: [Colors.transparent, Colors.transparent, Color(0xCC000000), Color(0xF5000000)],
+                ),
+              ),
+            ),
+            // Top badges: content type
+            Positioned(top: 12, left: 16, child: Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white12),
+                ),
+                child: Text(item.isShow ? 'SERIES' : 'MOVIE',
+                    style: const TextStyle(color: Colors.white70, fontSize: 9,
+                        fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+              ),
+              if (item.displayRating.isNotEmpty) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 10),
+                    const SizedBox(width: 3),
+                    Text(item.displayRating, style: const TextStyle(
+                        color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ]),
+                ),
+              ],
+            ])),
             // Content
             Positioned(bottom: 0, left: 0, right: 0,
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(item.title, style: const TextStyle(
-                      color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800,
-                      letterSpacing: -0.3, shadows: [Shadow(color: Colors.black, blurRadius: 8)])),
-                  const SizedBox(height: 8),
+                  Text(item.title,
+                    maxLines: 2, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900,
+                      letterSpacing: -0.5, height: 1.15,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 12)])),
+                  const SizedBox(height: 12),
                   Row(children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
                       decoration: BoxDecoration(gradient: AppColors.primaryGradient,
                           borderRadius: BorderRadius.circular(AppRadius.round),
                           boxShadow: AppShadows.primary),
                       child: const Row(mainAxisSize: MainAxisSize.min, children: [
                         Icon(Icons.play_arrow_rounded, color: Colors.white, size: 18),
-                        SizedBox(width: 4),
+                        SizedBox(width: 5),
                         Text('Watch Now', style: TextStyle(color: Colors.white,
-                            fontSize: 12, fontWeight: FontWeight.w700)),
+                            fontSize: 13, fontWeight: FontWeight.w800)),
                       ]),
                     ),
-                    const SizedBox(width: 8),
-                    if (item.displayRating.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(color: Colors.black38,
-                            borderRadius: BorderRadius.circular(AppRadius.round)),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.star_rounded, color: Colors.amber, size: 14),
-                          const SizedBox(width: 3),
-                          Text(item.displayRating, style: const TextStyle(
-                              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                        ]),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(AppRadius.round),
+                        border: Border.all(color: Colors.white24),
                       ),
+                      child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.add_rounded, color: Colors.white, size: 16),
+                        SizedBox(width: 4),
+                        Text('My List', style: TextStyle(color: Colors.white,
+                            fontSize: 12, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
                   ]),
                 ]),
               )),
@@ -472,31 +519,52 @@ class _ContentSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
         child: Row(children: [
+          // Red accent bar
+          Container(
+            width: 3, height: 20,
+            margin: const EdgeInsets.only(right: 10),
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
           Text(title, style: const TextStyle(color: AppColors.textPrimary,
-              fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: -0.3)),
+              fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: -0.4)),
           if (count != null) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.round),
-                  border: Border.all(color: AppColors.glassBorder)),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppRadius.round),
+                border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+              ),
               child: Text(count.toString(),
-                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+                  style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
             ),
           ],
           const Spacer(),
-          TextButton(
-            onPressed: () {
+          GestureDetector(
+            onTap: () {
               String? filter;
               if (title == "Movies") filter = "Movies";
               else if (title.contains("Show") || title.contains("Drama")) filter = "Shows";
               Navigator.of(context).pushNamed(AppRoutes.search,
                   arguments: {"initialFilter": filter});
             },
-            child: const Text("See all", style: TextStyle(color: AppColors.primary, fontSize: 13))),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.round),
+                border: Border.all(color: AppColors.glassBorder),
+              ),
+              child: const Text('See all', style: TextStyle(
+                  color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+          ),
         ]),
       ),
       SizedBox(
@@ -534,17 +602,22 @@ class _CategoryChip extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : AppColors.surface,
+          gradient: isSelected
+              ? AppColors.primaryGradient
+              : null,
+          color: isSelected ? null : AppColors.surface,
           borderRadius: BorderRadius.circular(AppRadius.round),
           border: Border.all(
-            color: isSelected ? AppColors.primary : AppColors.glassBorder, width: 1),
-          boxShadow: isSelected ? AppShadows.primary : null,
+            color: isSelected ? Colors.transparent : AppColors.glassBorder, width: 1),
+          boxShadow: isSelected
+              ? [BoxShadow(color: AppColors.primary.withOpacity(0.4), blurRadius: 12, offset: const Offset(0, 4))]
+              : null,
         ),
         child: Text(label, style: TextStyle(
           color: isSelected ? Colors.white : AppColors.textMuted,
-          fontSize: 13, fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal)),
+          fontSize: 12, fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500)),
       ),
     );
   }
