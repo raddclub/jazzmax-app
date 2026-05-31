@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
+import '../app.dart' show pendingVideoUri, appNavigatorKey;
 import '../core/remote_config.dart';
 import '../providers/auth_provider.dart';
 import '../core/services/app_update_service.dart';
@@ -57,6 +58,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       if (next.status == AuthStatus.authenticated) {
         _started = true;
         Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+        // If app was opened via "Open with" intent, push player after home loads
+        final uri = pendingVideoUri;
+        if (uri != null && uri.isNotEmpty) {
+          pendingVideoUri = null;
+          Future.delayed(const Duration(milliseconds: 400), () {
+            appNavigatorKey.currentState?.pushNamed(
+              '/player',
+              arguments: {
+                'file_id': '',
+                'title': uri.split('/').last.replaceAll(RegExp(r'%20'), ' '),
+                'local_path': uri.startsWith('file://') ? uri.substring(7) : uri,
+                'content_type': 'movie',
+              },
+            );
+          });
+        }
       } else if (next.status == AuthStatus.unauthenticated) {
         _started = true;
         Navigator.of(context).pushReplacementNamed(AppRoutes.login);
