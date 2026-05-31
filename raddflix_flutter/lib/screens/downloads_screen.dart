@@ -112,8 +112,9 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
   PreferredSizeWidget _buildAppBar(DownloadsState state) {
     return AppBar(
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.background,
       elevation: 0,
+      scrolledUnderElevation: 0,
       title: _selecting
           ? Text('${_selected.length} selected',
               style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700))
@@ -165,18 +166,51 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
   Widget _buildStorageBar(DownloadsState state) {
     final totalBytes = state.downloads.fold<int>(0, (sum, d) => sum + _size(d));
+    final completed = state.downloads.where((d) => _isComplete(d)).length;
+    final active    = state.downloads.where((d) => _isDownloading(d)).length;
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      decoration: const BoxDecoration(
-          border: Border(bottom: BorderSide(color: AppColors.divider, width: 0.5))),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.glassBorder),
+      ),
       child: Row(children: [
-        const Icon(Icons.storage_rounded, size: 16, color: AppColors.textMuted),
-        const SizedBox(width: 6),
-        Text(_fmtSize(totalBytes) + ' downloaded',
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
-        const Spacer(),
-        Text('${state.downloads.length} file${state.downloads.length == 1 ? '' : 's'}',
-            style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+        Container(
+          width: 40, height: 40,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.primary.withOpacity(0.12),
+            border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+          ),
+          child: const Icon(Icons.download_done_rounded, size: 20, color: AppColors.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Text(_fmtSize(totalBytes),
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700)),
+            const Text(' stored', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+            const Spacer(),
+            if (active > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('$active loading', style: const TextStyle(
+                    color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+              ),
+          ]),
+          const SizedBox(height: 5),
+          Row(children: [
+            Text('$completed complete', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+            const Text(' · ', style: TextStyle(color: AppColors.textMuted)),
+            Text('${state.downloads.length} total', style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
+          ]),
+        ])),
       ]),
     );
   }
@@ -196,14 +230,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
               decoration: BoxDecoration(
-                color: selected ? AppColors.primary : AppColors.surface,
+                gradient: selected ? AppColors.primaryGradient : null,
+                color: selected ? null : AppColors.surface,
                 borderRadius: BorderRadius.circular(AppRadius.round),
-                border: Border.all(color: selected ? AppColors.primary : AppColors.glassBorder)),
+                border: Border.all(color: selected ? Colors.transparent : AppColors.glassBorder),
+                boxShadow: selected ? [BoxShadow(color: AppColors.primary.withOpacity(0.35), blurRadius: 10, offset: const Offset(0,3))] : null,
+              ),
               child: Text(labels[f]!, style: TextStyle(
                   color: selected ? Colors.white : AppColors.textMuted,
-                  fontSize: 12, fontWeight: selected ? FontWeight.w700 : FontWeight.normal)),
+                  fontSize: 12, fontWeight: selected ? FontWeight.w800 : FontWeight.w500)),
             ),
           );
         }).toList(),
@@ -227,17 +264,36 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   Widget _buildEmpty() {
     return Center(
       child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.download_for_offline_outlined, color: AppColors.textMuted, size: 72),
-        const SizedBox(height: 20),
-        const Text('No Downloads Yet', style: TextStyle(
-            color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        const Text('Videos you download will appear here.',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        Container(
+          width: 100, height: 100,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.glassBorder, width: 1.5),
+          ),
+          child: const Icon(Icons.download_for_offline_outlined,
+              color: AppColors.textMuted, size: 48),
+        ),
         const SizedBox(height: 24),
-        ElevatedButton(
-          onPressed: () => Navigator.of(context).pushReplacementNamed(AppRoutes.home),
-          child: const Text('Browse Content'),
+        const Text('No Downloads Yet', style: TextStyle(
+            color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w800,
+            letterSpacing: -0.3)),
+        const SizedBox(height: 8),
+        const Text('Download videos to watch offline.',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+        const SizedBox(height: 28),
+        GestureDetector(
+          onTap: () => Navigator.of(context).pushReplacementNamed(AppRoutes.home),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
+            decoration: BoxDecoration(
+              gradient: AppColors.primaryGradient,
+              borderRadius: BorderRadius.circular(AppRadius.round),
+              boxShadow: AppShadows.primary,
+            ),
+            child: const Text('Browse Content', style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
         ),
       ]).animate().fadeIn(duration: 400.ms),
     );
@@ -253,39 +309,59 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       itemBuilder: (_, i) {
         final folder = _folders[i];
         final count = state.downloads.where((d) => _folderFor(d) == folder).length;
+        final folderColor = _folderColor(folder);
         return GestureDetector(
           onTap: count > 0 ? () => setState(() => _activeFolder = folder) : null,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: count > 0 ? AppColors.surface : AppColors.surface.withOpacity(0.4),
+              color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(color: AppColors.glassBorder)),
+              border: Border.all(
+                color: count > 0 ? folderColor.withOpacity(0.25) : AppColors.glassBorder,
+                width: count > 0 ? 1.0 : 0.5,
+              ),
+              boxShadow: count > 0 ? [
+                BoxShadow(color: folderColor.withOpacity(0.08), blurRadius: 16, offset: const Offset(0, 4)),
+              ] : null,
+            ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Row(children: [
-                  Icon(_folderIcon(folder), color: AppColors.primary, size: 28),
+                  Container(
+                    width: 44, height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: folderColor.withOpacity(count > 0 ? 0.14 : 0.06),
+                      border: Border.all(color: folderColor.withOpacity(count > 0 ? 0.3 : 0.1)),
+                    ),
+                    child: Icon(_folderIcon(folder),
+                        color: count > 0 ? folderColor : AppColors.textMuted, size: 22),
+                  ),
                   const Spacer(),
                   if (count > 0) Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(AppRadius.round)),
-                    child: Text('$count', style: const TextStyle(
-                        color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700))),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: folderColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.round),
+                    ),
+                    child: Text('$count', style: TextStyle(
+                        color: folderColor, fontSize: 12, fontWeight: FontWeight.w800))),
                 ]),
                 const Spacer(),
                 Text(folder, style: TextStyle(
                     color: count > 0 ? AppColors.textPrimary : AppColors.textMuted,
                     fontSize: 15, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
                 Text(count == 0 ? 'Empty' : '$count video${count == 1 ? '' : 's'}',
                     style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ]),
             ),
           ),
         ).animate(delay: (i * 60).ms).fadeIn(duration: 300.ms)
-            .scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1),
-                duration: 300.ms, curve: AppCurves.enter);
+            .scale(begin: const Offset(0.92, 0.92), end: const Offset(1, 1),
+                duration: 350.ms, curve: AppCurves.enter);
       },
     );
   }
@@ -412,10 +488,19 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
   IconData _folderIcon(String name) {
     switch (name) {
-      case 'Movies':   return Icons.movie_outlined;
-      case 'TV Shows': return Icons.tv_outlined;
-      case 'Dramas':   return Icons.live_tv_outlined;
-      default:         return Icons.folder_outlined;
+      case 'Movies':   return Icons.movie_rounded;
+      case 'TV Shows': return Icons.live_tv_rounded;
+      case 'Dramas':   return Icons.theater_comedy_rounded;
+      default:         return Icons.folder_rounded;
+    }
+  }
+
+  Color _folderColor(String name) {
+    switch (name) {
+      case 'Movies':   return const Color(0xFFE8002D);
+      case 'TV Shows': return const Color(0xFF3B82F6);
+      case 'Dramas':   return const Color(0xFF8B5CF6);
+      default:         return const Color(0xFF64748B);
     }
   }
 }
