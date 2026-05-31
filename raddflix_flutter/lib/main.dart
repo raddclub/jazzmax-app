@@ -9,13 +9,6 @@ import 'core/services/jazzdrive_service.dart';
 import 'core/services/poster_service.dart';
 import 'core/db/local_db.dart';
 
-/// Global navigator key — used by intent handler to push PlayerScreen
-/// even when there's no BuildContext available (e.g. background notification tap).
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-
-/// Pending video URI from "Open with" intent — read by SplashScreen on start.
-String? pendingVideoUri;
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -57,7 +50,7 @@ void main() async {
     if (call.method == 'onVideoUri') {
       final uri = call.arguments as String?;
       if (uri != null && uri.isNotEmpty) {
-        navigatorKey.currentState?.pushNamed(
+        appNavigatorKey.currentState?.pushNamed(
           '/player',
           arguments: {
             'file_id': '',
